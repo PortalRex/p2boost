@@ -1,0 +1,4 @@
+LIBRARY p2boost
+EXPORTS
+    CreateInterface
+

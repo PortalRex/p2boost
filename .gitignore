@@ -1,0 +1,9 @@
+.tools/
+build/
+out/
+artifacts/
+research/ghidra/projects/
+*.user
+*.suo
+*.VC.db
+

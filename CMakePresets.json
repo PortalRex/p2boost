@@ -1,0 +1,19 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "vs2022-x86",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "Win32",
+      "binaryDir": "${sourceDir}/build/vs2022-x86"
+    }
+  ],
+  "buildPresets": [
+    { "name": "release", "configurePreset": "vs2022-x86", "configuration": "Release" },
+    { "name": "debug", "configurePreset": "vs2022-x86", "configuration": "Debug" }
+  ],
+  "testPresets": [
+    { "name": "release", "configurePreset": "vs2022-x86", "configuration": "Release", "output": { "outputOnFailure": true } }
+  ]
+}
+
