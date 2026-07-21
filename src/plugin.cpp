@@ -3,6 +3,8 @@
 #include "console_commands.hpp"
 #include "frame_pacer.hpp"
 #include "metrics.hpp"
+#include "portal_trace.hpp"
+#include "renderer_trace.hpp"
 #include "sdk.hpp"
 
 #include <Windows.h>
@@ -15,6 +17,7 @@ class Plugin final : public sdk::IServerPluginCallbacks {
 public:
     bool Load(sdk::CreateInterfaceFn interface_factory, sdk::CreateInterfaceFn) override {
         instance_ = this;
+        if (interface_factory) engine_server_ = interface_factory("VEngineServer022", nullptr);
         if (!commands_.Connect(interface_factory) ||
             !commands_.Add("p2boost_status", "Print p2boost runtime state.", &CommandThunk) ||
             !commands_.Add("p2boost_enable", "Enable or disable verified fixes.", &CommandThunk) ||
@@ -25,6 +28,10 @@ public:
             return false;
         }
         verification_ = VerifyRuntime();
+        if (verification_.supported && verification_.native_d3d9 && !renderer_trace_.Install(&metrics_))
+            verification_.errors.emplace_back("renderer trace callsite signature mismatch");
+        if (verification_.supported && verification_.native_d3d9 && !portal_trace_.Install(&metrics_))
+            verification_.errors.emplace_back("portal trace callsite signature mismatch");
         enabled_ = verification_.supported && verification_.native_d3d9;
         if (enabled_ && !frame_pacer_.Install()) {
             verification_.errors.emplace_back("frame-pacer callsite signature mismatch");
@@ -36,17 +43,19 @@ public:
         for (const auto& error : verification_.errors) ConsolePrint("[p2boost] %s\n", error.c_str());
         return true;
     }
-    void Unload() override { commands_.Disconnect(); frame_pacer_.Remove(); instance_ = nullptr; ConsolePrint("[p2boost] unloaded\n"); }
+    void Unload() override { commands_.Disconnect(); portal_trace_.Remove(); renderer_trace_.Remove(); frame_pacer_.Remove(); active_client_ = nullptr; engine_server_ = nullptr; instance_ = nullptr; ConsolePrint("[p2boost] unloaded\n"); }
     void Pause() override { enabled_ = false; frame_pacer_.SetEnabled(false); }
     void UnPause() override { enabled_ = verification_.supported && verification_.native_d3d9; frame_pacer_.SetEnabled(enabled_); }
     const char* GetPluginDescription() override { return "p2boost native-D3D9 performance patch v" P2BOOST_VERSION; }
     void LevelInit(const char*) override {}
     void ServerActivate(sdk::edict_t*, int, int client_max) override { metrics_.SetCoop(client_max > 1); }
-    void GameFrame(bool simulating) override { metrics_.Frame(simulating); }
+    void GameFrame(bool simulating) override {
+        metrics_.Frame(simulating);
+    }
     void LevelShutdown() override { metrics_.SetCoop(false); }
-    void ClientFullyConnect(sdk::edict_t*) override {}
-    void ClientActive(sdk::edict_t*) override {}
-    void ClientDisconnect(sdk::edict_t*) override {}
+    void ClientFullyConnect(sdk::edict_t* entity) override { if (!active_client_) active_client_ = entity; }
+    void ClientActive(sdk::edict_t* entity) override { if (!active_client_) active_client_ = entity; }
+    void ClientDisconnect(sdk::edict_t* entity) override { if (active_client_ == entity) active_client_ = nullptr; }
     void ClientPutInServer(sdk::edict_t*, const char*) override {}
     void SetCommandClient(int) override {}
     void ClientSettingsChanged(sdk::edict_t*) override {}
@@ -94,7 +103,11 @@ private:
     VerificationResult verification_;
     Metrics metrics_;
     FramePacer frame_pacer_;
+    PortalTrace portal_trace_;
+    RendererTrace renderer_trace_;
     ConsoleCommandRegistry commands_;
+    void* engine_server_ = nullptr;
+    sdk::edict_t* active_client_ = nullptr;
     bool enabled_ = false;
 };
 

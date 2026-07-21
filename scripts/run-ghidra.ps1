@@ -2,6 +2,8 @@ param(
     [string]$GameRoot = 'D:\SteamLibrary\steamapps\common\Portal 2',
     [string]$GhidraRoot = '',
     [string]$JavaHome = '',
+    [ValidateSet('all','engine','shaderapidx9','materialsystem','client','server')]
+    [string[]]$Module = @('all'),
     [switch]$Fresh
 )
 
@@ -29,6 +31,10 @@ $binaries = @(
     'portal2\bin\client.dll',
     'portal2\bin\server.dll'
 )
+if ($Module -notcontains 'all') {
+    $selected = @($Module | ForEach-Object { $_.ToLowerInvariant() + '.dll' })
+    $binaries = @($binaries | Where-Object { $selected -contains [IO.Path]::GetFileName($_).ToLowerInvariant() })
+}
 foreach ($relative in $binaries) {
     $binary = Join-Path $GameRoot $relative
     if (-not (Test-Path -LiteralPath $binary)) { throw "missing game binary: $binary" }
@@ -42,4 +48,3 @@ foreach ($relative in $binaries) {
     & $headless @args
     if ($LASTEXITCODE -ne 0) { throw "Ghidra failed for $relative ($LASTEXITCODE)" }
 }
-

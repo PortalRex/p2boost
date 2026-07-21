@@ -7,11 +7,18 @@ $repo = Split-Path -Parent $PSScriptRoot
 $source = Join-Path $repo "build\vs2022-x86\$Configuration\p2boost.dll"
 $pdb = Join-Path $repo "build\vs2022-x86\$Configuration\p2boost.pdb"
 $autoexec = Join-Path $GameRoot 'portal2\cfg\autoexec.cfg'
+$pluginDirectory = Join-Path $GameRoot 'portal2'
 if (-not (Test-Path -LiteralPath $source)) { throw "build not found: $source" }
 if (-not (Test-Path -LiteralPath $autoexec)) { throw "autoexec not found: $autoexec" }
 
-Copy-Item -LiteralPath $source -Destination (Join-Path $GameRoot 'p2boost.dll') -Force
-if (Test-Path -LiteralPath $pdb) { Copy-Item -LiteralPath $pdb -Destination (Join-Path $GameRoot 'p2boost.pdb') -Force }
+Copy-Item -LiteralPath $source -Destination (Join-Path $pluginDirectory 'p2boost.dll') -Force
+if (Test-Path -LiteralPath $pdb) { Copy-Item -LiteralPath $pdb -Destination (Join-Path $pluginDirectory 'p2boost.pdb') -Force }
+# Early development builds used the installation root. Remove only those
+# p2boost-owned legacy paths so plugin_load cannot select a stale DLL.
+foreach ($name in 'p2boost.dll','p2boost.pdb') {
+    $legacy = Join-Path $GameRoot $name
+    if (Test-Path -LiteralPath $legacy) { Remove-Item -LiteralPath $legacy -Force }
+}
 Get-ChildItem -LiteralPath (Join-Path $repo 'cfg') -Filter 'p2boost*.cfg' | ForEach-Object {
     Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $GameRoot "portal2\cfg\$($_.Name)") -Force
 }

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(p2boost VERSION 0.1.0 LANGUAGES CXX)
+project(p2boost VERSION 0.3.0 LANGUAGES CXX)
 
 if(NOT WIN32)
   message(FATAL_ERROR "p2boost currently targets Portal 2 for Windows")
@@ -20,6 +20,8 @@ add_library(p2boost SHARED
   src/hook.cpp
   src/metrics.cpp
   src/plugin.cpp
+  src/portal_trace.cpp
+  src/renderer_trace.cpp
 )
 target_include_directories(p2boost PRIVATE src)
 target_compile_definitions(p2boost PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX P2BOOST_VERSION="${PROJECT_VERSION}")
@@ -40,9 +42,17 @@ add_executable(p2boost_tests
   src/frame_pacer.cpp
   src/hook.cpp
   src/metrics.cpp
+  src/portal_trace.cpp
+  src/renderer_trace.cpp
 )
 target_include_directories(p2boost_tests PRIVATE src)
 target_compile_definitions(p2boost_tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_compile_options(p2boost_tests PRIVATE /W4 /WX /permissive-)
 target_link_libraries(p2boost_tests PRIVATE bcrypt)
 add_test(NAME p2boost_tests COMMAND p2boost_tests)
+
+add_executable(p2profile tools/p2profile.cpp)
+target_compile_definitions(p2profile PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(p2profile PRIVATE /W4 /WX /permissive- /Zc:__cplusplus)
+target_link_options(p2profile PRIVATE /guard:cf)
+target_link_libraries(p2profile PRIVATE dbghelp)

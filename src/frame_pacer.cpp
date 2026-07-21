@@ -1,8 +1,9 @@
 #include "frame_pacer.hpp"
 
+#include <Windows.h>
+#include <cmath>
 #include <cstdint>
-#include <cstring>
-#include <intrin.h>
+#include <vector>
 
 namespace p2boost {
 
@@ -11,71 +12,57 @@ FramePacer* FramePacer::instance_ = nullptr;
 FramePacer::~FramePacer() { Remove(); }
 
 bool FramePacer::Install() {
-    if (instance_ || import_hook_.Installed()) return false;
-    HMODULE engine = GetModuleHandleW(L"engine.dll");
-    HMODULE tier0 = GetModuleHandleW(L"tier0.dll");
-    if (!engine || !tier0) return false;
-    const auto exported_sleep = reinterpret_cast<ThreadSleepFn>(GetProcAddress(tier0, "ThreadSleep"));
-    if (!exported_sleep) return false;
-#ifndef CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
-#define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002
-#endif
-    timer_ = CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
-                                    TIMER_MODIFY_STATE | SYNCHRONIZE);
-    if (!timer_) timer_ = CreateWaitableTimerW(nullptr, FALSE, nullptr);
-    if (!timer_) return false;
-    // FUN_101f9e30 + 0xae calls ThreadSleep(1) through this import. Hooking the
-    // slot preserves executable bytes and the previous target; the return
-    // address limits high-resolution waiting to the proven limiter callsite.
-    auto* callsite = reinterpret_cast<std::uint8_t*>(engine) + 0x1f9ede;
-    auto** import_slot = reinterpret_cast<void**>(reinterpret_cast<std::uint8_t*>(engine) + 0x3445f8);
-    const auto relocated_iat = reinterpret_cast<std::uint32_t>(import_slot);
-    if (callsite[0] != 0xff || callsite[1] != 0x15 ||
-        std::memcmp(callsite + 2, &relocated_iat, sizeof(relocated_iat)) != 0 || !*import_slot) {
-        CloseHandle(timer_);
-        timer_ = nullptr;
-        return false;
-    }
-    original_sleep_ = reinterpret_cast<ThreadSleepFn>(*import_slot);
-    limiter_return_address_ = callsite + 6;
+    if (instance_ || frame_complete_.Installed()) return false;
+    auto* engine = reinterpret_cast<std::uint8_t*>(GetModuleHandleW(L"engine.dll"));
+    if (!engine) return false;
+    // CEngine::Frame's limiter accumulator is normally reset with:
+    //   xorps xmm0,xmm0; movss [esi+18h],xmm0
+    // The replacement preserves only ordinary deadline-poll overshoot.
+    const std::vector<std::uint8_t> expected = {
+        0x0f, 0x57, 0xc0, 0xf3, 0x0f, 0x11, 0x46, 0x18
+    };
     instance_ = this;
-    if (!import_hook_.Install(import_slot, reinterpret_cast<void*>(&SleepHook))) {
+    if (!frame_complete_.Install(engine + 0x1fa043, expected,
+                                 reinterpret_cast<void*>(&FrameCompleteHook))) {
         instance_ = nullptr;
-        limiter_return_address_ = nullptr;
-        CloseHandle(timer_);
-        timer_ = nullptr;
         return false;
     }
     return true;
 }
 
 void FramePacer::Remove() {
-    import_hook_.Remove();
+    frame_complete_.Remove();
     enabled_.store(false, std::memory_order_relaxed);
-    if (timer_) CloseHandle(timer_);
-    timer_ = nullptr;
-    limiter_return_address_ = nullptr;
     if (instance_ == this) instance_ = nullptr;
 }
 
-void __cdecl FramePacer::SleepHook(unsigned int milliseconds) {
-    FramePacer* instance = instance_;
-    if (!instance) return;
-    if (_ReturnAddress() == instance->limiter_return_address_) instance->Sleep(milliseconds);
-    else instance->original_sleep_(milliseconds);
+void __declspec(naked) __cdecl FrameCompleteHook() {
+    __asm {
+        push ebp
+        push esi
+        call FrameCompleteDispatch
+        add esp, 8
+        ret
+    }
 }
 
-void FramePacer::Sleep(unsigned int milliseconds) {
-    if (!Enabled() || milliseconds == 0 || !timer_) {
-        original_sleep_(milliseconds);
-        return;
+void __cdecl FrameCompleteDispatch(void* host_state, void* caller_frame) {
+    auto* instance = FramePacer::instance_;
+    auto* accumulated = reinterpret_cast<float*>(static_cast<std::uint8_t*>(host_state) + 0x18);
+    const float target = *reinterpret_cast<const float*>(
+        static_cast<const std::uint8_t*>(caller_frame) - 8);
+    *accumulated = CarryFrameOvershoot(*accumulated, target, instance && instance->Enabled());
+}
+
+float CarryFrameOvershoot(float elapsed, float target, bool enabled) noexcept {
+    // Do not carry debt from renderer work or a real hitch. A <=10% carry is
+    // enough to correct deadline-poll drift without creating a short catch-up
+    // frame when fps_max is close to the machine's throughput ceiling.
+    if (enabled && std::isfinite(target) && std::isfinite(elapsed) && target > 0.0f &&
+        elapsed >= target && elapsed < target * 1.10f) {
+        return elapsed - target;
     }
-    LARGE_INTEGER due{};
-    due.QuadPart = -static_cast<LONGLONG>(milliseconds) * 10'000LL;
-    if (!SetWaitableTimerEx(timer_, &due, 0, nullptr, nullptr, nullptr, 0) ||
-        WaitForSingleObject(timer_, milliseconds + 50) != WAIT_OBJECT_0) {
-        original_sleep_(milliseconds);
-    }
+    return 0.0f;
 }
 
 } // namespace p2boost

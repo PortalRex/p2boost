@@ -1,8 +1,10 @@
 #include "build_fingerprint.hpp"
 #include "hook.hpp"
 #include "metrics.hpp"
+#include "frame_pacer.hpp"
 
 #include <Windows.h>
+#include <cmath>
 #include <cstdio>
 #include <fstream>
 #include <memory>
@@ -61,6 +63,15 @@ bool TestMetrics() {
     DeleteFileA(path.c_str());
     return lines == 3;
 }
+
+bool TestFramePhaseCarry() {
+    constexpr float epsilon = 0.000001f;
+    return std::abs(p2boost::CarryFrameOvershoot(0.0021f, 0.0020f, true) - 0.0001f) < epsilon &&
+           p2boost::CarryFrameOvershoot(0.0026f, 0.0020f, true) == 0.0f &&
+           p2boost::CarryFrameOvershoot(0.0021f, 0.0020f, false) == 0.0f &&
+           p2boost::CarryFrameOvershoot(0.0019f, 0.0020f, true) == 0.0f;
+}
+
 } // namespace
 
 int main() {
@@ -68,6 +79,7 @@ int main() {
     const bool callsite = TestCallSitePatch();
     const bool hash = TestKnownHash();
     const bool metrics = TestMetrics();
-    std::printf("hook_chain=%s callsite=%s hash=%s metrics=%s\n", hook ? "ok" : "FAIL", callsite ? "ok" : "FAIL", hash ? "ok" : "FAIL", metrics ? "ok" : "FAIL");
-    return hook && callsite && hash && metrics ? 0 : 1;
+    const bool phase = TestFramePhaseCarry();
+    std::printf("hook_chain=%s callsite=%s hash=%s metrics=%s phase=%s\n", hook ? "ok" : "FAIL", callsite ? "ok" : "FAIL", hash ? "ok" : "FAIL", metrics ? "ok" : "FAIL", phase ? "ok" : "FAIL");
+    return hook && callsite && hash && metrics && phase ? 0 : 1;
 }

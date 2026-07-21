@@ -14,15 +14,15 @@ loaded for diagnostics but installs no fix.
 ## Current status
 
 This is a research alpha, not a claim that all acceptance gates are met. The
-coarse `ThreadSleep(1)` call in Portal 2's `fps_max` host-loop path has been
-replaced, at that caller only, by a high-resolution waitable-timer wait. The
-engine still decides whether and how long to wait, so `fps_max`, VSync,
-fullscreen, and refresh policy remain engine-owned. The hook chains through the
-previous import target and restores it only if it still owns the slot.
+verified pacing fix preserves the small amount by which the host loop polls
+past an `fps_max` deadline instead of throwing that phase information away.
+Only overshoot below 10% of one frame is carried; renderer-heavy frames and
+real hitches are reset normally, so the patch cannot create catch-up bursts.
+`fps_max`, VSync, fullscreen, and refresh policy remain engine-owned.
 
-The focus/portal-resource and redundant co-op-render causes are documented but
-not patched because the current evidence does not yet isolate a safe permanent
-change. See [research/report.md](research/report.md) and
+The focus reset and co-op renderer paths are instrumented but not modified
+because the current evidence does not support a safe quality-neutral removal.
+See [research/report.md](research/report.md) and
 [benchmarks/report.md](benchmarks/report.md).
 
 ## Build and install
@@ -49,9 +49,10 @@ files:
 - `p2boost_status` prints hashes/build support, native-D3D9 state, SAR state,
   enabled state, and metric count.
 - `p2boost_enable 0|1` switches the verified fix at runtime for A/B testing.
-- `p2boost_trace 0|1` enables the fixed-size QPC frame trace.
+- `p2boost_trace 0|1` enables fixed-size QPC frame, D3D9 resource, and portal
+  render tracing.
 - `p2boost_dump_metrics` writes `p2boost_metrics.csv` in the game root, including
-  simulation, focus, and local-co-op state.
+  simulation, focus, local-co-op, resource-reacquisition, and portal timings.
 
 No command writes or archives a game cvar.
 
@@ -61,7 +62,21 @@ No command writes or archives a game cvar.
 and exports symbols, strings, target decompilation, and callers. Generated
 projects/artifacts are ignored because they contain derived game-binary data.
 PresentMon capture and analysis scripts are under `scripts/`; the 30-cycle
-focus harness is `run-focus-portal-cycles.ps1`.
+focus harness is `run-focus-portal-cycles.ps1`. The deterministic
+`run-coop-lobby-portals.ps1` runner creates two local players in the co-op
+lobby, equips them, places a linked portal pair, restores fixed camera poses,
+saves a proof screenshot, runs patched/unpatched captures, and restores the
+user's original `fps_max` and `sv_cheats` values.
+
+`p2profile.exe` is a research-only x86 user-mode sampler for systems where
+kernel ETW collection is unavailable without elevation. It records the main
+thread's module-relative instruction pointers and call stacks for correlation
+with the Ghidra exports; it is not loaded into the game and is not part of the
+runtime patch.
+
+Every push and pull request is built, tested, packaged, and uploaded by GitHub
+Actions. Pushes to the default branch also update the rolling `nightly`
+prerelease and its SHA-256 file; `v*` tags create normal releases.
 
 Only legally installed binaries, Valve's public Source SDK, and SAR's public
 repository are valid research inputs. Leaked Source trees and old IDA databases

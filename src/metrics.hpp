@@ -15,11 +15,25 @@ public:
     bool Tracing() const noexcept { return tracing_; }
     void SetCoop(bool coop) noexcept { coop_ = coop; }
     void Frame(bool simulating) noexcept;
+    void RecordReacquire(double milliseconds, const char* reason) noexcept;
+    void RecordReacquireStage(size_t stage, double milliseconds) noexcept;
+    void RecordPortalRender(double milliseconds) noexcept;
     bool Dump(const std::string& path) const;
     size_t Count() const noexcept { return count_; }
 
 private:
-    struct Sample { long long qpc; double delta_ms; bool simulating; bool focused; bool coop; };
+    struct Sample {
+        long long qpc;
+        double delta_ms;
+        double reacquire_ms;
+        std::array<double, 3> reacquire_stages_ms;
+        double portal_render_ms;
+        unsigned int portal_render_count;
+        int reacquire_reason;
+        bool simulating;
+        bool focused;
+        bool coop;
+    };
     LARGE_INTEGER frequency_{};
     long long last_qpc_ = 0;
     std::array<Sample, Capacity> samples_{};
@@ -27,6 +41,11 @@ private:
     size_t count_ = 0;
     bool tracing_ = false;
     bool coop_ = false;
+    double pending_reacquire_ms_ = 0.0;
+    std::array<double, 3> pending_reacquire_stages_ms_{};
+    double pending_portal_render_ms_ = 0.0;
+    unsigned int pending_portal_render_count_ = 0;
+    int pending_reacquire_reason_ = 0;
 };
 
 } // namespace p2boost

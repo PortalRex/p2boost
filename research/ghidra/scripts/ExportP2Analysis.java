@@ -71,15 +71,42 @@ public class ExportP2Analysis extends GhidraScript {
         if (!output.exists() && !output.mkdirs()) throw new Exception("cannot create " + output);
         String base = currentProgram.getName().replaceAll("[^A-Za-z0-9_.-]", "_");
         Set<Function> targets = new HashSet<>();
-        if (base.equalsIgnoreCase("engine.dll")) addFunctionAndCallers(targets, 0x101f9d40L, 2);
+        if (base.equalsIgnoreCase("engine.dll")) {
+            addFunctionAndCallers(targets, 0x101f9d40L, 2);
+            long[] profileTargets = {
+                0x100e4240L, 0x10120bd0L, 0x101249f0L, 0x10109e10L,
+                0x100c0840L, 0x100e70b0L, 0x101b41f0L, 0x100da870L,
+                0x100e6dd0L, 0x100e4120L, 0x1006f4c0L, 0x10122fa0L,
+                0x100ea960L, 0x10127b60L, 0x10127380L, 0x100dd330L,
+                0x100ea5b0L
+            };
+            for (long address : profileTargets) addFunctionAndCallers(targets, address, 1);
+        }
         if (base.equalsIgnoreCase("shaderapidx9.dll")) {
+            addFunctionAndCallers(targets, 0x100241a0L, 1);
             addFunctionAndCallers(targets, 0x10024450L, 2);
             addFunctionAndCallers(targets, 0x10024690L, 2);
+            addFunctionAndCallers(targets, 0x10004b80L, 1);
+            addFunctionAndCallers(targets, 0x10004320L, 1);
+        }
+        if (base.equalsIgnoreCase("materialsystem.dll")) {
+            addFunctionAndCallers(targets, 0x10011230L, 2);
+            addFunctionAndCallers(targets, 0x10027610L, 1);
+            addFunctionAndCallers(targets, 0x1001bd70L, 1);
+            addFunctionAndCallers(targets, 0x10013980L, 1);
         }
         if (base.equalsIgnoreCase("client.dll")) {
             addFunctionAndCallers(targets, 0x101ee590L, 2);
             addFunctionAndCallers(targets, 0x10272830L, 2);
             addFunctionAndCallers(targets, 0x10284300L, 2);
+            long[] profileTargets = {
+                0x10586a20L, 0x100e1fa0L, 0x100e2180L, 0x100e6280L,
+                0x10587990L, 0x1058b060L, 0x100e3180L, 0x100e5840L,
+                0x100e57b0L, 0x100e0990L, 0x10585e80L, 0x104f0c80L,
+                0x101e5620L, 0x101edfa0L, 0x101f1460L, 0x101f1190L,
+                0x101f0e30L, 0x101ec9e0L, 0x101ec8b0L
+            };
+            for (long address : profileTargets) addFunctionAndCallers(targets, address, 1);
         }
 
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(new File(output, base + "-functions.tsv")))) {

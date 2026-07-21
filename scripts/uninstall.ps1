@@ -7,9 +7,11 @@ if (Test-Path -LiteralPath $autoexec) {
     $updated = [regex]::Replace($text, $pattern, '')
     if ($updated -ne $text) { [IO.File]::WriteAllText($autoexec, $updated, [Text.UTF8Encoding]::new($false)) }
 }
-foreach ($name in 'p2boost.dll','p2boost.pdb') {
-    $path = Join-Path $GameRoot $name
-    if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force }
+foreach ($directory in $GameRoot,(Join-Path $GameRoot 'portal2')) {
+    foreach ($name in 'p2boost.dll','p2boost.pdb') {
+        $path = Join-Path $directory $name
+        if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force }
+    }
 }
 Get-ChildItem -LiteralPath (Join-Path $GameRoot 'portal2\cfg') -Filter 'p2boost*.cfg' -ErrorAction SilentlyContinue |
     Remove-Item -Force
