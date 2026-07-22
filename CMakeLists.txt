@@ -61,6 +61,7 @@ target_link_libraries(p2boost_tests PRIVATE bcrypt)
 add_test(NAME p2boost_tests COMMAND p2boost_tests)
 
 add_executable(p2profile tools/p2profile.cpp)
+target_include_directories(p2profile PRIVATE src)
 target_compile_definitions(p2profile PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_compile_options(p2profile PRIVATE /W4 /WX /permissive- /Zc:__cplusplus)
 target_link_options(p2profile PRIVATE /guard:cf)

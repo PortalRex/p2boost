@@ -1,89 +1,90 @@
-#include "console_commands.hpp"
+#include "console_commands.h"
 
 #include <Windows.h>
 
 namespace p2boost {
-namespace {
-constexpr std::size_t kRegisterConCommandSlot = 9;
-constexpr std::size_t kUnregisterConCommandSlot = 10;
-constexpr std::size_t kFindCommandBaseSlot = 13;
+	namespace {
+		constexpr std::size_t register_command_slot	  = 9;
+		constexpr std::size_t unregister_command_slot = 10;
+		constexpr std::size_t find_command_slot		  = 13;
 
-template <typename T> T VFunc(void* object, std::size_t slot) {
-    return reinterpret_cast<T>((*reinterpret_cast<void***>(object))[slot]);
+		template < typename T >
+		T vfunc( void* object, std::size_t slot ) {
+			return reinterpret_cast< T >( ( *reinterpret_cast< void*** >( object ) )[ slot ] );
+		}
+	}
+
+	ConsoleCommandBase::ConsoleCommandBase( const char* command_name,
+											const char* command_help,
+											int			command_flags )
+		: m_next( nullptr ), m_registered( false ), m_padding{ }, m_name( command_name ), m_help( command_help ),
+		  m_flags( command_flags ) {
+	}
+
+	ConsoleCommand::ConsoleCommand( const char* command_name,
+									const char* command_help,
+									Callback	command_callback )
+		: ConsoleCommandBase( command_name, command_help, 0 ), m_callback( command_callback ),
+		  m_completion_callback( nullptr ), m_callback_flags( 0x02 ), m_callback_padding{ } {
+	}
+
+	bool ConsoleCommandRegistry::connect( sdk::CreateInterfaceFn engine_factory ) {
+		if( m_cvar )
+			return true;
+		if( engine_factory )
+			m_cvar = engine_factory( "VEngineCvar007", nullptr );
+		if( !m_cvar ) {
+			HMODULE vstdlib = GetModuleHandleW( L"vstdlib.dll" );
+			if( !vstdlib )
+				return false;
+			using GetFactoryFn = sdk::CreateInterfaceFn( __cdecl* )( );
+			auto get_factory =
+				reinterpret_cast< GetFactoryFn >( GetProcAddress( vstdlib, "VStdLib_GetICVarFactory" ) );
+			if( !get_factory )
+				return false;
+			sdk::CreateInterfaceFn factory = get_factory( );
+			if( factory )
+				m_cvar = factory( "VEngineCvar007", nullptr );
+		}
+		if( !m_cvar )
+			return false;
+
+		using FindCommandBaseFn = void*(__thiscall*)( void*, const char* );
+		auto  find				= vfunc< FindCommandBaseFn >( m_cvar, find_command_slot );
+		void* reference			= find( m_cvar, "listdemo" );
+		if( !reference ) {
+			m_cvar = nullptr;
+			return false;
+		}
+		m_command_vtable = *reinterpret_cast< void** >( reference );
+		return m_command_vtable != nullptr;
+	}
+
+	bool ConsoleCommandRegistry::add( const char* name, const char* help, Callback callback ) {
+		if( !m_cvar || !m_command_vtable || !callback )
+			return false;
+		auto command								  = std::make_unique< ConsoleCommand >( name, help, callback );
+		*reinterpret_cast< void** >( command.get( ) ) = m_command_vtable;
+		using RegisterFn							  = void( __thiscall* )( void*, ConsoleCommandBase* );
+		vfunc< RegisterFn >( m_cvar, register_command_slot )( m_cvar, command.get( ) );
+		command->m_registered = true;
+		m_commands.push_back( std::move( command ) );
+		return true;
+	}
+
+	void ConsoleCommandRegistry::disconnect( ) {
+		if( m_cvar ) {
+			using UnregisterFn = void( __thiscall* )( void*, ConsoleCommandBase* );
+			auto unregister	   = vfunc< UnregisterFn >( m_cvar, unregister_command_slot );
+			for( auto& command : m_commands ) {
+				if( command->m_registered )
+					unregister( m_cvar, command.get( ) );
+				command->m_registered = false;
+			}
+		}
+		m_commands.clear( );
+		m_command_vtable = nullptr;
+		m_cvar			 = nullptr;
+	}
+
 }
-} // namespace
-
-ConsoleCommandBase::ConsoleCommandBase(const char* command_name,
-                                       const char* command_help,
-                                       int command_flags)
-    : next(nullptr), registered(false), padding{}, name(command_name), help(command_help),
-      flags(command_flags) {
-}
-
-ConsoleCommand::ConsoleCommand(const char* command_name,
-                               const char* command_help,
-                               Callback command_callback)
-    : ConsoleCommandBase(command_name, command_help, 0), callback(command_callback),
-      completion_callback(nullptr), callback_flags(0x02), callback_padding{} {
-}
-
-bool ConsoleCommandRegistry::Connect(sdk::CreateInterfaceFn engine_factory) {
-    if (cvar_)
-        return true;
-    if (engine_factory)
-        cvar_ = engine_factory("VEngineCvar007", nullptr);
-    if (!cvar_) {
-        HMODULE vstdlib = GetModuleHandleW(L"vstdlib.dll");
-        if (!vstdlib)
-            return false;
-        using GetFactoryFn = sdk::CreateInterfaceFn(__cdecl*)();
-        auto get_factory =
-            reinterpret_cast<GetFactoryFn>(GetProcAddress(vstdlib, "VStdLib_GetICVarFactory"));
-        if (!get_factory)
-            return false;
-        sdk::CreateInterfaceFn factory = get_factory();
-        if (factory)
-            cvar_ = factory("VEngineCvar007", nullptr);
-    }
-    if (!cvar_)
-        return false;
-
-    using FindCommandBaseFn = void*(__thiscall*)(void*, const char*);
-    auto find = VFunc<FindCommandBaseFn>(cvar_, kFindCommandBaseSlot);
-    void* reference = find(cvar_, "listdemo");
-    if (!reference) {
-        cvar_ = nullptr;
-        return false;
-    }
-    command_vtable_ = *reinterpret_cast<void**>(reference);
-    return command_vtable_ != nullptr;
-}
-
-bool ConsoleCommandRegistry::Add(const char* name, const char* help, Callback callback) {
-    if (!cvar_ || !command_vtable_ || !callback)
-        return false;
-    auto command = std::make_unique<ConsoleCommand>(name, help, callback);
-    *reinterpret_cast<void**>(command.get()) = command_vtable_;
-    using RegisterFn = void(__thiscall*)(void*, ConsoleCommandBase*);
-    VFunc<RegisterFn>(cvar_, kRegisterConCommandSlot)(cvar_, command.get());
-    command->registered = true;
-    commands_.push_back(std::move(command));
-    return true;
-}
-
-void ConsoleCommandRegistry::Disconnect() {
-    if (cvar_) {
-        using UnregisterFn = void(__thiscall*)(void*, ConsoleCommandBase*);
-        auto unregister = VFunc<UnregisterFn>(cvar_, kUnregisterConCommandSlot);
-        for (auto& command : commands_) {
-            if (command->registered)
-                unregister(cvar_, command.get());
-            command->registered = false;
-        }
-    }
-    commands_.clear();
-    command_vtable_ = nullptr;
-    cvar_ = nullptr;
-}
-
-} // namespace p2boost

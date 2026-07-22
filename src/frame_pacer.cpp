@@ -1,7 +1,8 @@
-#include "frame_pacer.hpp"
+#include "frame_pacer.h"
 
-#include "address.hpp"
-#include "stack_frame.hpp"
+#include "address.h"
+#include "portal2.h"
+#include "stack.h"
 
 #include <Windows.h>
 #include <cmath>
@@ -10,67 +11,68 @@
 
 namespace p2boost {
 
-FramePacer* FramePacer::instance_ = nullptr;
+	FramePacer* FramePacer::m_instance = nullptr;
 
-FramePacer::~FramePacer() {
-    Remove();
+	FramePacer::~FramePacer( ) {
+		remove( );
+	}
+
+	bool FramePacer::install( ) {
+		if( m_instance || m_frame_complete.installed( ) )
+			return false;
+
+		Address engine{ GetModuleHandleW( L"engine.dll" ) };
+		if( !engine )
+			return false;
+
+		// xref: CEngine::Frame clears [esi+18h] after each limiter wait.
+		std::vector< std::uint8_t > expected{ 0x0f, 0x57, 0xc0, 0xf3, 0x0f, 0x11, 0x46, 0x18 };
+
+		m_instance = this;
+		if( !m_frame_complete.install( engine.add( portal2::engine::frame_complete ).as< void* >( ), expected, reinterpret_cast< void* >( &FrameCompleteHook ) ) ) {
+			m_instance = nullptr;
+			return false;
+		}
+
+		return true;
+	}
+
+	void FramePacer::remove( ) {
+		m_frame_complete.remove( );
+		m_enabled.store( false, std::memory_order_relaxed );
+
+		if( m_instance == this )
+			m_instance = nullptr;
+	}
+
+	// bridge the displaced x86 frame into a normal cdecl helper.
+	void __declspec( naked ) __cdecl FrameCompleteHook( ) {
+		__asm {
+			push ebp
+			push esi
+			call FrameCompleteDispatch
+			add esp, 8
+			ret
+		}
+	}
+
+	void __cdecl FrameCompleteDispatch( void* host_state, void* caller_frame ) {
+		FramePacer* instance = FramePacer::m_instance;
+		Address		host{ host_state };
+		Stack		caller{ caller_frame };
+		float*		accumulated = host.add( portal2::engine::frame_accumulator ).as< float* >( );
+		float		target		= caller.local( portal2::engine::frame_target_local ).to< float >( );
+
+		*accumulated = carry_frame_overshoot( *accumulated, target, instance && instance->enabled( ) );
+	}
+
+	float carry_frame_overshoot( float elapsed, float target, bool enabled ) noexcept {
+		// carry only normal deadline polling drift.
+		if( enabled && std::isfinite( target ) && std::isfinite( elapsed ) && target > 0.f && elapsed >= target && elapsed < target * 1.10f )
+			return elapsed - target;
+
+		// reset phase after real renderer work or a hitch.
+		return 0.f;
+	}
+
 }
-
-bool FramePacer::Install() {
-    if (instance_ || frame_complete_.Installed())
-        return false;
-    const Address engine(GetModuleHandleW(L"engine.dll"));
-    if (!engine.Valid())
-        return false;
-    // CEngine::Frame's limiter accumulator is normally reset with:
-    //   xorps xmm0,xmm0; movss [esi+18h],xmm0
-    // The replacement preserves only ordinary deadline-poll overshoot.
-    const std::vector<std::uint8_t> expected = {0x0f, 0x57, 0xc0, 0xf3, 0x0f, 0x11, 0x46, 0x18};
-    instance_ = this;
-    if (!frame_complete_.Install(engine.Add(0x1fa043).As<void*>(),
-                                 expected,
-                                 reinterpret_cast<void*>(&FrameCompleteHook))) {
-        instance_ = nullptr;
-        return false;
-    }
-    return true;
-}
-
-void FramePacer::Remove() {
-    frame_complete_.Remove();
-    enabled_.store(false, std::memory_order_relaxed);
-    if (instance_ == this)
-        instance_ = nullptr;
-}
-
-void __declspec(naked) __cdecl FrameCompleteHook() {
-    __asm {
-        push ebp
-        push esi
-        call FrameCompleteDispatch
-        add esp, 8
-        ret
-    }
-}
-
-void __cdecl FrameCompleteDispatch(void* host_state, void* caller_frame) {
-    auto* instance = FramePacer::instance_;
-    const Address host(host_state);
-    const StackFrame caller(caller_frame);
-    auto* accumulated = host.Add(0x18).As<float*>();
-    const float target = caller.LocalAddress(8).Read<float>();
-    *accumulated = CarryFrameOvershoot(*accumulated, target, instance && instance->Enabled());
-}
-
-float CarryFrameOvershoot(float elapsed, float target, bool enabled) noexcept {
-    // Do not carry debt from renderer work or a real hitch. A <=10% carry is
-    // enough to correct deadline-poll drift without creating a short catch-up
-    // frame when fps_max is close to the machine's throughput ceiling.
-    if (enabled && std::isfinite(target) && std::isfinite(elapsed) && target > 0.0f &&
-        elapsed >= target && elapsed < target * 1.10f) {
-        return elapsed - target;
-    }
-    return 0.0f;
-}
-
-} // namespace p2boost

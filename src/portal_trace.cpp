@@ -1,70 +1,73 @@
-#include "portal_trace.hpp"
+#include "portal_trace.h"
 
-#include "address.hpp"
-#include "metrics.hpp"
-#include "x86.hpp"
+#include "address.h"
+#include "metrics.h"
+#include "portal2.h"
+#include "qpc.h"
+#include "x86.h"
 
 #include <Windows.h>
-#include <cstdint>
 
 namespace p2boost {
-PortalTrace* PortalTrace::instance_ = nullptr;
 
-PortalTrace::~PortalTrace() {
-    Remove();
-}
+	PortalTrace* PortalTrace::m_instance = nullptr;
 
-bool PortalTrace::Install(Metrics* metrics) {
-    if (instance_ || !metrics)
-        return false;
-    const Address module(GetModuleHandleW(L"client.dll"));
-    if (!module.Valid())
-        return false;
-    const Address portal_render = module.Add(0x1ee590);
-    original_ = portal_render.As<PortalRenderFn>();
-    const auto expected_call = [&](std::ptrdiff_t rva) {
-        return x86::RelativeCall(module.Add(rva), portal_render);
-    };
-    metrics_ = metrics;
-    instance_ = this;
-    if (!primary_view_.Install(module.Add(0x285c91).As<void*>(),
-                               expected_call(0x285c91),
-                               reinterpret_cast<void*>(&PortalRenderHook)) ||
-        !secondary_view_.Install(module.Add(0x2c57db).As<void*>(),
-                                 expected_call(0x2c57db),
-                                 reinterpret_cast<void*>(&PortalRenderHook))) {
-        Remove();
-        return false;
-    }
-    return true;
-}
+	PortalTrace::~PortalTrace( ) {
+		remove( );
+	}
 
-void PortalTrace::Remove() {
-    secondary_view_.Remove();
-    primary_view_.Remove();
-    metrics_ = nullptr;
-    original_ = nullptr;
-    if (instance_ == this)
-        instance_ = nullptr;
-}
+	bool PortalTrace::install( Metrics* metrics ) {
+		if( m_instance || !metrics )
+			return false;
 
-void __fastcall PortalTrace::PortalRenderHook(void* self,
-                                              void*,
-                                              void* view,
-                                              unsigned int clear_flags) {
-    auto* instance = instance_;
-    if (!instance || !instance->original_)
-        return;
-    if (!instance->metrics_ || !instance->metrics_->Tracing()) {
-        instance->original_(self, view, clear_flags);
-        return;
-    }
-    LARGE_INTEGER frequency{}, begin{}, end{};
-    QueryPerformanceFrequency(&frequency);
-    QueryPerformanceCounter(&begin);
-    instance->original_(self, view, clear_flags);
-    QueryPerformanceCounter(&end);
-    instance->metrics_->RecordPortalRender(static_cast<double>(end.QuadPart - begin.QuadPart) *
-                                           1000.0 / static_cast<double>(frequency.QuadPart));
+		Address client{ GetModuleHandleW( L"client.dll" ) };
+		if( !client )
+			return false;
+
+		// xref: both view paths call the same internal portal renderer.
+		Address primary_call{ client.add( portal2::client::primary_portal_render ) };
+		Address secondary_call{ client.add( portal2::client::secondary_portal_render ) };
+		Address portal_render{ primary_call.rel32( 1 ) };
+		if( primary_call.at< std::uint8_t >( ) != 0xe8 || secondary_call.at< std::uint8_t >( ) != 0xe8 ||
+			!portal_render || secondary_call.rel32( 1 ) != portal_render )
+			return false;
+
+		m_original = portal_render.as< PortalRender_t >( );
+		m_metrics  = metrics;
+		m_instance = this;
+
+		if( !m_primary_view.install( primary_call.as< void* >( ), x86::relative_call( primary_call, portal_render ), reinterpret_cast< void* >( &PortalRender ) ) || !m_secondary_view.install( secondary_call.as< void* >( ), x86::relative_call( secondary_call, portal_render ), reinterpret_cast< void* >( &PortalRender ) ) ) {
+			remove( );
+			return false;
+		}
+
+		return true;
+	}
+
+	void PortalTrace::remove( ) {
+		m_secondary_view.remove( );
+		m_primary_view.remove( );
+		m_metrics  = nullptr;
+		m_original = nullptr;
+
+		if( m_instance == this )
+			m_instance = nullptr;
+	}
+
+	void __fastcall PortalTrace::PortalRender( void* self, void*, void* view, unsigned int clear_flags ) {
+		PortalTrace* instance = m_instance;
+		if( !instance || !instance->m_original )
+			return;
+
+		if( !instance->m_metrics || !instance->m_metrics->tracing( ) ) {
+			instance->m_original( self, view, clear_flags );
+			return;
+		}
+
+		// time only the original portal renderer.
+		Stopwatch timer;
+		instance->m_original( self, view, clear_flags );
+		instance->m_metrics->record_portal_render( timer.elapsed_ms( ) );
+	}
+
 }
-} // namespace p2boost
