@@ -11,6 +11,21 @@
 
 namespace p2boost {
 
+	// Small read-only summary consumed by the optional in-game profiler.
+	struct OverlayMetrics {
+		double		 m_frame_ms{ };
+		double		 m_average_ms{ };
+		double		 m_p99_ms{ };
+		double		 m_max_ms{ };
+		double		 m_portal_ms{ };
+		double		 m_render_worker_ms{ };
+		unsigned int m_portal_count{ };
+		unsigned int m_focus_events{ };
+		unsigned int m_shadow_skips{ };
+		bool		 m_focused{ };
+		bool		 m_coop{ };
+	};
+
 	// stores one execution of the queued material render worker.
 	struct RenderWorkerMetrics {
 		Qpc::tick_t		   m_begin_qpc{ };
@@ -87,6 +102,13 @@ namespace p2boost {
 			return m_tracing.load( std::memory_order_relaxed );
 		}
 
+		void set_overlay_collection( bool collecting ) noexcept {
+			m_overlay_collection.store( collecting, std::memory_order_relaxed );
+		}
+
+		// Build a bounded rolling summary without exposing the history ring.
+		OverlayMetrics overlay_metrics( ) const noexcept;
+
 		void set_coop( bool coop ) noexcept {
 			m_coop = coop;
 		}
@@ -95,8 +117,7 @@ namespace p2boost {
 		void frame( bool simulating ) noexcept;
 
 		// record focus restore work and its three stages.
-		void record_reacquire(
-			double milliseconds, const char* reason, Qpc::tick_t begin_qpc, Qpc::tick_t end_qpc ) noexcept;
+		void record_reacquire( double milliseconds, const char* reason, Qpc::tick_t begin_qpc, Qpc::tick_t end_qpc ) noexcept;
 		void record_reacquire_stage( size_t stage, double milliseconds ) noexcept;
 
 		// record renderer work attributed by the hooks.
@@ -147,7 +168,12 @@ namespace p2boost {
 		size_t						   m_cursor{ };
 		size_t						   m_count{ };
 		std::atomic< bool >			   m_tracing{ };
+		std::atomic< bool >			   m_overlay_collection{ };
 		bool						   m_coop{ };
+
+		bool collecting( ) const noexcept {
+			return tracing( ) || m_overlay_collection.load( std::memory_order_relaxed );
+		}
 
 		// pending events are consumed by the next frame.
 		double					m_pending_reacquire_ms{ };

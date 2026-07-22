@@ -37,8 +37,7 @@ namespace p2boost {
 		using StaticLightingRestore_t = void( __cdecl* )( );
 
 		// callbacks keep engine-style names to make xrefs easy to recognize.
-		static void __fastcall Reacquire(
-			void* self, void*, unsigned char release, unsigned char restore, const char* reason );
+		static void __fastcall Reacquire( void* self, void*, unsigned char release, unsigned char restore, const char* reason );
 		static void __fastcall ShaderDevice( void* self, void* );
 		static void __fastcall FrameSync( void* self, void* );
 		static void __fastcall ResourceCallbacks( void* self, void*, void* callback, int context );
@@ -56,8 +55,7 @@ namespace p2boost {
 		static HRESULT __stdcall SetVertexShader( IDirect3DDevice9*, IDirect3DVertexShader9* );
 		static HRESULT __stdcall SetPixelShader( IDirect3DDevice9*, IDirect3DPixelShader9* );
 		static HRESULT __stdcall DrawPrimitive( IDirect3DDevice9*, D3DPRIMITIVETYPE, UINT, UINT );
-		static HRESULT __stdcall DrawIndexedPrimitive(
-			IDirect3DDevice9*, D3DPRIMITIVETYPE, INT, UINT, UINT, UINT, UINT );
+		static HRESULT __stdcall DrawIndexedPrimitive( IDirect3DDevice9*, D3DPRIMITIVETYPE, INT, UINT, UINT, UINT, UINT );
 		static HRESULT __stdcall DrawPrimitiveUp( IDirect3DDevice9*, D3DPRIMITIVETYPE, UINT, const void*, UINT );
 		static HRESULT __stdcall DrawIndexedPrimitiveUp(
 			IDirect3DDevice9*, D3DPRIMITIVETYPE, UINT, UINT, UINT, const void*, D3DFORMAT, const void*, UINT );

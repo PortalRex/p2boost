@@ -59,10 +59,8 @@ namespace p2boost::renderer_research {
 				if( current == key ) {
 					return false;
 				}
-				if( current == 0 && table[ slot ].compare_exchange_strong( current,
-										key,
-										std::memory_order_relaxed,
-										std::memory_order_relaxed ) ) {
+				if( current == 0 &&
+					table[ slot ].compare_exchange_strong( current, key, std::memory_order_relaxed, std::memory_order_relaxed ) ) {
 					return true;
 				}
 				slot = ( slot + 1 ) & ( pipeline_table_size - 1 );
@@ -72,8 +70,7 @@ namespace p2boost::renderer_research {
 
 		void describe_texture_0( RenderWorkerMetrics& metrics, const PipelineObservation& pipeline ) noexcept {
 			// inspect only the texture attached to the slowest draw in this worker.
-			auto* texture = reinterpret_cast< IDirect3DBaseTexture9* >(
-				static_cast< std::uintptr_t >( pipeline.m_state.m_textures[ 0 ] ) );
+			auto* texture = reinterpret_cast< IDirect3DBaseTexture9* >( static_cast< std::uintptr_t >( pipeline.m_state.m_textures[ 0 ] ) );
 			if( !texture ) {
 				return;
 			}
@@ -99,8 +96,7 @@ namespace p2boost::renderer_research {
 
 				// Hashing is intentionally research-only. LockRect can itself block on
 				// a managed texture, so its cost must never enter a shipping build.
-				if( ( pipeline.m_first_texture_mask & 1 ) != 0 && type == D3DRTYPE_TEXTURE &&
-					description.Format == D3DFMT_DXT5 ) {
+				if( ( pipeline.m_first_texture_mask & 1 ) != 0 && type == D3DRTYPE_TEXTURE && description.Format == D3DFMT_DXT5 ) {
 					D3DLOCKED_RECT locked{ };
 					auto*		   texture2d = static_cast< IDirect3DTexture9* >( texture );
 					if( SUCCEEDED( texture2d->LockRect( 0, &locked, nullptr, D3DLOCK_READONLY ) ) ) {
@@ -142,10 +138,8 @@ namespace p2boost::renderer_research {
 		std::memset( g_dynamic_surface_table, 0, sizeof( g_dynamic_surface_table ) );
 	}
 
-	void count_queued_command( RenderWorkerMetrics& metrics,
-		std::uint8_t*								node,
-		void*										queued_functor_execute,
-		void*										queued_functor_leaf ) noexcept {
+	void count_queued_command(
+		RenderWorkerMetrics& metrics, std::uint8_t* node, void* queued_functor_execute, void* queued_functor_leaf ) noexcept {
 		// queued nodes store the command object immediately after their link.
 		auto* object = node + sizeof( void* );
 		// the command vtable exposes its execute function in slot three.
@@ -170,8 +164,8 @@ namespace p2boost::renderer_research {
 		// retain a compact per-worker histogram without heap allocation.
 		const auto	key32 = static_cast< unsigned int >( reinterpret_cast< std::uintptr_t >( key ) );
 		std::size_t slot  = 0;
-		while( slot < metrics.m_command_counts.size( ) && metrics.m_command_counts[ slot ] != 0 &&
-			   metrics.m_command_keys[ slot ] != key32 ) {
+		while(
+			slot < metrics.m_command_counts.size( ) && metrics.m_command_counts[ slot ] != 0 && metrics.m_command_keys[ slot ] != key32 ) {
 			++slot;
 		}
 		if( slot < metrics.m_command_counts.size( ) ) {
@@ -210,8 +204,7 @@ namespace p2boost::renderer_research {
 
 	void set_texture( DWORD stage, IDirect3DBaseTexture9* texture ) noexcept {
 		if( stage < 4 ) {
-			g_pipeline_state.m_textures[ stage ] =
-				static_cast< std::uint32_t >( reinterpret_cast< std::uintptr_t >( texture ) );
+			g_pipeline_state.m_textures[ stage ] = static_cast< std::uint32_t >( reinterpret_cast< std::uintptr_t >( texture ) );
 		}
 	}
 
@@ -226,11 +219,9 @@ namespace p2boost::renderer_research {
 	PipelineObservation observe_pipeline( ) noexcept {
 		// classify first-seen resources without retaining COM references.
 		PipelineObservation observation{ };
-		observation.m_state = g_pipeline_state;
-		observation.m_first_vertex_shader =
-			insert_process_key( observation.m_state.m_vertex_shader, g_vertex_shader_keys );
-		observation.m_first_pixel_shader =
-			insert_process_key( observation.m_state.m_pixel_shader, g_pixel_shader_keys );
+		observation.m_state				  = g_pipeline_state;
+		observation.m_first_vertex_shader = insert_process_key( observation.m_state.m_vertex_shader, g_vertex_shader_keys );
+		observation.m_first_pixel_shader  = insert_process_key( observation.m_state.m_pixel_shader, g_pixel_shader_keys );
 
 		// combine both shader identities into one stable pipeline key.
 		auto pair_key = observation.m_state.m_vertex_shader * 0x9e3779b9u;
@@ -269,9 +260,7 @@ namespace p2boost::renderer_research {
 		metrics.m_max_draw_vertex_count	   = vertex_count;
 		metrics.m_max_draw_vertex_shader   = pipeline.m_state.m_vertex_shader;
 		metrics.m_max_draw_pixel_shader	   = pipeline.m_state.m_pixel_shader;
-		std::copy_n( pipeline.m_state.m_textures,
-			metrics.m_max_draw_textures.size( ),
-			metrics.m_max_draw_textures.begin( ) );
+		std::copy_n( pipeline.m_state.m_textures, metrics.m_max_draw_textures.size( ), metrics.m_max_draw_textures.begin( ) );
 		metrics.m_max_draw_first_vertex_shader = pipeline.m_first_vertex_shader;
 		metrics.m_max_draw_first_pixel_shader  = pipeline.m_first_pixel_shader;
 		metrics.m_max_draw_first_pipeline	   = pipeline.m_first_pipeline;

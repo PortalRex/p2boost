@@ -30,8 +30,7 @@ namespace {
 		p2boost::VtableSlotHook hook;
 		if( !hook.install( &table[ 0 ], reinterpret_cast< void* >( &replacement ) ) )
 			return false;
-		if( table[ 0 ] != reinterpret_cast< void* >( &replacement ) ||
-			hook.previous( ) != reinterpret_cast< void* >( &original ) )
+		if( table[ 0 ] != reinterpret_cast< void* >( &replacement ) || hook.previous( ) != reinterpret_cast< void* >( &original ) )
 			return false;
 		table[ 0 ] = reinterpret_cast< void* >( &original ); // Simulate a later owner replacing our slot.
 		if( hook.remove( ) )
@@ -49,8 +48,7 @@ namespace {
 		const p2boost::Stack   stack( address );
 		return address.add( sizeof( std::uintptr_t ) ).to< std::uintptr_t >( ) == frame[ 1 ] &&
 			   stack.ReturnAddress( ).as< void* >( ) == reinterpret_cast< void* >( &original ) &&
-			   stack.arg( 0 ).to< std::uintptr_t >( ) == frame[ 2 ] &&
-			   stack.next( ).as< std::uintptr_t >( ) == frame[ 0 ];
+			   stack.arg( 0 ).to< std::uintptr_t >( ) == frame[ 2 ] && stack.next( ).as< std::uintptr_t >( ) == frame[ 0 ];
 	}
 
 	bool test_relative_call_encoding( ) {
@@ -62,8 +60,7 @@ namespace {
 		std::int32_t displacement = 0;
 		std::memcpy( &displacement, encoded.data( ) + 1, sizeof( displacement ) );
 		std::memcpy( instruction + 1, &displacement, sizeof( displacement ) );
-		return displacement == 0x100 &&
-			   call.rel32( 1 ).as< std::uintptr_t >( ) == call.add( 0x105 ).as< std::uintptr_t >( );
+		return displacement == 0x100 && call.rel32( 1 ).as< std::uintptr_t >( ) == call.add( 0x105 ).as< std::uintptr_t >( );
 	}
 
 	bool test_pattern_scanner( ) {
@@ -97,8 +94,7 @@ namespace {
 	}
 
 	bool test_call_site_patch( ) {
-		auto* memory = static_cast< unsigned char* >(
-			VirtualAlloc( nullptr, 64, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE ) );
+		auto* memory = static_cast< unsigned char* >( VirtualAlloc( nullptr, 64, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE ) );
 		if( !memory )
 			return false;
 		const std::vector< std::uint8_t > expected{ 0xff, 0x15, 1, 2, 3, 4 };
@@ -106,36 +102,33 @@ namespace {
 		p2boost::CallSitePatch patch;
 		const bool			   installed = patch.install( memory, expected, reinterpret_cast< void* >( &replacement ) );
 		const bool			   encoded	 = installed && memory[ 0 ] == 0xe8 && memory[ 5 ] == 0x90;
-		const bool removed = patch.remove( ) && std::memcmp( memory, expected.data( ), expected.size( ) ) == 0;
+		const bool			   removed	 = patch.remove( ) && std::memcmp( memory, expected.data( ), expected.size( ) ) == 0;
 		VirtualFree( memory, 0, MEM_RELEASE );
 		return installed && encoded && removed;
 	}
 
 	bool test_pointer_immediate_patch( ) {
-		auto* memory = static_cast< unsigned char* >(
-			VirtualAlloc( nullptr, 64, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE ) );
+		auto* memory = static_cast< unsigned char* >( VirtualAlloc( nullptr, 64, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE ) );
 		if( !memory )
 			return false;
 		std::vector< std::uint8_t > expected{ 0xb8, 0, 0, 0, 0 };
-		const auto original_pointer = static_cast< std::uint32_t >( reinterpret_cast< std::uintptr_t >( &original ) );
+		const auto					original_pointer = static_cast< std::uint32_t >( reinterpret_cast< std::uintptr_t >( &original ) );
 		std::memcpy( expected.data( ) + 1, &original_pointer, sizeof( original_pointer ) );
 		std::memcpy( memory, expected.data( ), expected.size( ) );
 		p2boost::PointerImmediatePatch patch;
-		const bool	  installed = patch.install( memory, expected, 1, reinterpret_cast< void* >( &replacement ) );
-		std::uint32_t encoded	= 0;
+		const bool					   installed = patch.install( memory, expected, 1, reinterpret_cast< void* >( &replacement ) );
+		std::uint32_t				   encoded	 = 0;
 		std::memcpy( &encoded, memory + 1, sizeof( encoded ) );
-		const bool points_to_replacement =
-			installed &&
-			encoded == static_cast< std::uint32_t >( reinterpret_cast< std::uintptr_t >( &replacement ) ) &&
-			patch.previous( ) == reinterpret_cast< void* >( &original );
+		const bool points_to_replacement = installed &&
+										   encoded == static_cast< std::uint32_t >( reinterpret_cast< std::uintptr_t >( &replacement ) ) &&
+										   patch.previous( ) == reinterpret_cast< void* >( &original );
 		const bool removed = patch.remove( ) && std::memcmp( memory, expected.data( ), expected.size( ) ) == 0;
 		VirtualFree( memory, 0, MEM_RELEASE );
 		return installed && points_to_replacement && removed;
 	}
 
 	bool test_inline_detour( ) {
-		auto* memory = static_cast< unsigned char* >(
-			VirtualAlloc( nullptr, 64, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE ) );
+		auto* memory = static_cast< unsigned char* >( VirtualAlloc( nullptr, 64, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE ) );
 		if( !memory )
 			return false;
 		const std::vector< std::uint8_t > expected{ 0xa1, 1, 2, 3, 4 };
@@ -143,7 +136,7 @@ namespace {
 		p2boost::InlineDetour hook;
 		const bool			  installed = hook.install( memory, expected, reinterpret_cast< void* >( &replacement ) );
 		const bool			  encoded	= installed && memory[ 0 ] == 0xe9 && hook.previous( ) != nullptr;
-		const bool removed = hook.remove( ) && std::memcmp( memory, expected.data( ), expected.size( ) ) == 0;
+		const bool			  removed	= hook.remove( ) && std::memcmp( memory, expected.data( ), expected.size( ) ) == 0;
 		VirtualFree( memory, 0, MEM_RELEASE );
 		return installed && encoded && removed;
 	}
@@ -228,8 +221,5 @@ int main( ) {
 		metrics ? "ok" : "FAIL",
 		phase ? "ok" : "FAIL",
 		qpc ? "ok" : "FAIL" );
-	return address && relative_call && pattern && hook && callsite && pointer && inline_detour && hash && metrics &&
-				   phase && qpc
-			   ? 0
-			   : 1;
+	return address && relative_call && pattern && hook && callsite && pointer && inline_detour && hash && metrics && phase && qpc ? 0 : 1;
 }

@@ -17,13 +17,12 @@ namespace p2boost {
 	}
 
 	ConsoleCommandBase::ConsoleCommandBase( const char* command_name, const char* command_help, int command_flags )
-		: m_next( nullptr ), m_registered( false ), m_padding{ }, m_name( command_name ), m_help( command_help ),
-		  m_flags( command_flags ) {
+		: m_next( nullptr ), m_registered( false ), m_padding{ }, m_name( command_name ), m_help( command_help ), m_flags( command_flags ) {
 	}
 
 	ConsoleCommand::ConsoleCommand( const char* command_name, const char* command_help, Callback command_callback )
-		: ConsoleCommandBase( command_name, command_help, 0 ), m_callback( command_callback ),
-		  m_completion_callback( nullptr ), m_callback_flags( 0x02 ), m_callback_padding{ } {
+		: ConsoleCommandBase( command_name, command_help, 0 ), m_callback( command_callback ), m_completion_callback( nullptr ),
+		  m_callback_flags( 0x02 ), m_callback_padding{ } {
 	}
 
 	bool ConsoleCommandRegistry::connect( sdk::CreateInterfaceFn engine_factory ) {
@@ -38,7 +37,7 @@ namespace p2boost {
 			if( !vstdlib )
 				return false;
 			using GetFactoryFn = sdk::CreateInterfaceFn( __cdecl* )( );
-			auto get_factory = reinterpret_cast< GetFactoryFn >( GetProcAddress( vstdlib, "VStdLib_GetICVarFactory" ) );
+			auto get_factory   = reinterpret_cast< GetFactoryFn >( GetProcAddress( vstdlib, "VStdLib_GetICVarFactory" ) );
 			if( !get_factory )
 				return false;
 			sdk::CreateInterfaceFn factory = get_factory( );

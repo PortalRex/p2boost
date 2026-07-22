@@ -16,8 +16,7 @@ namespace p2boost {
 		};
 
 		// write only while the caller still owns the expected bytes.
-		WriteResult write_bytes(
-			void* address, const void* expected, const void* replacement, size_t size, DWORD protection ) {
+		WriteResult write_bytes( void* address, const void* expected, const void* replacement, size_t size, DWORD protection ) {
 			DWORD old_protection{ };
 			if( !VirtualProtect( address, size, protection, &old_protection ) )
 				return WriteResult::protection_failed;
@@ -89,11 +88,8 @@ namespace p2boost {
 		if( m_patched.empty( ) )
 			return false;
 
-		m_installed = write_bytes( m_address,
-						  m_original.data( ),
-						  m_patched.data( ),
-						  m_patched.size( ),
-						  PAGE_EXECUTE_READWRITE ) == WriteResult::written;
+		m_installed = write_bytes( m_address, m_original.data( ), m_patched.data( ), m_patched.size( ), PAGE_EXECUTE_READWRITE ) ==
+					  WriteResult::written;
 		if( !m_installed )
 			m_address = nullptr;
 
@@ -104,11 +100,7 @@ namespace p2boost {
 		if( !m_installed )
 			return true;
 
-		WriteResult result{ write_bytes( m_address,
-			m_patched.data( ),
-			m_original.data( ),
-			m_original.size( ),
-			PAGE_EXECUTE_READWRITE ) };
+		WriteResult result{ write_bytes( m_address, m_patched.data( ), m_original.data( ), m_original.size( ), PAGE_EXECUTE_READWRITE ) };
 		if( result == WriteResult::protection_failed )
 			return false;
 
@@ -141,11 +133,8 @@ namespace p2boost {
 		std::uint32_t replacement32{ static_cast< std::uint32_t >( replacement_value ) };
 		std::memcpy( m_patched.data( ) + pointer_offset, &replacement32, sizeof( replacement32 ) );
 
-		m_installed = write_bytes( m_address,
-						  m_original.data( ),
-						  m_patched.data( ),
-						  m_patched.size( ),
-						  PAGE_EXECUTE_READWRITE ) == WriteResult::written;
+		m_installed = write_bytes( m_address, m_original.data( ), m_patched.data( ), m_patched.size( ), PAGE_EXECUTE_READWRITE ) ==
+					  WriteResult::written;
 		if( !m_installed ) {
 			m_address  = nullptr;
 			m_previous = nullptr;
@@ -158,11 +147,7 @@ namespace p2boost {
 		if( !m_installed )
 			return true;
 
-		WriteResult result{ write_bytes( m_address,
-			m_patched.data( ),
-			m_original.data( ),
-			m_original.size( ),
-			PAGE_EXECUTE_READWRITE ) };
+		WriteResult result{ write_bytes( m_address, m_patched.data( ), m_original.data( ), m_original.size( ), PAGE_EXECUTE_READWRITE ) };
 		if( result == WriteResult::protection_failed )
 			return false;
 
@@ -187,8 +172,8 @@ namespace p2boost {
 		}
 
 		// copy the displaced bytes and jump back after them.
-		m_trampoline = static_cast< std::uint8_t* >(
-			VirtualAlloc( nullptr, expected.size( ) + 5, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE ) );
+		m_trampoline =
+			static_cast< std::uint8_t* >( VirtualAlloc( nullptr, expected.size( ) + 5, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE ) );
 		if( !m_trampoline ) {
 			m_address = nullptr;
 			return false;
@@ -197,8 +182,8 @@ namespace p2boost {
 		m_original = expected;
 		std::memcpy( m_trampoline, m_original.data( ), m_original.size( ) );
 
-		std::vector< std::uint8_t > return_jump{ x86::relative_jump( Address{ m_trampoline + m_original.size( ) },
-			Address{ m_address + m_original.size( ) } ) };
+		std::vector< std::uint8_t > return_jump{
+			x86::relative_jump( Address{ m_trampoline + m_original.size( ) }, Address{ m_address + m_original.size( ) } ) };
 		m_patched = x86::relative_jump( Address{ m_address }, Address{ replacement } );
 		if( return_jump.empty( ) || m_patched.empty( ) ) {
 			VirtualFree( m_trampoline, 0, MEM_RELEASE );
@@ -210,11 +195,8 @@ namespace p2boost {
 		std::memcpy( m_trampoline + m_original.size( ), return_jump.data( ), return_jump.size( ) );
 		FlushInstructionCache( GetCurrentProcess( ), m_trampoline, m_original.size( ) + return_jump.size( ) );
 
-		m_installed = write_bytes( m_address,
-						  m_original.data( ),
-						  m_patched.data( ),
-						  m_patched.size( ),
-						  PAGE_EXECUTE_READWRITE ) == WriteResult::written;
+		m_installed = write_bytes( m_address, m_original.data( ), m_patched.data( ), m_patched.size( ), PAGE_EXECUTE_READWRITE ) ==
+					  WriteResult::written;
 		if( !m_installed ) {
 			VirtualFree( m_trampoline, 0, MEM_RELEASE );
 			m_trampoline = nullptr;
@@ -228,11 +210,7 @@ namespace p2boost {
 		if( !m_installed )
 			return true;
 
-		WriteResult result{ write_bytes( m_address,
-			m_patched.data( ),
-			m_original.data( ),
-			m_original.size( ),
-			PAGE_EXECUTE_READWRITE ) };
+		WriteResult result{ write_bytes( m_address, m_patched.data( ), m_original.data( ), m_original.size( ), PAGE_EXECUTE_READWRITE ) };
 		if( result == WriteResult::protection_failed )
 			return false;
 

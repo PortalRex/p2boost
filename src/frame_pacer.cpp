@@ -36,9 +36,7 @@ namespace p2boost {
 		std::vector< std::uint8_t > expected{ 0x0f, 0x57, 0xc0, 0xf3, 0x0f, 0x11, 0x46, 0x18 };
 
 		m_instance = this;
-		if( !m_frame_complete.install( frame_complete.as< void* >( ),
-				expected,
-				reinterpret_cast< void* >( &FrameCompleteHook ) ) ) {
+		if( !m_frame_complete.install( frame_complete.as< void* >( ), expected, reinterpret_cast< void* >( &FrameCompleteHook ) ) ) {
 			m_instance = nullptr;
 			return false;
 		}

@@ -117,7 +117,12 @@ public class ExportP2Analysis extends GhidraScript {
                 0x101f995eL,
                 // 2026-07-22 synchronized ETW/PresentMon 8.43 ms lobby frame.
                 0x10124adbL, 0x1031224aL, 0x100e1a90L, 0x10124da2L,
-                0x10070f38L, 0x10218c8aL, 0x1026febcL
+                0x10070f38L, 0x10218c8aL, 0x1026febcL,
+                // Negative-control trace: these synchronous KeyValues reads
+                // were initially mistaken for area streaming. Correlating the
+                // callers proved they belong to deferred new-game/config work.
+                0x10159590L, 0x10159a30L, 0x10158fd0L, 0x101593ccL,
+                0x10278380L, 0x101a6bc0L
             };
             for (long address : profileTargets) addFunctionAndCallers(targets, address, 1);
             long[] queuedSubmissionTargets = {
@@ -243,6 +248,16 @@ public class ExportP2Analysis extends GhidraScript {
                 0x10001f9aL, 0x10002e5dL
             };
             for (long address : steadyReadTargets) addFunctionAndCallers(targets, address, 2);
+
+            long[] startupReadTargets = {
+                // Negative-control trace retained to document the rejected
+                // area-streaming hypothesis. The engine callers resolve to
+                // CHostState::State_NewGame and config/KeyValues processing.
+                0x100331a7L, 0x10033242L, 0x10026fd0L, 0x100271b0L,
+                0x100276d0L, 0x1002793eL, 0x10027410L, 0x10027529L,
+                0x10024c80L, 0x10024d6cL, 0x10024e60L, 0x10024e9cL
+            };
+            for (long address : startupReadTargets) addFunctionAndCallers(targets, address, 3);
         }
         if (base.equalsIgnoreCase("client.dll")) {
             addFunctionAndCallers(targets, 0x101ee590L, 2);

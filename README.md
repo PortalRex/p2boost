@@ -73,6 +73,10 @@ the default `OFF` configuration.
 - `p2boost_enable 0|1` switches the verified fix at runtime for A/B testing.
 - `p2boost_trace 0|1` enables fixed-size QPC frame, D3D9 resource, portal,
   projected-shadow, queued-worker, concrete hardware-fence, and Present tracing.
+- `p2boost_overlay 0|1` toggles a compact in-game profiler. Its one-second
+  rolling panel shows current/average frame time, FPS, p99, maximum, hitch
+  state, portal and render-worker time, shadow skips, focus events, SP/co-op,
+  SAR, and fix state. Collection and display stop completely when disabled.
 - `p2boost_dump_metrics` writes `p2boost_metrics.csv` in the game root, including
   simulation, focus, local-co-op, resource-reacquisition, portal, and
   projected-shadow timings/cache decisions. When renderer-worker tracing has
@@ -120,10 +124,12 @@ response before every five-second default capture. It restores `fps_max` and lea
 all visual and gameplay cvars alone.
 
 `run-live-gameplay.ps1` is the primary short performance check. It records
-matched single-player Trust Fling and two-player lobby runs while genuine
-player commands move, jump, and fire both portal guns. Linked portals remain
-visible in every capture, and proof screenshots are saved beside the CSVs.
-The default eight-second duration keeps a complete SP/co-op A/B run short.
+matched single-player Laser Relays and two-player lobby runs while genuine
+player commands move and fire both portal guns. The SP route starts at the
+normal spawn and walks under collision through the main relay room for twelve
+seconds; it does not use noclip, a position override, or in-capture RCON
+traffic. Proof screenshots are saved beside the CSVs. The default 13-second
+duration includes the complete extended SP route.
 Start the game with `+ss_map mp_coop_lobby_2` before a combined run, then use:
 
 ```powershell

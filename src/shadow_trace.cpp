@@ -43,16 +43,14 @@ namespace p2boost {
 
 		// recover the flashlight list global from its model-count xref.
 		const Address flashlight_xref = pattern::find_unique( client, portal2::signature::flashlight_models );
-		m_flashlight_models_parent =
-			flashlight_xref.add( portal2::xref::flashlight_models_global ).at< Address >( ).as< int** >( );
+		m_flashlight_models_parent	  = flashlight_xref.add( portal2::xref::flashlight_models_global ).at< Address >( ).as< int** >( );
 		if( !m_remove_dirty || !m_flashlight_models_parent || !*m_flashlight_models_parent )
 			return false;
 
 		m_metrics = metrics;
 		m_states.reserve( 16 );
 		m_instance = this;
-		if( !m_update_projected.install( vtable + portal2::slot::update_projected,
-				reinterpret_cast< void* >( &UpdateProjected ) ) ) {
+		if( !m_update_projected.install( vtable + portal2::slot::update_projected, reinterpret_cast< void* >( &UpdateProjected ) ) ) {
 			m_instance = nullptr;
 			m_metrics  = nullptr;
 			return false;
@@ -100,8 +98,7 @@ namespace p2boost {
 		}
 
 		// handles index a fixed-stride CUtlVector owned by the manager.
-		auto* entries =
-			*reinterpret_cast< std::uint8_t** >( static_cast< std::uint8_t* >( self ) + portal2::shadow::entries );
+		auto* entries = *reinterpret_cast< std::uint8_t** >( static_cast< std::uint8_t* >( self ) + portal2::shadow::entries );
 		if( !entries ) {
 			previous( self, handle, force );
 			return;
@@ -119,12 +116,11 @@ namespace p2boost {
 
 		auto* flashlight_models_parent = *instance->m_flashlight_models_parent;
 		// model-list changes affect the generated projection despite equal bytes.
-		const int flashlight_models =
-			flashlight_models_parent
-				? *reinterpret_cast< int* >( reinterpret_cast< std::uint8_t* >( flashlight_models_parent ) +
-											 portal2::shadow::flashlight_models )
-				: 0;
-		const bool same = prior != instance->m_states.end( ) && prior->m_flashlight_models == flashlight_models &&
+		const int  flashlight_models = flashlight_models_parent
+										   ? *reinterpret_cast< int* >( reinterpret_cast< std::uint8_t* >( flashlight_models_parent ) +
+																		portal2::shadow::flashlight_models )
+										   : 0;
+		const bool same				 = prior != instance->m_states.end( ) && prior->m_flashlight_models == flashlight_models &&
 						  std::memcmp( prior->m_bytes.data( ), shadow, prior->m_bytes.size( ) ) == 0;
 
 		// preserve dirty-list cleanup while omitting only the identical rebuild.

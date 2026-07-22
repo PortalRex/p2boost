@@ -7,9 +7,8 @@
 
 namespace p2boost {
 
-	void Metrics::record_reacquire(
-		double milliseconds, const char* reason, Qpc::tick_t begin_qpc, Qpc::tick_t end_qpc ) noexcept {
-		if( !m_tracing )
+	void Metrics::record_reacquire( double milliseconds, const char* reason, Qpc::tick_t begin_qpc, Qpc::tick_t end_qpc ) noexcept {
+		if( !collecting( ) )
 			return;
 		// merge nested restore work into the current frame sample.
 		m_pending_reacquire_ms += milliseconds;
@@ -21,21 +20,20 @@ namespace p2boost {
 	}
 
 	void Metrics::record_reacquire_stage( size_t stage, double milliseconds ) noexcept {
-		if( !m_tracing || stage >= m_pending_reacquire_stages_ms.size( ) )
+		if( !collecting( ) || stage >= m_pending_reacquire_stages_ms.size( ) )
 			return;
 		m_pending_reacquire_stages_ms[ stage ] += milliseconds;
 	}
 
 	void Metrics::record_portal_render( double milliseconds ) noexcept {
-		if( !m_tracing )
+		if( !collecting( ) )
 			return;
 		m_pending_portal_render_ms += milliseconds;
 		++m_pending_portal_render_count;
 	}
 
-	void Metrics::record_shadow_update(
-		double milliseconds, bool same_projection, bool same_full, bool skipped ) noexcept {
-		if( !m_tracing )
+	void Metrics::record_shadow_update( double milliseconds, bool same_projection, bool same_full, bool skipped ) noexcept {
+		if( !collecting( ) )
 			return;
 		m_pending_shadow_update_ms += milliseconds;
 		++m_pending_shadow_update_count;
@@ -48,7 +46,7 @@ namespace p2boost {
 	}
 
 	void Metrics::record_render_worker( RenderWorkerMetrics sample ) noexcept {
-		if( !tracing( ) )
+		if( !collecting( ) )
 			return;
 		// render workers can finish off-thread, so their ring is synchronized.
 		std::lock_guard< std::mutex > lock( m_render_worker_mutex );
@@ -71,7 +69,7 @@ namespace p2boost {
 	}
 
 	void Metrics::frame( bool simulating ) noexcept {
-		if( !tracing( ) )
+		if( !collecting( ) )
 			return;
 		const Qpc::tick_t now				 = Qpc::now( );
 		const double	  delta				 = m_last_qpc == 0 ? 0.0 : Qpc::milliseconds( now - m_last_qpc );
@@ -155,6 +153,49 @@ namespace p2boost {
 		m_last_qpc = now;
 	}
 
+	OverlayMetrics Metrics::overlay_metrics( ) const noexcept {
+		OverlayMetrics result{ };
+		if( m_count == 0 )
+			return result;
+
+		// One second covers a full high-refresh pacing window without allowing
+		// old map-load spikes to remain on screen indefinitely.
+		constexpr size_t					  window_capacity = 1024;
+		std::array< double, window_capacity > frame_times{ };
+		size_t								  frame_count = 0;
+		double								  frame_total = 0.0;
+		const size_t						  newest	  = ( m_cursor + capacity - 1 ) % capacity;
+		const auto&							  latest	  = m_samples[ newest ];
+		result.m_frame_ms								  = latest.m_delta_ms;
+		result.m_focused								  = latest.m_focused;
+		result.m_coop									  = latest.m_coop;
+
+		const Qpc::tick_t cutoff = latest.m_qpc - Qpc::ticks( 1000.0 );
+		for( size_t offset = 0; offset < m_count && frame_count < window_capacity; ++offset ) {
+			const auto& sample = m_samples[ ( newest + capacity - offset ) % capacity ];
+			if( sample.m_qpc < cutoff )
+				break;
+			if( sample.m_delta_ms > 0.0 && sample.m_simulating ) {
+				frame_times[ frame_count++ ] = sample.m_delta_ms;
+				frame_total += sample.m_delta_ms;
+			}
+			result.m_portal_ms += sample.m_portal_render_ms;
+			result.m_portal_count += sample.m_portal_render_count;
+			result.m_render_worker_ms += sample.m_render_worker_ms;
+			result.m_shadow_skips += sample.m_shadow_skipped_count;
+			if( sample.m_reacquire_ms > 0.0 )
+				++result.m_focus_events;
+		}
+
+		if( frame_count == 0 )
+			return result;
+		std::sort( frame_times.begin( ), frame_times.begin( ) + frame_count );
+		result.m_average_ms = frame_total / static_cast< double >( frame_count );
+		result.m_p99_ms		= frame_times[ ( frame_count - 1 ) * 99 / 100 ];
+		result.m_max_ms		= frame_times[ frame_count - 1 ];
+		return result;
+	}
+
 	bool Metrics::dump( const std::string& path ) const {
 		// frame samples are written oldest-first even after the ring wraps.
 		std::ofstream output( path, std::ios::trunc );
@@ -171,31 +212,27 @@ namespace p2boost {
 		const size_t start = m_count == capacity ? m_cursor : 0;
 		for( size_t index = 0; index < m_count; ++index ) {
 			const auto& sample = m_samples[ ( start + index ) % capacity ];
-			output << sample.m_qpc << ',' << sample.m_delta_ms << ',' << sample.m_reacquire_begin_qpc << ','
-				   << sample.m_reacquire_end_qpc << ',' << sample.m_reacquire_ms << ','
-				   << sample.m_reacquire_stages_ms[ 0 ] << ',' << sample.m_reacquire_stages_ms[ 1 ] << ','
-				   << sample.m_reacquire_stages_ms[ 2 ] << ',' << sample.m_portal_render_ms << ','
-				   << sample.m_portal_render_count << ',' << sample.m_shadow_update_ms << ','
-				   << sample.m_shadow_update_count << ',' << sample.m_shadow_same_projection_count << ','
-				   << sample.m_shadow_same_full_count << ',' << sample.m_shadow_skipped_count << ','
-				   << sample.m_render_worker_begin_qpc << ',' << sample.m_render_worker_end_qpc << ','
-				   << sample.m_render_worker_ms << ',' << sample.m_render_worker_cycles << ','
-				   << sample.m_render_worker_count << ',' << sample.m_render_worker_queued_calls << ','
-				   << sample.m_render_worker_parameter_bytes << ',' << sample.m_render_worker_vertex_bytes << ','
-				   << sample.m_render_worker_index_bytes << ',' << sample.m_reacquire_reason << ','
-				   << ( sample.m_simulating ? 1 : 0 ) << ',' << ( sample.m_focused ? 1 : 0 ) << ','
-				   << ( sample.m_coop ? 1 : 0 ) << '\n';
+			output << sample.m_qpc << ',' << sample.m_delta_ms << ',' << sample.m_reacquire_begin_qpc << ',' << sample.m_reacquire_end_qpc
+				   << ',' << sample.m_reacquire_ms << ',' << sample.m_reacquire_stages_ms[ 0 ] << ',' << sample.m_reacquire_stages_ms[ 1 ]
+				   << ',' << sample.m_reacquire_stages_ms[ 2 ] << ',' << sample.m_portal_render_ms << ',' << sample.m_portal_render_count
+				   << ',' << sample.m_shadow_update_ms << ',' << sample.m_shadow_update_count << ','
+				   << sample.m_shadow_same_projection_count << ',' << sample.m_shadow_same_full_count << ','
+				   << sample.m_shadow_skipped_count << ',' << sample.m_render_worker_begin_qpc << ',' << sample.m_render_worker_end_qpc
+				   << ',' << sample.m_render_worker_ms << ',' << sample.m_render_worker_cycles << ',' << sample.m_render_worker_count << ','
+				   << sample.m_render_worker_queued_calls << ',' << sample.m_render_worker_parameter_bytes << ','
+				   << sample.m_render_worker_vertex_bytes << ',' << sample.m_render_worker_index_bytes << ',' << sample.m_reacquire_reason
+				   << ',' << ( sample.m_simulating ? 1 : 0 ) << ',' << ( sample.m_focused ? 1 : 0 ) << ',' << ( sample.m_coop ? 1 : 0 )
+				   << '\n';
 		}
 		const bool frame_output_good = output.good( );
 		output.close( );
 		// place detailed worker records beside the requested frame CSV.
-		const size_t	  separator = path.find_last_of( "/\\" );
-		const size_t	  dot		= path.find_last_of( '.' );
-		const std::string worker_path =
-			dot != std::string::npos && ( separator == std::string::npos || dot > separator )
-				? path.substr( 0, dot ) + "_render_workers" + path.substr( dot )
-				: path + "_render_workers.csv";
-		std::ofstream worker_output( worker_path, std::ios::trunc );
+		const size_t	  separator	  = path.find_last_of( "/\\" );
+		const size_t	  dot		  = path.find_last_of( '.' );
+		const std::string worker_path = dot != std::string::npos && ( separator == std::string::npos || dot > separator )
+											? path.substr( 0, dot ) + "_render_workers" + path.substr( dot )
+											: path + "_render_workers.csv";
+		std::ofstream	  worker_output( worker_path, std::ios::trunc );
 		if( !worker_output )
 			return false;
 		worker_output << "begin_qpc,end_qpc,wall_ms,cycles,queued_calls,parameter_bytes,vertex_bytes,index_bytes,"
@@ -234,57 +271,51 @@ namespace p2boost {
 			for( size_t index = 0; index < m_render_worker_count; ++index ) {
 				const auto& sample = m_render_worker_samples[ ( worker_start + index ) % capacity ];
 				worker_output << sample.m_begin_qpc << ',' << sample.m_end_qpc << ','
-							  << Qpc::milliseconds( sample.m_end_qpc - sample.m_begin_qpc ) << ',' << sample.m_cycles
-							  << ',' << sample.m_queued_calls << ',' << sample.m_parameter_bytes << ','
-							  << sample.m_vertex_bytes << ',' << sample.m_index_bytes << ','
-							  << sample.m_hardware_sync_count << ',' << Qpc::milliseconds( sample.m_hardware_sync_qpc )
-							  << ',' << Qpc::milliseconds( sample.m_max_hardware_sync_qpc ) << ','
-							  << sample.m_hardware_sync_cycles << ',' << sample.m_sync_index_before << ','
-							  << sample.m_sync_pending_before << ',' << sample.m_sync_pending_after << ','
-							  << sample.m_present_count << ',' << Qpc::milliseconds( sample.m_present_qpc ) << ','
+							  << Qpc::milliseconds( sample.m_end_qpc - sample.m_begin_qpc ) << ',' << sample.m_cycles << ','
+							  << sample.m_queued_calls << ',' << sample.m_parameter_bytes << ',' << sample.m_vertex_bytes << ','
+							  << sample.m_index_bytes << ',' << sample.m_hardware_sync_count << ','
+							  << Qpc::milliseconds( sample.m_hardware_sync_qpc ) << ','
+							  << Qpc::milliseconds( sample.m_max_hardware_sync_qpc ) << ',' << sample.m_hardware_sync_cycles << ','
+							  << sample.m_sync_index_before << ',' << sample.m_sync_pending_before << ',' << sample.m_sync_pending_after
+							  << ',' << sample.m_present_count << ',' << Qpc::milliseconds( sample.m_present_qpc ) << ','
 							  << Qpc::milliseconds( sample.m_max_present_qpc );
 #ifdef P2BOOST_RESEARCH_DRAW_TRACE
 				worker_output << ',' << sample.m_draw_count << ',' << Qpc::milliseconds( sample.m_draw_qpc ) << ','
 							  << Qpc::milliseconds( sample.m_max_draw_qpc ) << ',' << sample.m_max_draw_method << ','
 							  << sample.m_max_draw_primitive_type << ',' << sample.m_max_draw_primitive_count << ','
 							  << sample.m_max_draw_vertex_count;
-				worker_output << ",0x" << std::hex << sample.m_max_draw_vertex_shader << ",0x"
-							  << sample.m_max_draw_pixel_shader;
+				worker_output << ",0x" << std::hex << sample.m_max_draw_vertex_shader << ",0x" << sample.m_max_draw_pixel_shader;
 				for( const auto texture : sample.m_max_draw_textures )
 					worker_output << ",0x" << texture;
-				worker_output << std::dec << ',' << static_cast< unsigned int >( sample.m_max_draw_first_vertex_shader )
-							  << ',' << static_cast< unsigned int >( sample.m_max_draw_first_pixel_shader ) << ','
+				worker_output << std::dec << ',' << static_cast< unsigned int >( sample.m_max_draw_first_vertex_shader ) << ','
+							  << static_cast< unsigned int >( sample.m_max_draw_first_pixel_shader ) << ','
 							  << static_cast< unsigned int >( sample.m_max_draw_first_pipeline ) << ','
 							  << static_cast< unsigned int >( sample.m_max_draw_first_texture_mask ) << ','
-							  << sample.m_max_draw_texture0_type << ",0x" << std::hex
-							  << sample.m_max_draw_texture0_format << std::dec << ','
-							  << sample.m_max_draw_texture0_width << ',' << sample.m_max_draw_texture0_height << ",0x"
-							  << std::hex << sample.m_max_draw_texture0_usage << std::dec << ','
-							  << sample.m_max_draw_texture0_pool << ',' << sample.m_max_draw_texture0_levels << ",0x"
-							  << std::hex << sample.m_max_draw_texture0_hash << std::dec;
+							  << sample.m_max_draw_texture0_type << ",0x" << std::hex << sample.m_max_draw_texture0_format << std::dec
+							  << ',' << sample.m_max_draw_texture0_width << ',' << sample.m_max_draw_texture0_height << ",0x" << std::hex
+							  << sample.m_max_draw_texture0_usage << std::dec << ',' << sample.m_max_draw_texture0_pool << ','
+							  << sample.m_max_draw_texture0_levels << ",0x" << std::hex << sample.m_max_draw_texture0_hash << std::dec;
 				for( const auto address : sample.m_max_draw_stack )
 					worker_output << ",0x" << std::hex << address << std::dec;
 				for( size_t command = 0; command < sample.m_command_keys.size( ); ++command )
 					worker_output << ",0x" << std::hex << sample.m_command_keys[ command ] << std::dec << ','
 								  << sample.m_command_counts[ command ];
-				worker_output << ',' << sample.m_dynamic_light_count << ','
-							  << Qpc::milliseconds( sample.m_dynamic_light_qpc ) << ','
+				worker_output << ',' << sample.m_dynamic_light_count << ',' << Qpc::milliseconds( sample.m_dynamic_light_qpc ) << ','
 							  << sample.m_dynamic_light_unique_lights << ',' << sample.m_dynamic_light_unique_surfaces;
-				worker_output << ",0x" << std::hex << sample.m_dynamic_light_first_light << ",0x"
-							  << sample.m_dynamic_light_first_surface << ",0x" << sample.m_dynamic_light_first_flags
-							  << std::dec << ',' << static_cast< unsigned int >( sample.m_dynamic_light_first_bool_a )
-							  << ',' << static_cast< unsigned int >( sample.m_dynamic_light_first_bool_b );
+				worker_output << ",0x" << std::hex << sample.m_dynamic_light_first_light << ",0x" << sample.m_dynamic_light_first_surface
+							  << ",0x" << sample.m_dynamic_light_first_flags << std::dec << ','
+							  << static_cast< unsigned int >( sample.m_dynamic_light_first_bool_a ) << ','
+							  << static_cast< unsigned int >( sample.m_dynamic_light_first_bool_b );
 				// light payloads are raw words so the capture preserves exact bits.
 				const auto light_float = [ &sample ]( size_t word ) {
 					float value = 0.0f;
 					std::memcpy( &value, &sample.m_dynamic_light_words[ word ], sizeof( value ) );
 					return value;
 				};
-				worker_output << ",0x" << std::hex << sample.m_dynamic_light_words[ 0 ] << std::dec << ','
-							  << light_float( 1 ) << ',' << light_float( 2 ) << ',' << light_float( 3 ) << ','
-							  << light_float( 4 ) << ",0x" << std::hex << sample.m_dynamic_light_words[ 5 ] << std::dec
-							  << ',' << light_float( 6 ) << ',' << light_float( 7 ) << ',' << light_float( 8 ) << ','
-							  << static_cast< std::int32_t >( sample.m_dynamic_light_words[ 9 ] ) << ','
+				worker_output << ",0x" << std::hex << sample.m_dynamic_light_words[ 0 ] << std::dec << ',' << light_float( 1 ) << ','
+							  << light_float( 2 ) << ',' << light_float( 3 ) << ',' << light_float( 4 ) << ",0x" << std::hex
+							  << sample.m_dynamic_light_words[ 5 ] << std::dec << ',' << light_float( 6 ) << ',' << light_float( 7 ) << ','
+							  << light_float( 8 ) << ',' << static_cast< std::int32_t >( sample.m_dynamic_light_words[ 9 ] ) << ','
 							  << static_cast< std::int32_t >( sample.m_dynamic_light_words[ 10 ] );
 #endif
 				worker_output << ',' << sample.m_thread_id << '\n';

@@ -26,23 +26,10 @@ namespace p2boost {
 		std::string narrow( const std::wstring& input ) {
 			if( input.empty( ) )
 				return { };
-			const int	size = WideCharToMultiByte( CP_UTF8,
-				  0,
-				  input.c_str( ),
-				  static_cast< int >( input.size( ) ),
-				  nullptr,
-				  0,
-				  nullptr,
-				  nullptr );
+			const int size =
+				WideCharToMultiByte( CP_UTF8, 0, input.c_str( ), static_cast< int >( input.size( ) ), nullptr, 0, nullptr, nullptr );
 			std::string output( static_cast< size_t >( size ), '\0' );
-			WideCharToMultiByte( CP_UTF8,
-				0,
-				input.c_str( ),
-				static_cast< int >( input.size( ) ),
-				output.data( ),
-				size,
-				nullptr,
-				nullptr );
+			WideCharToMultiByte( CP_UTF8, 0, input.c_str( ), static_cast< int >( input.size( ) ), output.data( ), size, nullptr, nullptr );
 			return output;
 		}
 
@@ -60,18 +47,10 @@ namespace p2boost {
 		// every patched module must match; partial matches are never accepted.
 		static const std::array< ModuleFingerprint, 5 > modules{ {
 			{ "engine.dll", "bin\\engine.dll", "5196eace78d5f2f47f8ce39a49b0efd15374a2b996b272642f0493ace42c24dc" },
-			{ "shaderapidx9.dll",
-				"bin\\shaderapidx9.dll",
-				"0879d15b4f9cf9f55bb86d874dc88b6edf4d8dfc825e77d3bd1619a2df250439" },
-			{ "materialsystem.dll",
-				"bin\\materialsystem.dll",
-				"8b8bbdb77e72a23bef8e67f0b9800327338e125ba0fbfae68feb2dc864af4fbf" },
-			{ "client.dll",
-				"portal2\\bin\\client.dll",
-				"2ff27c2878c258b2c16a0982e30b0d2f1bad9d213e42cc778dc2a2925c625137" },
-			{ "server.dll",
-				"portal2\\bin\\server.dll",
-				"4c3ecc83bbea0864660a49322d1d5188cdc00fe43a7ea56f1ca8a0c94356bb4c" },
+			{ "shaderapidx9.dll", "bin\\shaderapidx9.dll", "0879d15b4f9cf9f55bb86d874dc88b6edf4d8dfc825e77d3bd1619a2df250439" },
+			{ "materialsystem.dll", "bin\\materialsystem.dll", "8b8bbdb77e72a23bef8e67f0b9800327338e125ba0fbfae68feb2dc864af4fbf" },
+			{ "client.dll", "portal2\\bin\\client.dll", "2ff27c2878c258b2c16a0982e30b0d2f1bad9d213e42cc778dc2a2925c625137" },
+			{ "server.dll", "portal2\\bin\\server.dll", "4c3ecc83bbea0864660a49322d1d5188cdc00fe43a7ea56f1ca8a0c94356bb4c" },
 		} };
 		return modules;
 	}
@@ -150,8 +129,7 @@ namespace p2boost {
 		}
 		std::wstring	   engine_path = module_path( engine );
 		const std::wstring suffix	   = L"\\bin\\engine.dll";
-		if( engine_path.size( ) <= suffix.size( ) ||
-			lower( engine_path.substr( engine_path.size( ) - suffix.size( ) ) ) != suffix ) {
+		if( engine_path.size( ) <= suffix.size( ) || lower( engine_path.substr( engine_path.size( ) - suffix.size( ) ) ) != suffix ) {
 			result.m_errors.emplace_back( "cannot derive game root from engine.dll" );
 			return result;
 		}
@@ -159,8 +137,7 @@ namespace p2boost {
 		result.m_game_root = narrow( root );
 		// hash files on disk before any private engine address is resolved.
 		for( const auto& module : supported_build_23973718( ) ) {
-			const std::wstring relative( module.m_relative_path,
-				module.m_relative_path + strlen( module.m_relative_path ) );
+			const std::wstring relative( module.m_relative_path, module.m_relative_path + strlen( module.m_relative_path ) );
 			const std::wstring path = root + L"\\" + relative;
 			try {
 				const std::string actual = sha256_file( path );
@@ -177,9 +154,9 @@ namespace p2boost {
 		const HMODULE vulkan_shader = GetModuleHandleW( L"shaderapivk.dll" );
 		if( d3d9 ) {
 			const std::wstring d3d_path = lower( module_path( d3d9 ) );
-			result.m_native_d3d9		= vulkan_shader == nullptr &&
-								   ( d3d_path.find( L"\\windows\\system32\\d3d9.dll" ) != std::wstring::npos ||
-									   d3d_path.find( L"\\windows\\syswow64\\d3d9.dll" ) != std::wstring::npos );
+			result.m_native_d3d9 =
+				vulkan_shader == nullptr && ( d3d_path.find( L"\\windows\\system32\\d3d9.dll" ) != std::wstring::npos ||
+												d3d_path.find( L"\\windows\\syswow64\\d3d9.dll" ) != std::wstring::npos );
 		}
 		if( !result.m_native_d3d9 )
 			result.m_errors.emplace_back( "native Microsoft D3D9 runtime is not active" );

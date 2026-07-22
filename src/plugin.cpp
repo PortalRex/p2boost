@@ -4,6 +4,7 @@
 #include "frame_pacer.h"
 #include "metrics.h"
 #include "portal_trace.h"
+#include "profiler_overlay.h"
 #include "renderer_trace.h"
 #include "sdk.h"
 #include "shadow_trace.h"
@@ -25,21 +26,21 @@ namespace p2boost {
 				!m_commands.add( "p2boost_status", "Print p2boost runtime state.", &CommandThunk ) ||
 				!m_commands.add( "p2boost_enable", "Enable or disable verified fixes.", &CommandThunk ) ||
 				!m_commands.add( "p2boost_trace", "Enable or disable diagnostic frame tracing.", &CommandThunk ) ||
+				!m_commands.add( "p2boost_overlay", "Enable or disable the in-game profiler overlay.", &CommandThunk ) ||
 				!m_commands.add( "p2boost_dump_metrics", "Write diagnostic timings to CSV.", &CommandThunk ) ) {
 				console_print( "[p2boost] failed to register console commands\n" );
 				m_instance = nullptr;
 				return false;
 			}
 			m_verification = verify_runtime( );
+			m_profiler_overlay.connect( interface_factory );
 
 			// each feature remains unavailable when its exact signature fails.
 			if( m_verification.m_supported && m_verification.m_native_d3d9 && !m_renderer_trace.install( &m_metrics ) )
 				m_verification.m_errors.emplace_back( "renderer trace callsite signature mismatch" );
-			if( m_verification.m_supported && m_verification.m_native_d3d9 &&
-				!m_renderer_trace.focus_sync_available( ) )
+			if( m_verification.m_supported && m_verification.m_native_d3d9 && !m_renderer_trace.focus_sync_available( ) )
 				m_verification.m_errors.emplace_back( "material-system focus synchronization signature mismatch" );
-			if( m_verification.m_supported && m_verification.m_native_d3d9 &&
-				!m_renderer_trace.static_lighting_fix_available( ) )
+			if( m_verification.m_supported && m_verification.m_native_d3d9 && !m_renderer_trace.static_lighting_fix_available( ) )
 				m_verification.m_errors.emplace_back( "static-lighting restore callsite signature mismatch" );
 			if( m_verification.m_supported && m_verification.m_native_d3d9 && !m_portal_trace.install( &m_metrics ) )
 				m_verification.m_errors.emplace_back( "portal trace callsite signature mismatch" );
@@ -61,6 +62,8 @@ namespace p2boost {
 		void Unload( ) override {
 			// stop external entry points before removing their backing hooks.
 			m_commands.disconnect( );
+			m_profiler_overlay.set_enabled( false, m_metrics );
+			m_profiler_overlay.disconnect( );
 			m_shadow_trace.remove( );
 			m_portal_trace.remove( );
 			m_renderer_trace.remove( );
@@ -95,6 +98,7 @@ namespace p2boost {
 				m_last_focused = focused;
 			}
 			m_metrics.frame( simulating );
+			m_profiler_overlay.draw( m_metrics, m_enabled, GetModuleHandleW( L"sar.dll" ) != nullptr );
 		}
 		void LevelShutdown( ) override {
 			m_metrics.set_coop( false );
@@ -121,13 +125,14 @@ namespace p2boost {
 			if( _stricmp( command, "p2boost_status" ) == 0 ) {
 				const bool sar_loaded = GetModuleHandleW( L"sar.dll" ) != nullptr;
 				console_print( "[p2boost] build=23973718 supported=%d native_d3d9=%d enabled=%d "
-							   "pacer_installed=%d tracing=%d sar=%d samples=%zu focus_sync=%d lighting_fix=%d "
+							   "pacer_installed=%d tracing=%d overlay=%d sar=%d samples=%zu focus_sync=%d lighting_fix=%d "
 							   "lighting_skips=%u shadow_cache=%d shadow_skips=%u root=%s\n",
 					m_verification.m_supported,
 					m_verification.m_native_d3d9,
 					m_enabled,
 					m_frame_pacer.installed( ),
 					m_metrics.tracing( ),
+					m_profiler_overlay.enabled( ),
 					sar_loaded,
 					m_metrics.count( ),
 					m_renderer_trace.focus_sync_available( ),
@@ -158,12 +163,19 @@ namespace p2boost {
 					console_print( "usage: p2boost_trace 0|1\n" );
 				return sdk::Stop;
 			}
+			if( _stricmp( command, "p2boost_overlay" ) == 0 ) {
+				if( args.ArgC( ) == 2 && ( strcmp( args.Arg( 1 ), "0" ) == 0 || strcmp( args.Arg( 1 ), "1" ) == 0 ) )
+					m_profiler_overlay.set_enabled( strcmp( args.Arg( 1 ), "1" ) == 0, m_metrics );
+				else
+					console_print( "usage: p2boost_overlay 0|1\n" );
+				if( !m_profiler_overlay.available( ) )
+					console_print( "[p2boost] profiler overlay unavailable: VEngineClient interface missing\n" );
+				return sdk::Stop;
+			}
 			if( _stricmp( command, "p2boost_dump_metrics" ) == 0 ) {
 				// keep captures beside the game for predictable script discovery.
 				const std::string path = m_verification.m_game_root + "\\p2boost_metrics.csv";
-				console_print( "[p2boost] metrics %s: %s\n",
-					m_metrics.dump( path ) ? "written" : "write failed",
-					path.c_str( ) );
+				console_print( "[p2boost] metrics %s: %s\n", m_metrics.dump( path ) ? "written" : "write failed", path.c_str( ) );
 				return sdk::Stop;
 			}
 			return sdk::Continue;
@@ -204,6 +216,7 @@ namespace p2boost {
 		PortalTrace			   m_portal_trace;
 		RendererTrace		   m_renderer_trace;
 		ShadowTrace			   m_shadow_trace;
+		ProfilerOverlay		   m_profiler_overlay;
 		ConsoleCommandRegistry m_commands;
 		bool				   m_enabled	  = false;
 		bool				   m_last_focused = false;

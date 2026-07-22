@@ -72,8 +72,7 @@ namespace p2boost {
 
 		// both xrefs must still reach the same private reacquire routine.
 		const Address reacquire = needs_reset.rel32( 1 );
-		if( !has_bytes( needs_reset, { 0xe8 } ) || !has_bytes( other_app, { 0xe8 } ) || !reacquire ||
-			other_app.rel32( 1 ) != reacquire )
+		if( !has_bytes( needs_reset, { 0xe8 } ) || !has_bytes( other_app, { 0xe8 } ) || !reacquire || other_app.rel32( 1 ) != reacquire )
 			return false;
 		m_original = reacquire.as< Reacquire_t >( );
 		const Address engine( GetModuleHandleW( L"engine.dll" ) );
@@ -81,11 +80,10 @@ namespace p2boost {
 			return false;
 
 		// locate both static-lighting calls by their surrounding restore logic.
-		const Address lighting_site = pattern::find_unique( engine, portal2::signature::restore_static_lighting )
-										  .add( portal2::xref::restore_static_lighting );
-		const Address lighting_cache_site =
-			pattern::find_unique( engine, portal2::signature::restore_static_lighting_cache )
-				.add( portal2::xref::restore_static_lighting_cache );
+		const Address lighting_site =
+			pattern::find_unique( engine, portal2::signature::restore_static_lighting ).add( portal2::xref::restore_static_lighting );
+		const Address lighting_cache_site = pattern::find_unique( engine, portal2::signature::restore_static_lighting_cache )
+												.add( portal2::xref::restore_static_lighting_cache );
 		if( !has_bytes( lighting_site, { 0xe8 } ) || !has_bytes( lighting_cache_site, { 0xe8 } ) )
 			return false;
 		m_lighting_original		  = lighting_site.rel32( 1 ).as< StaticLightingRestore_t >( );
@@ -102,25 +100,22 @@ namespace p2boost {
 		};
 
 		// recover private shader objects from unique absolute-operand xrefs.
-		const Address shader_device_match = pattern::find_unique( shader_module, portal2::signature::shader_device );
-		const Address shader_device_global =
-			shader_device_match.add( portal2::xref::shader_device_global ).at< Address >( );
-		void* shader_device = shader_device_global.to< void* >( );
+		const Address shader_device_match  = pattern::find_unique( shader_module, portal2::signature::shader_device );
+		const Address shader_device_global = shader_device_match.add( portal2::xref::shader_device_global ).at< Address >( );
+		void*		  shader_device		   = shader_device_global.to< void* >( );
 
-		const Address resource_callbacks_global =
-			needs_reset_match.add( portal2::xref::resource_callbacks_global ).at< Address >( );
-		void* resource_callbacks = resource_callbacks_global.to< void* >( );
+		const Address resource_callbacks_global = needs_reset_match.add( portal2::xref::resource_callbacks_global ).at< Address >( );
+		void*		  resource_callbacks		= resource_callbacks_global.to< void* >( );
 
 		const Address frame_sync_match = pattern::find_unique( shader_module, portal2::signature::frame_sync );
-		void* frame_sync = frame_sync_match.add( portal2::xref::frame_sync_object ).at< Address >( ).as< void* >( );
+		void*		  frame_sync	   = frame_sync_match.add( portal2::xref::frame_sync_object ).at< Address >( ).as< void* >( );
 
 		// one material-system function exposes both related device globals.
-		const Address material_devices = pattern::find_unique( materials, portal2::signature::material_devices );
-		const Address present_device_global =
-			material_devices.add( portal2::xref::present_device_global ).at< Address >( );
-		const Address shader_api_global = material_devices.add( portal2::xref::shader_api_global ).at< Address >( );
-		void*		  present_device	= present_device_global.to< void* >( );
-		void*		  shader_api		= shader_api_global.to< void* >( );
+		const Address material_devices		= pattern::find_unique( materials, portal2::signature::material_devices );
+		const Address present_device_global = material_devices.add( portal2::xref::present_device_global ).at< Address >( );
+		const Address shader_api_global		= material_devices.add( portal2::xref::shader_api_global ).at< Address >( );
+		void*		  present_device		= present_device_global.to< void* >( );
+		void*		  shader_api			= shader_api_global.to< void* >( );
 		if( !shader_api || !present_device ) {
 			remove( );
 			return false;
@@ -136,8 +131,7 @@ namespace p2boost {
 		const Address hardware_sync{ shader_api_vtable[ portal2::slot::hardware_sync ] };
 		const Address present{ present_vtable[ portal2::slot::present ] };
 		// Present uses a stack frame before saving ESI; validate its complete stable prologue.
-		if( !has_bytes( hardware_sync, { 0xa1 } ) ||
-			!has_bytes( present, { 0x55, 0x8b, 0xec, 0x83, 0xec, 0x40, 0x56, 0x8b, 0xf1 } ) ) {
+		if( !has_bytes( hardware_sync, { 0xa1 } ) || !has_bytes( present, { 0x55, 0x8b, 0xec, 0x83, 0xec, 0x40, 0x56, 0x8b, 0xf1 } ) ) {
 			remove( );
 			return false;
 		}
@@ -157,10 +151,8 @@ namespace p2boost {
 										  .add( portal2::xref::dynamic_light_signed_vtable )
 										  .at< Address >( );
 		// unwrap these two functors only while collecting research metrics.
-		m_queued_functor_execute =
-			pattern::find_unique( materials, portal2::signature::queued_functor_execute ).as< void* >( );
-		m_queued_functor_leaf =
-			pattern::find_unique( materials, portal2::signature::queued_functor_leaf ).as< void* >( );
+		m_queued_functor_execute = pattern::find_unique( materials, portal2::signature::queued_functor_execute ).as< void* >( );
+		m_queued_functor_leaf	 = pattern::find_unique( materials, portal2::signature::queued_functor_leaf ).as< void* >( );
 		if( !d3d_device || !unsigned_vtable || !signed_vtable || !m_queued_functor_execute || !m_queued_functor_leaf ) {
 			remove( );
 			return false;
@@ -170,47 +162,36 @@ namespace p2boost {
 		auto** unsigned_execute_slot	 = unsigned_vtable.as< void** >( ) + 3;
 		auto** signed_execute_slot		 = signed_vtable.as< void** >( ) + 3;
 		m_dynamic_light_execute_original = reinterpret_cast< DynamicLightExecute_t >( *unsigned_execute_slot );
-		const bool draw_hooks			 = d3d_device &&
-								install_slot( m_set_texture,
-									d3d_device,
-									portal2::d3d9::set_texture,
-									reinterpret_cast< void* >( &SetTexture ) ) &&
-								install_slot( m_set_vertex_shader,
-									d3d_device,
-									portal2::d3d9::set_vertex_shader,
-									reinterpret_cast< void* >( &SetVertexShader ) ) &&
-								install_slot( m_set_pixel_shader,
-									d3d_device,
-									portal2::d3d9::set_pixel_shader,
-									reinterpret_cast< void* >( &SetPixelShader ) ) &&
-								install_slot( m_draw_primitive,
-									d3d_device,
-									portal2::d3d9::draw_primitive,
-									reinterpret_cast< void* >( &DrawPrimitive ) ) &&
-								install_slot( m_draw_indexed_primitive,
-									d3d_device,
-									portal2::d3d9::draw_indexed_primitive,
-									reinterpret_cast< void* >( &DrawIndexedPrimitive ) ) &&
-								install_slot( m_draw_primitive_up,
-									d3d_device,
-									portal2::d3d9::draw_primitive_up,
-									reinterpret_cast< void* >( &DrawPrimitiveUp ) ) &&
-								install_slot( m_draw_indexed_primitive_up,
-									d3d_device,
-									portal2::d3d9::draw_indexed_primitive_up,
-									reinterpret_cast< void* >( &DrawIndexedPrimitiveUp ) );
-		const bool dynamic_light_hooks = *unsigned_execute_slot == *signed_execute_slot &&
-										 m_dynamic_light_execute_unsigned.install( unsigned_execute_slot,
-											 reinterpret_cast< void* >( &DynamicLightExecute ) ) &&
-										 m_dynamic_light_execute_signed.install( signed_execute_slot,
-											 reinterpret_cast< void* >( &DynamicLightExecute ) );
+		const bool draw_hooks =
+			d3d_device && install_slot( m_set_texture, d3d_device, portal2::d3d9::set_texture, reinterpret_cast< void* >( &SetTexture ) ) &&
+			install_slot( m_set_vertex_shader,
+				d3d_device,
+				portal2::d3d9::set_vertex_shader,
+				reinterpret_cast< void* >( &SetVertexShader ) ) &&
+			install_slot( m_set_pixel_shader, d3d_device, portal2::d3d9::set_pixel_shader, reinterpret_cast< void* >( &SetPixelShader ) ) &&
+			install_slot( m_draw_primitive, d3d_device, portal2::d3d9::draw_primitive, reinterpret_cast< void* >( &DrawPrimitive ) ) &&
+			install_slot( m_draw_indexed_primitive,
+				d3d_device,
+				portal2::d3d9::draw_indexed_primitive,
+				reinterpret_cast< void* >( &DrawIndexedPrimitive ) ) &&
+			install_slot( m_draw_primitive_up,
+				d3d_device,
+				portal2::d3d9::draw_primitive_up,
+				reinterpret_cast< void* >( &DrawPrimitiveUp ) ) &&
+			install_slot( m_draw_indexed_primitive_up,
+				d3d_device,
+				portal2::d3d9::draw_indexed_primitive_up,
+				reinterpret_cast< void* >( &DrawIndexedPrimitiveUp ) );
+		const bool dynamic_light_hooks =
+			*unsigned_execute_slot == *signed_execute_slot &&
+			m_dynamic_light_execute_unsigned.install( unsigned_execute_slot, reinterpret_cast< void* >( &DynamicLightExecute ) ) &&
+			m_dynamic_light_execute_signed.install( signed_execute_slot, reinterpret_cast< void* >( &DynamicLightExecute ) );
 #else
 		const bool draw_hooks		   = true;
 		const bool dynamic_light_hooks = true;
 #endif
-		const auto lighting_call = x86::relative_call( lighting_site, Address( m_lighting_original ) );
-		const auto lighting_cache_call =
-			x86::relative_call( lighting_cache_site, Address( m_lighting_cache_original ) );
+		const auto lighting_call	   = x86::relative_call( lighting_site, Address( m_lighting_original ) );
+		const auto lighting_cache_call = x86::relative_call( lighting_cache_site, Address( m_lighting_cache_original ) );
 
 		// The queue stores the worker callback as a MOV EAX, imm32 instruction.
 		// Preserve that complete instruction as the signature for reversible A/B.
@@ -222,9 +203,7 @@ namespace p2boost {
 		}
 
 		std::vector< std::uint8_t > render_worker_bytes( 5 );
-		std::memcpy( render_worker_bytes.data( ),
-			render_worker_site.as< const void* >( ),
-			render_worker_bytes.size( ) );
+		std::memcpy( render_worker_bytes.data( ), render_worker_site.as< const void* >( ), render_worker_bytes.size( ) );
 		m_render_worker_original = render_worker_site.add( 1 ).at< RenderWorker_t >( );
 
 		std::vector< std::uint8_t > hardware_sync_bytes( 5 );
@@ -232,35 +211,23 @@ namespace p2boost {
 
 		// Installation is transactional: any failed signature or hook rolls back
 		// every hook already installed by this instance.
-		if( !m_needs_reset.install( needs_reset.as< void* >( ),
-				expected_call( needs_reset ),
-				reinterpret_cast< void* >( &Reacquire ) ) ||
-			!m_other_app.install( other_app.as< void* >( ),
-				expected_call( other_app ),
-				reinterpret_cast< void* >( &Reacquire ) ) ||
+		if( !m_needs_reset.install( needs_reset.as< void* >( ), expected_call( needs_reset ), reinterpret_cast< void* >( &Reacquire ) ) ||
+			!m_other_app.install( other_app.as< void* >( ), expected_call( other_app ), reinterpret_cast< void* >( &Reacquire ) ) ||
 			!m_lighting_restore.install( lighting_site.as< void* >( ),
 				lighting_call,
 				reinterpret_cast< void* >( &StaticLightingRestore ) ) ||
 			!m_lighting_cache_restore.install( lighting_cache_site.as< void* >( ),
 				lighting_cache_call,
 				reinterpret_cast< void* >( &StaticLightingCacheRestore ) ) ||
-			!install_slot( m_shader_device,
-				shader_device,
-				portal2::slot::shader_device,
-				reinterpret_cast< void* >( &ShaderDevice ) ) ||
-			!install_slot( m_frame_sync,
-				frame_sync,
-				portal2::slot::frame_sync,
-				reinterpret_cast< void* >( &FrameSync ) ) ||
+			!install_slot( m_shader_device, shader_device, portal2::slot::shader_device, reinterpret_cast< void* >( &ShaderDevice ) ) ||
+			!install_slot( m_frame_sync, frame_sync, portal2::slot::frame_sync, reinterpret_cast< void* >( &FrameSync ) ) ||
 			!install_slot( m_resource_callbacks,
 				resource_callbacks,
 				portal2::slot::resource_callbacks,
 				reinterpret_cast< void* >( &ResourceCallbacks ) ) ||
-			!m_hardware_sync.install( hardware_sync.as< void* >( ),
-				hardware_sync_bytes,
-				reinterpret_cast< void* >( &HardwareSync ) ) ||
-			!m_present.install( present_vtable + portal2::slot::present, reinterpret_cast< void* >( &Present ) ) ||
-			!draw_hooks || !dynamic_light_hooks ||
+			!m_hardware_sync.install( hardware_sync.as< void* >( ), hardware_sync_bytes, reinterpret_cast< void* >( &HardwareSync ) ) ||
+			!m_present.install( present_vtable + portal2::slot::present, reinterpret_cast< void* >( &Present ) ) || !draw_hooks ||
+			!dynamic_light_hooks ||
 			!m_render_worker.install( render_worker_site.as< void* >( ),
 				render_worker_bytes,
 				1,
@@ -387,16 +354,13 @@ namespace p2boost {
 #endif
 		}
 		const auto byte_delta = [ context ]( size_t current, size_t start ) {
-			const int value =
-				*reinterpret_cast< int* >( context + current ) - *reinterpret_cast< int* >( context + start );
+			const int value = *reinterpret_cast< int* >( context + current ) - *reinterpret_cast< int* >( context + start );
 			return value > 0 ? static_cast< unsigned int >( value ) : 0u;
 		};
 		const unsigned int parameter_bytes =
 			byte_delta( portal2::queued_context::parameter_current, portal2::queued_context::parameter_start );
-		const unsigned int vertex_bytes =
-			byte_delta( portal2::queued_context::vertex_current, portal2::queued_context::vertex_start );
-		const unsigned int index_bytes =
-			byte_delta( portal2::queued_context::index_current, portal2::queued_context::index_start );
+		const unsigned int vertex_bytes = byte_delta( portal2::queued_context::vertex_current, portal2::queued_context::vertex_start );
+		const unsigned int index_bytes	= byte_delta( portal2::queued_context::index_current, portal2::queued_context::index_start );
 		unsigned long long begin_cycles = 0;
 		unsigned long long end_cycles	= 0;
 		const Qpc::tick_t  begin		= Qpc::now( );
@@ -428,11 +392,10 @@ namespace p2boost {
 			previous( self );
 			return;
 		}
-		auto*			   bytes		= static_cast< std::uint8_t* >( self );
-		const int		   index_before = *reinterpret_cast< int* >( bytes + portal2::hardware_sync::index );
-		const unsigned int pending_before =
-			static_cast< unsigned int >( *( bytes + portal2::hardware_sync::pending_a ) != 0 ) |
-			( static_cast< unsigned int >( *( bytes + portal2::hardware_sync::pending_b ) != 0 ) << 1 );
+		auto*			   bytes		  = static_cast< std::uint8_t* >( self );
+		const int		   index_before	  = *reinterpret_cast< int* >( bytes + portal2::hardware_sync::index );
+		const unsigned int pending_before = static_cast< unsigned int >( *( bytes + portal2::hardware_sync::pending_a ) != 0 ) |
+											( static_cast< unsigned int >( *( bytes + portal2::hardware_sync::pending_b ) != 0 ) << 1 );
 		unsigned long long begin_cycles = 0;
 		unsigned long long end_cycles	= 0;
 		const Qpc::tick_t  begin		= Qpc::now( );
@@ -496,8 +459,7 @@ namespace p2boost {
 	// mirror texture bindings without retaining COM references.
 	HRESULT __stdcall RendererTrace::SetTexture( IDirect3DDevice9* self, DWORD stage, IDirect3DBaseTexture9* texture ) {
 		auto* instance = m_instance;
-		auto  previous =
-			 instance ? reinterpret_cast< decltype( &SetTexture ) >( instance->m_set_texture.previous( ) ) : nullptr;
+		auto  previous = instance ? reinterpret_cast< decltype( &SetTexture ) >( instance->m_set_texture.previous( ) ) : nullptr;
 		if( !previous )
 			return D3DERR_INVALIDCALL;
 		const HRESULT result = previous( self, stage, texture );
@@ -509,9 +471,7 @@ namespace p2boost {
 	HRESULT __stdcall RendererTrace::SetVertexShader( IDirect3DDevice9* self, IDirect3DVertexShader9* shader ) {
 		// mirror the currently bound vertex shader for draw attribution.
 		auto* instance = m_instance;
-		auto  previous =
-			 instance ? reinterpret_cast< decltype( &SetVertexShader ) >( instance->m_set_vertex_shader.previous( ) )
-					  : nullptr;
+		auto  previous = instance ? reinterpret_cast< decltype( &SetVertexShader ) >( instance->m_set_vertex_shader.previous( ) ) : nullptr;
 		if( !previous )
 			return D3DERR_INVALIDCALL;
 		const HRESULT result = previous( self, shader );
@@ -523,9 +483,7 @@ namespace p2boost {
 	HRESULT __stdcall RendererTrace::SetPixelShader( IDirect3DDevice9* self, IDirect3DPixelShader9* shader ) {
 		// mirror the currently bound pixel shader for draw attribution.
 		auto* instance = m_instance;
-		auto  previous =
-			 instance ? reinterpret_cast< decltype( &SetPixelShader ) >( instance->m_set_pixel_shader.previous( ) )
-					  : nullptr;
+		auto  previous = instance ? reinterpret_cast< decltype( &SetPixelShader ) >( instance->m_set_pixel_shader.previous( ) ) : nullptr;
 		if( !previous )
 			return D3DERR_INVALIDCALL;
 		const HRESULT result = previous( self, shader );
@@ -538,9 +496,7 @@ namespace p2boost {
 	HRESULT __stdcall RendererTrace::DrawPrimitive(
 		IDirect3DDevice9* self, D3DPRIMITIVETYPE primitive_type, UINT start_vertex, UINT primitive_count ) {
 		auto* instance = m_instance;
-		auto  previous = instance
-							 ? reinterpret_cast< decltype( &DrawPrimitive ) >( instance->m_draw_primitive.previous( ) )
-							 : nullptr;
+		auto  previous = instance ? reinterpret_cast< decltype( &DrawPrimitive ) >( instance->m_draw_primitive.previous( ) ) : nullptr;
 		if( !previous )
 			return D3DERR_INVALIDCALL;
 		const auto pipeline = renderer_research::observe_pipeline( );
@@ -567,28 +523,16 @@ namespace p2boost {
 		UINT																 start_index,
 		UINT																 primitive_count ) {
 		auto* instance = m_instance;
-		auto  previous = instance ? reinterpret_cast< decltype( &DrawIndexedPrimitive ) >(
-										instance->m_draw_indexed_primitive.previous( ) )
-								  : nullptr;
+		auto  previous =
+			 instance ? reinterpret_cast< decltype( &DrawIndexedPrimitive ) >( instance->m_draw_indexed_primitive.previous( ) ) : nullptr;
 		if( !previous )
 			return D3DERR_INVALIDCALL;
 		const auto pipeline = renderer_research::observe_pipeline( );
 		if( !g_worker_trace.m_active || !instance->m_metrics || !instance->m_metrics->tracing( ) )
-			return previous( self,
-				primitive_type,
-				base_vertex_index,
-				min_vertex_index,
-				vertex_count,
-				start_index,
-				primitive_count );
-		const Qpc::tick_t begin	 = Qpc::now( );
-		const HRESULT	  result = previous( self,
-			primitive_type,
-			base_vertex_index,
-			min_vertex_index,
-			vertex_count,
-			start_index,
-			primitive_count );
+			return previous( self, primitive_type, base_vertex_index, min_vertex_index, vertex_count, start_index, primitive_count );
+		const Qpc::tick_t begin = Qpc::now( );
+		const HRESULT	  result =
+			previous( self, primitive_type, base_vertex_index, min_vertex_index, vertex_count, start_index, primitive_count );
 		renderer_research::record_draw( g_worker_trace,
 			begin,
 			portal2::d3d9::draw_indexed_primitive,
@@ -600,15 +544,10 @@ namespace p2boost {
 	}
 
 	// user-memory draws are separate because the driver copies their data.
-	HRESULT __stdcall RendererTrace::DrawPrimitiveUp( IDirect3DDevice9* self,
-		D3DPRIMITIVETYPE												primitive_type,
-		UINT															primitive_count,
-		const void*														vertex_data,
-		UINT															vertex_stride ) {
+	HRESULT __stdcall RendererTrace::DrawPrimitiveUp(
+		IDirect3DDevice9* self, D3DPRIMITIVETYPE primitive_type, UINT primitive_count, const void* vertex_data, UINT vertex_stride ) {
 		auto* instance = m_instance;
-		auto  previous =
-			 instance ? reinterpret_cast< decltype( &DrawPrimitiveUp ) >( instance->m_draw_primitive_up.previous( ) )
-					  : nullptr;
+		auto  previous = instance ? reinterpret_cast< decltype( &DrawPrimitiveUp ) >( instance->m_draw_primitive_up.previous( ) ) : nullptr;
 		if( !previous )
 			return D3DERR_INVALIDCALL;
 		const auto pipeline = renderer_research::observe_pipeline( );
@@ -637,9 +576,9 @@ namespace p2boost {
 		const void*															   vertex_data,
 		UINT																   vertex_stride ) {
 		auto* instance = m_instance;
-		auto  previous = instance ? reinterpret_cast< decltype( &DrawIndexedPrimitiveUp ) >(
-										instance->m_draw_indexed_primitive_up.previous( ) )
-								  : nullptr;
+		auto  previous = instance
+							 ? reinterpret_cast< decltype( &DrawIndexedPrimitiveUp ) >( instance->m_draw_indexed_primitive_up.previous( ) )
+							 : nullptr;
 		if( !previous )
 			return D3DERR_INVALIDCALL;
 		const auto pipeline = renderer_research::observe_pipeline( );
@@ -675,14 +614,12 @@ namespace p2boost {
 #endif
 
 	// serialize focus recovery with material-system access when available.
-	void __fastcall RendererTrace::Reacquire(
-		void* self, void*, unsigned char release, unsigned char restore, const char* reason ) {
+	void __fastcall RendererTrace::Reacquire( void* self, void*, unsigned char release, unsigned char restore, const char* reason ) {
 		RendererTrace* instance = m_instance;
 		if( !instance || !instance->m_original )
 			return;
 		void* material_lock = nullptr;
-		if( instance->m_fix_enabled.load( ) && instance->m_material_system && instance->m_material_lock &&
-			instance->m_material_unlock ) {
+		if( instance->m_fix_enabled.load( ) && instance->m_material_system && instance->m_material_lock && instance->m_material_unlock ) {
 			material_lock = instance->m_material_lock( instance->m_material_system );
 		}
 		const bool		  tracing	= instance->m_metrics && instance->m_metrics->tracing( );
@@ -732,9 +669,8 @@ namespace p2boost {
 		auto* instance = m_instance;
 		if( !instance )
 			return;
-		auto	   previous = reinterpret_cast< NoArgs_t >( instance->m_shader_device.previous( ) );
-		const bool timed =
-			instance->m_reacquire_depth.load( ) != 0 && instance->m_metrics && instance->m_metrics->tracing( );
+		auto			previous = reinterpret_cast< NoArgs_t >( instance->m_shader_device.previous( ) );
+		const bool		timed	 = instance->m_reacquire_depth.load( ) != 0 && instance->m_metrics && instance->m_metrics->tracing( );
 		const Stopwatch timer{ timed };
 		previous( self );
 		if( timed )
@@ -746,9 +682,8 @@ namespace p2boost {
 		auto* instance = m_instance;
 		if( !instance )
 			return;
-		auto	   previous = reinterpret_cast< NoArgs_t >( instance->m_frame_sync.previous( ) );
-		const bool timed =
-			instance->m_reacquire_depth.load( ) != 0 && instance->m_metrics && instance->m_metrics->tracing( );
+		auto			previous = reinterpret_cast< NoArgs_t >( instance->m_frame_sync.previous( ) );
+		const bool		timed	 = instance->m_reacquire_depth.load( ) != 0 && instance->m_metrics && instance->m_metrics->tracing( );
 		const Stopwatch timer{ timed };
 		previous( self );
 		if( timed )
@@ -760,9 +695,8 @@ namespace p2boost {
 		auto* instance = m_instance;
 		if( !instance )
 			return;
-		auto	   previous = reinterpret_cast< ResourceCallbacks_t >( instance->m_resource_callbacks.previous( ) );
-		const bool timed =
-			instance->m_reacquire_depth.load( ) != 0 && instance->m_metrics && instance->m_metrics->tracing( );
+		auto			previous = reinterpret_cast< ResourceCallbacks_t >( instance->m_resource_callbacks.previous( ) );
+		const bool		timed	 = instance->m_reacquire_depth.load( ) != 0 && instance->m_metrics && instance->m_metrics->tracing( );
 		const Stopwatch timer{ timed };
 		previous( self, callback, context );
 		if( timed )

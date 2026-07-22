@@ -79,8 +79,7 @@ namespace p2boost {
 		PointerImmediatePatch& operator=( const PointerImmediatePatch& ) = delete;
 
 		// install or remove this immediate patch.
-		bool install(
-			void* address, const std::vector< std::uint8_t >& expected, size_t pointer_offset, void* replacement );
+		bool install( void* address, const std::vector< std::uint8_t >& expected, size_t pointer_offset, void* replacement );
 		bool remove( );
 
 		void* previous( ) const noexcept {

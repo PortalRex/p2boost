@@ -1,7 +1,7 @@
 param(
     [ValidateSet('Both', 'SinglePlayer', 'Coop')][string]$Scenario = 'Both',
     [string]$OutputDirectory = 'artifacts\benchmarks\live-gameplay',
-    [ValidateRange(5, 30)][int]$DurationSeconds = 8,
+    [ValidateRange(13, 30)][int]$DurationSeconds = 13,
     [ValidateSet(360, 500, 999)][int]$FpsMax = 999,
     [int]$ProcessId = 0,
     [string]$RconPassword = 'p2boostlab',
@@ -117,20 +117,14 @@ function Save-Proof([string]$Map, [string]$Name) {
 }
 
 function Set-SinglePlayerScene {
-    Invoke-Game @('map sp_a2_trust_fling') | Out-Null
-    Wait-ForSession 'sp_a2_trust_fling' 1
+    Invoke-Game @('map sp_a2_laser_relays') | Out-Null
+    Wait-ForSession 'sp_a2_laser_relays' 1
 
     Invoke-Game @(
         'sv_cheats 1',
         "fps_max $FpsMax",
         'give weapon_portalgun',
-        'upgrade_portalgun',
-        'setpos 1024 -2272 -335',
-        'setang 0 90 0',
-        # Two linked portals fill the view and keep recursive portal rendering
-        # active throughout the sample. They are not a hidden prewarm step.
-        'portal_place 0 0 960 -1984 -270 0 -90 0',
-        'portal_place 0 1 1088 -1984 -270 0 -90 0'
+        'upgrade_portalgun'
     ) | Out-Null
 
     Set-Foreground
@@ -159,33 +153,26 @@ function Set-CoopScene {
 }
 
 function Invoke-SinglePlayerActions {
-    # These are real user-command inputs. Movement, jumping, and portal shots
-    # run normal prediction, simulation, visibility, particles, and rendering.
-    Invoke-Game @('cmd1 +forward', 'cmd1 +moveleft') | Out-Null
-    Start-Sleep -Milliseconds 700
-    Invoke-Game @('cmd1 -moveleft', 'cmd1 +jump') | Out-Null
-    Start-Sleep -Milliseconds 150
-    Invoke-Game @('cmd1 -jump', 'cmd1 +attack') | Out-Null
-    Start-Sleep -Milliseconds 100
-    Invoke-Game @('cmd1 -attack', 'cmd1 +moveright') | Out-Null
-    Start-Sleep -Milliseconds 700
-    Invoke-Game @('cmd1 -moveright', 'cmd1 +attack2') | Out-Null
-    Start-Sleep -Milliseconds 100
-    Invoke-Game @('cmd1 -attack2', 'cmd1 -forward') | Out-Null
+    # Schedule real inputs before PresentMon starts. Sending one RCON packet per
+    # action during a capture produced a false 33.7 ms main-thread hitch.
+    Invoke-Game @(
+        # Laser Relays opens into its expensive main room by walking straight
+        # from the normal spawn. No position, view, or collision cheats are
+        # used, so the capture includes the real visibility transition.
+        'hwait 90 cmd1 +forward; hwait 300 cmd1 +attack; hwait 306 cmd1 -attack; ' +
+        'hwait 330 cmd1 +attack2; hwait 336 cmd1 -attack2; hwait 720 cmd1 -forward'
+    ) | Out-Null
 }
 
 function Invoke-CoopActions {
-    # Drive both local players at once so the capture includes two prediction
-    # paths, two views, portal effects, and normal split-screen entity work.
-    Invoke-Game @('cmd1 +forward', 'cmd1 +moveleft', 'cmd2 +forward', 'cmd2 +moveright') | Out-Null
-    Start-Sleep -Milliseconds 650
-    Invoke-Game @('cmd1 -moveleft', 'cmd2 -moveright', 'cmd1 +jump', 'cmd2 +jump') | Out-Null
-    Start-Sleep -Milliseconds 150
-    Invoke-Game @('cmd1 -jump', 'cmd2 -jump', 'cmd1 +attack', 'cmd2 +attack2') | Out-Null
-    Start-Sleep -Milliseconds 100
-    Invoke-Game @('cmd1 -attack', 'cmd2 -attack2') | Out-Null
-    Start-Sleep -Milliseconds 650
-    Invoke-Game @('cmd1 -forward', 'cmd2 -forward') | Out-Null
+    # Both local players move and shoot while normal prediction, simulation,
+    # visibility, particles, and split-screen rendering remain active.
+    Invoke-Game @(
+        'hwait 90 cmd1 +forward; hwait 90 cmd1 +moveleft; hwait 90 cmd2 +forward; hwait 90 cmd2 +moveright; ' +
+        'hwait 129 cmd1 -moveleft; hwait 129 cmd2 -moveright; hwait 129 cmd1 +jump; hwait 129 cmd2 +jump; ' +
+        'hwait 138 cmd1 -jump; hwait 138 cmd2 -jump; hwait 138 cmd1 +attack; hwait 138 cmd2 +attack2; ' +
+        'hwait 144 cmd1 -attack; hwait 144 cmd2 -attack2; hwait 183 cmd1 -forward; hwait 183 cmd2 -forward'
+    ) | Out-Null
 }
 
 function Stop-AllInputs {
@@ -211,6 +198,11 @@ function Measure-Scene([string]$Name, [bool]$Patched, [scriptblock]$Setup, [scri
         Remove-Item -LiteralPath $csv -Force
     }
 
+    # Queue every gameplay action before measurement. The first action has a
+    # 1.5-second lead-in, leaving enough time for PresentMon to attach without
+    # allowing RCON parsing or socket activity into the measured interval.
+    & $Actions
+
     # Keep PresentMon in this elevated process tree. A PowerShell background job
     # starts through remoting and loses the caller's usable elevation token on
     # some Windows installations, producing an empty capture despite admin UI.
@@ -227,8 +219,6 @@ function Measure-Scene([string]$Name, [bool]$Patched, [scriptblock]$Setup, [scri
     )
 
     try {
-        Start-Sleep -Milliseconds 500
-        & $Actions
         $captureProcess.WaitForExit()
         $captureProcess.Refresh()
         # Windows PowerShell can discard ExitCode after the native handle is
@@ -277,9 +267,9 @@ try {
     }
 
     if ($Scenario -in @('Both', 'SinglePlayer')) {
-        Measure-Scene 'sp-trust-fling' $false ${function:Set-SinglePlayerScene} ${function:Invoke-SinglePlayerActions}
-        Measure-Scene 'sp-trust-fling' $true ${function:Set-SinglePlayerScene} ${function:Invoke-SinglePlayerActions}
-        Save-Proof 'sp_a2_trust_fling' 'sp-trust-fling'
+        Measure-Scene 'sp-laser-relays' $false ${function:Set-SinglePlayerScene} ${function:Invoke-SinglePlayerActions}
+        Measure-Scene 'sp-laser-relays' $true ${function:Set-SinglePlayerScene} ${function:Invoke-SinglePlayerActions}
+        Save-Proof 'sp_a2_laser_relays' 'sp-laser-relays'
     }
 } finally {
     try { Stop-AllInputs } catch {}

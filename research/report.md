@@ -310,3 +310,26 @@ now restores the queued-worker target first, tracks in-flight batches, and
 requires a 50 ms zero-callback grace interval before removing downstream
 hooks. Ten consecutive unload/reload cycles passed while the co-op paint demo
 was rendering with tracing enabled.
+
+## Grounded Laser Relays reproduction
+
+Visual validation rejected the earlier automated Trust Fling route: its old
+camera and movement path could look through or leave level geometry, so none
+of its captures are retained as performance evidence. A replacement route on
+`sp_a2_laser_relays` starts at the normal spawn, uses collision and ordinary
+forward/portal inputs, and visibly enters the relay room. Input events are
+scheduled before capture, avoiding the 33.7 ms false hitch previously caused
+by repeated RCON packets during measurement.
+
+The first short grounded A/B reproduced one attributable entry spike: 20.2059
+ms unpatched and 10.2092 ms patched. That route stopped near the room entrance,
+so its numbers are retained only as the initial reproduction. The runner now
+holds forward for five additional seconds to cross the expensive relay area.
+
+The extended 13-second A/B reached the deeper relay platforms and saved a
+matching proof image. Unpatched recorded three frames above 8.3 ms and a
+12.9386 ms maximum; patched recorded no frame above 8.3 ms and a 5.5315 ms
+maximum. Average throughput improved from 612.68 to 731.02 FPS, while 1% low
+improved from 318.40 to 352.10 FPS. Median CPU-busy time fell from 1.5708 to
+1.2947 ms. This is the current valid SP gameplay result; the discarded Trust
+Fling and out-of-bounds noclip captures are not used in any comparison.

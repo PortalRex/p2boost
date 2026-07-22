@@ -65,11 +65,9 @@ namespace p2boost::pattern {
 
 		auto* begin = start.as< std::uint8_t* >( );
 		auto* end	= begin + length;
-		auto  found = std::search( begin,
-			 end,
-			 signature.begin( ),
-			 signature.end( ),
-			 []( std::uint8_t value, const byte_t& expected ) { return expected.second || value == expected.first; } );
+		auto  found = std::search( begin, end, signature.begin( ), signature.end( ), []( std::uint8_t value, const byte_t& expected ) {
+			 return expected.second || value == expected.first;
+		 } );
 
 		return found == end ? Address{ } : Address{ found };
 	}
@@ -84,9 +82,8 @@ namespace p2boost::pattern {
 			return { };
 
 		// a second match makes the signature ambiguous and therefore unusable.
-		const Address next = first.add( 1 );
-		const size_t  remaining =
-			length - static_cast< size_t >( next.as< std::uintptr_t >( ) - module.as< std::uintptr_t >( ) );
+		const Address next		= first.add( 1 );
+		const size_t  remaining = length - static_cast< size_t >( next.as< std::uintptr_t >( ) - module.as< std::uintptr_t >( ) );
 		return find( next, remaining, signature ) ? Address{ } : first;
 	}
 

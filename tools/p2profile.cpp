@@ -57,7 +57,7 @@ namespace {
 
 	std::vector< Module > read_modules( DWORD process_id ) {
 		std::vector< Module > modules;
-		Handle snapshot{ CreateToolhelp32Snapshot( TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, process_id ) };
+		Handle				  snapshot{ CreateToolhelp32Snapshot( TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, process_id ) };
 		if( !snapshot )
 			return modules;
 		MODULEENTRY32 entry{ sizeof( entry ) };
@@ -67,17 +67,14 @@ namespace {
 			const auto begin = reinterpret_cast< std::uintptr_t >( entry.modBaseAddr );
 			modules.push_back( { begin, begin + entry.modBaseSize, entry.szModule } );
 		} while( Module32Next( snapshot.m_value, &entry ) );
-		std::sort( modules.begin( ), modules.end( ), []( const Module& a, const Module& b ) {
-			return a.m_begin < b.m_begin;
-		} );
+		std::sort( modules.begin( ), modules.end( ), []( const Module& a, const Module& b ) { return a.m_begin < b.m_begin; } );
 		return modules;
 	}
 
 	const Module* find_module( const std::vector< Module >& modules, std::uintptr_t address ) {
-		const auto found = std::upper_bound( modules.begin( ),
-			modules.end( ),
-			address,
-			[]( std::uintptr_t value, const Module& module ) { return value < module.m_begin; } );
+		const auto found = std::upper_bound( modules.begin( ), modules.end( ), address, []( std::uintptr_t value, const Module& module ) {
+			return value < module.m_begin;
+		} );
 		if( found == modules.begin( ) )
 			return nullptr;
 		const Module& module = *std::prev( found );
@@ -133,16 +130,11 @@ int main( int argc, char** argv ) {
 	}
 	const DWORD thread_id = requested_thread_id ? requested_thread_id : find_main_thread( process_id );
 	Handle		process{ OpenProcess( PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, process_id ) };
-	Handle		thread{
-		 OpenThread( THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT | THREAD_QUERY_LIMITED_INFORMATION, FALSE, thread_id ) };
-	const auto modules = read_modules( process_id );
-	std::FILE* output  = nullptr;
+	Handle		thread{ OpenThread( THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT | THREAD_QUERY_LIMITED_INFORMATION, FALSE, thread_id ) };
+	const auto	modules = read_modules( process_id );
+	std::FILE*	output	= nullptr;
 	if( !process || !thread || modules.empty( ) || fopen_s( &output, argv[ 3 ], "w" ) != 0 || !output ) {
-		std::fprintf( stderr,
-			"p2profile: attach/output failed (pid=%lu tid=%lu error=%lu)\n",
-			process_id,
-			thread_id,
-			GetLastError( ) );
+		std::fprintf( stderr, "p2profile: attach/output failed (pid=%lu tid=%lu error=%lu)\n", process_id, thread_id, GetLastError( ) );
 		return 1;
 	}
 	SymSetOptions( SYMOPT_DEFERRED_LOADS | SYMOPT_UNDNAME );

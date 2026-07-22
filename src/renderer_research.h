@@ -25,10 +25,8 @@ namespace p2boost::renderer_research {
 	};
 
 	void reset_worker_state( ) noexcept;
-	void count_queued_command( RenderWorkerMetrics& metrics,
-		std::uint8_t*								node,
-		void*										queued_functor_execute,
-		void*										queued_functor_leaf ) noexcept;
+	void count_queued_command(
+		RenderWorkerMetrics& metrics, std::uint8_t* node, void* queued_functor_execute, void* queued_functor_leaf ) noexcept;
 	void capture_dynamic_light( RenderWorkerMetrics& metrics, const void* command ) noexcept;
 
 	void							  set_texture( DWORD stage, IDirect3DBaseTexture9* texture ) noexcept;

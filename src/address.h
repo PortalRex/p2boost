@@ -20,8 +20,7 @@ namespace p2boost {
 		// native address ctors.
 		__forceinline Address( std::uintptr_t address ) noexcept : m_addr{ address } {
 		}
-		__forceinline Address( const void* address ) noexcept
-			: m_addr{ reinterpret_cast< std::uintptr_t >( address ) } {
+		__forceinline Address( const void* address ) noexcept : m_addr{ reinterpret_cast< std::uintptr_t >( address ) } {
 		}
 
 		template < typename t, std::enable_if_t< std::is_pointer_v< t >, int > = 0 >

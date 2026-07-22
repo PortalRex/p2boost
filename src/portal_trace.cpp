@@ -26,15 +26,15 @@ namespace p2boost {
 			return false;
 
 		// resolve both independent CViewRender xrefs.
-		Address primary_call = pattern::find_unique( client, portal2::signature::primary_portal_render )
-								   .add( portal2::xref::primary_portal_call );
-		Address secondary_call = pattern::find_unique( client, portal2::signature::secondary_portal_render )
-									 .add( portal2::xref::secondary_portal_call );
+		Address primary_call =
+			pattern::find_unique( client, portal2::signature::primary_portal_render ).add( portal2::xref::primary_portal_call );
+		Address secondary_call =
+			pattern::find_unique( client, portal2::signature::secondary_portal_render ).add( portal2::xref::secondary_portal_call );
 
 		// both calls must still reach one internal portal renderer.
 		Address portal_render{ primary_call.rel32( 1 ) };
-		if( primary_call.at< std::uint8_t >( ) != 0xe8 || secondary_call.at< std::uint8_t >( ) != 0xe8 ||
-			!portal_render || secondary_call.rel32( 1 ) != portal_render )
+		if( primary_call.at< std::uint8_t >( ) != 0xe8 || secondary_call.at< std::uint8_t >( ) != 0xe8 || !portal_render ||
+			secondary_call.rel32( 1 ) != portal_render )
 			return false;
 
 		m_original = portal_render.as< PortalRender_t >( );

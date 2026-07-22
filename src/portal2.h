@@ -8,35 +8,30 @@ namespace p2boost::portal2 {
 	namespace signature {
 
 		// CEngine::Frame tail that clears the limiter accumulator.
-		constexpr auto frame_complete =
-			"84 DB 5B 74 0C 8B 0D ? ? ? ? FF 15 ? ? ? ? 0F 57 C0 F3 0F 11 46 18 5E 8B E5 5D C3";
+		constexpr auto frame_complete = "84 DB 5B 74 0C 8B 0D ? ? ? ? FF 15 ? ? ? ? 0F 57 C0 F3 0F 11 46 18 5E 8B E5 5D C3";
 
 		// shader-device restore xrefs to both static-lighting rebuilds.
-		constexpr auto restore_static_lighting =
-			"6A 01 E8 ? ? ? ? 83 C4 04 E8 ? ? ? ? 8B 0D ? ? ? ? 8B 11 8B 42 3C FF D0";
+		constexpr auto restore_static_lighting		 = "6A 01 E8 ? ? ? ? 83 C4 04 E8 ? ? ? ? 8B 0D ? ? ? ? 8B 11 8B 42 3C FF D0";
 		constexpr auto restore_static_lighting_cache = "57 8B F9 74 3C E8 ? ? ? ? 0F B7 47 18 3D FF FF 00 00 74 2C";
 
 		// constructors that embed the two queued dynamic-light vtables.
-		constexpr auto dynamic_light_unsigned =
-			"8B 4D 0C C7 00 ? ? ? ? C7 40 08 ? ? ? ? C7 40 10 ? ? ? ? 89 58 18 88 50 50";
-		constexpr auto dynamic_light_signed =
-			"8B 4D FC C7 40 0C 01 00 00 00 89 48 14 C7 00 ? ? ? ? C7 40 08 ? ? ? ? C7 40 10";
+		constexpr auto dynamic_light_unsigned = "8B 4D 0C C7 00 ? ? ? ? C7 40 08 ? ? ? ? C7 40 10 ? ? ? ? 89 58 18 88 50 50";
+		constexpr auto dynamic_light_signed	  = "8B 4D FC C7 40 0C 01 00 00 00 89 48 14 C7 00 ? ? ? ? C7 40 08 ? ? ? ? C7 40 10";
 
 		// CShaderDeviceDx8::Present paths for reset and another-app-active.
-		constexpr auto needs_reset =
-			"8B 0D ? ? ? ? 8B 11 8B 82 9C 00 00 00 6A 01 FF D0 68 ? ? ? ? 6A 01 6A 01 8B CE E8 ? ? ? ? EB 12";
-		constexpr auto other_app =
-			"8B 0D ? ? ? ? 8B 11 8B 82 9C 00 00 00 6A 01 FF D0 68 ? ? ? ? 6A 01 6A 01 8B CE E8 ? ? ? ? EB 06";
+		constexpr auto needs_reset = "8B 0D ? ? ? ? 8B 11 8B 82 9C 00 00 00 6A 01 FF D0 68 ? ? ? ? 6A 01 6A 01 8B CE "
+									 "E8 ? ? ? ? EB 12";
+		constexpr auto other_app   = "8B 0D ? ? ? ? 8B 11 8B 82 9C 00 00 00 6A 01 FF D0 68 ? ? ? ? 6A 01 6A 01 8B CE E8 "
+									 "? ? ? ? EB 06";
 
 		// code xrefs that expose otherwise private shader-api objects.
 		constexpr auto shader_device = "8B 0D ? ? ? ? 8B 11 8B 42 24 FF D0 8D 48 FF 8B 45 08 0F AC D8 0C";
 		constexpr auto frame_sync	 = "B8 ? ? ? ? C3 CC CC CC CC CC CC CC CC CC CC 8A 41 1C D0 E8 24 01 C3";
-		constexpr auto d3d_device =
-			"A1 ? ? ? ? 8B 10 8B 52 68 51 8B 4D FC 8D 7E 08 57 51 8B 4E 1C 6A 00 53 51 50 FF D2";
+		constexpr auto d3d_device	 = "A1 ? ? ? ? 8B 10 8B 52 68 51 8B 4D FC 8D 7E 08 57 51 8B 4E 1C 6A 00 53 51 50 FF D2";
 
 		// one function references the presentation and shader-api globals together.
-		constexpr auto material_devices =
-			"8D 45 C8 E8 ? ? ? ? 8B 0D ? ? ? ? 8B 11 8B 42 18 FF D0 8B 0D ? ? ? ? 8B 11 8B 92 24 01 00 00";
+		constexpr auto material_devices = "8D 45 C8 E8 ? ? ? ? 8B 0D ? ? ? ? 8B 11 8B 42 18 FF D0 8B 0D ? ? ? ? 8B 11 "
+										  "8B 92 24 01 00 00";
 
 		// CMaterialSystem::EndFrame embeds the queued render-worker callback.
 		constexpr auto render_worker = "33 C9 51 8D 55 F4 52 51 B8 ? ? ? ? 50 56 E8 ? ? ? ? 83 C4 10";
