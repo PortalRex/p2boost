@@ -103,6 +103,12 @@ captures and 5 focus/portal cycles. Release-gate reproduction must pass
 `-DurationSeconds 60` or `-Cycles 30` explicitly; shortening the smoke defaults
 does not change the published acceptance methodology.
 
+`run-gameplay-demos.ps1` replays matched patched/unpatched segments from a
+single-player portal/traversal demo and two co-op demos (repulsion gel and
+tractor beam), validating the map embedded in Source's accepted `playdemo`
+response before every five-second default capture. It restores `fps_max` and leaves
+all visual and gameplay cvars alone.
+
 `p2profile.exe` is a research-only x86 user-mode sampler for systems where
 kernel ETW collection is unavailable without elevation. Its default mode
 records low-overhead main-thread instruction pointers. Explicit `--stack` mode

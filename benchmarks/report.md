@@ -106,6 +106,26 @@ the packaged hook lifecycle across more varied gameplay; they are not used as
 an A/B performance claim because demo segments and transient state were not
 identical across those three scenarios.
 
+The automated matched-segment runner was then added and exercised with its
+five-second defaults. It restarts each demo at the same tick range for both
+variants and verifies the demo header's map before capture:
+
+| Gameplay segment | Variant | Average FPS | p99 ms | Maximum ms |
+|---|---:|---:|---:|---:|
+| Trust Fling | unpatched | 922.09 | 2.3476 | 4.1779 |
+| Trust Fling | patched | 970.14 | 1.3738 | 4.6162 |
+| Co-op repulsion gel | unpatched | 937.49 | 2.1810 | 3.1529 |
+| Co-op repulsion gel | patched | 978.02 | 2.1300 | 5.5801 |
+| Co-op tractor beam | unpatched | 816.83 | 2.6477 | 10.0561 |
+| Co-op tractor beam | patched | 845.59 | 2.7361 | 9.3846 |
+
+Average throughput improved by 3.5-5.2% in all three short pairs. Trust Fling
+p99 improved materially and repulsion-gel p99 improved slightly; tractor-beam
+p99 regressed by 3.3%, while its maximum improved. Separate repetitions caught
+occasional 9-31 ms queued-worker events in both portal and co-op gameplay.
+This variance is why the runner is retained and why the explicit GPU-fence
+path remains an open smoothness issue rather than being hidden by averages.
+
 ## Focus and portal results
 
 The original timestamped native-D3D9 harness completed 30 minimize/restore/
