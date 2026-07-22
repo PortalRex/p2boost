@@ -62,14 +62,15 @@ files:
 - `p2boost_status` prints hashes/build support, native-D3D9 state, SAR state,
   enabled state, and metric count.
 - `p2boost_enable 0|1` switches the verified fix at runtime for A/B testing.
-- `p2boost_trace 0|1` enables fixed-size QPC frame, D3D9 resource, and portal
-  render/projected-shadow tracing.
+- `p2boost_trace 0|1` enables fixed-size QPC frame, D3D9 resource, portal,
+  projected-shadow, queued-worker, concrete hardware-fence, and Present tracing.
 - `p2boost_dump_metrics` writes `p2boost_metrics.csv` in the game root, including
   simulation, focus, local-co-op, resource-reacquisition, portal, and
   projected-shadow timings/cache decisions. When renderer-worker tracing has
   been active it also writes `p2boost_metrics_render_workers.csv`, with one row
-  per queued render batch (wall time, thread cycles, command count, and buffer
-  byte totals). The worker hook is a direct forwarder while tracing is off.
+  per queued render batch (wall time, thread cycles, queued-call count, buffer
+  byte totals, fence time, and Present time). It does not timestamp every draw
+  command, and the worker hook is a direct forwarder while tracing is off.
 
 No command writes or archives a game cvar.
 

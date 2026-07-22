@@ -9,6 +9,8 @@ Portal 2 Steam build `23973718`, Windows x86, native Microsoft D3D9:
 | engine.dll | `5196EACE78D5F2F47F8CE39A49B0EFD15374A2B996B272642F0493ACE42C24DC` |
 | shaderapidx9.dll | `0879D15B4F9CF9F55BB86D874DC88B6EDF4D8DFC825E77D3BD1619A2DF250439` |
 | materialsystem.dll | `8B8BBDB77E72A23BEF8E67F0B9800327338E125BA0FBFAE68FEB2DC864AF4FBF` |
+| studiorender.dll | `34CD78BDE18BCD96CE4B96D43D4E83649F6DE64E020181F6BB229CDF5E8DB812` |
+| stdshader_dx9.dll | `49D1648B3D27150F554AA68F248C3342501AD3F38BC9949AC6CDAE763020E08F` |
 | client.dll | `2FF27C2878C258B2C16A0982E30B0D2F1BAD9D213E42CC778DC2A2925C625137` |
 | server.dll | `4C3ECC83BBEA0864660A49322D1D5188CDC00FE43A7EA56F1CA8A0C94356BB4C` |
 
@@ -29,6 +31,14 @@ requested interval only when overshoot is below 10% of one frame. It otherwise
 performs the original zero. The threshold rejects renderer workload and hitch
 debt, so no rapid catch-up frames are introduced. Runtime disable executes the
 original zero behavior.
+
+The engine also conditionally calls `ThreadSleep(1)` at RVA `0x1f9ede` while
+`sleep_when_meeting_framerate` is enabled and the configured headroom remains.
+A chain-safe prototype replaced only that call with a high-resolution wait,
+kept the one-millisecond maximum quantum, and left a 0.25 ms polling tail. In
+the same co-op paint demo at `fps_max 360`, the existing patch measured 358.49
+FPS with a 4.10 ms p99; the prototype measured 358.48 FPS with a 4.13 ms p99.
+It was neutral and has been removed rather than adding an unproven timing hook.
 
 ## Device/focus causality
 
@@ -102,6 +112,26 @@ fence stalls. None of these experiments ships: moving a hitch, silently
 lowering a cap, or weakening the engine's resource-ordering contract is not a
 fix. The low-overhead trace-only worker timing remains so future candidates can
 be evaluated against the proven path without permanent per-draw hooks.
+
+A later portal-heavy co-op paint capture separated the fence, presentation,
+and total worker wall time with concrete, chain-aware hooks. Its deterministic
+29.4549 ms worker burst contained 7,540 queued calls, but only 0.0019 ms in
+`ForceHardwareSync` and 0.1155 ms in Present. A non-intrusive sampler caught the
+same interval blocked in the native D3D9/NVIDIA submission path. A stack-only
+research run resolved the caller chain through `materialsystem.dll+0x3ac67`,
+`shaderapidx9.dll+0x1ee55/+0x1ee77`, and multiple distinct
+`stdshader_dx9.dll` draw leaves. Ghidra shows `shaderapidx9.dll+0x1edb0`
+applies the selected shader snapshot before dispatching the actual backend draw
+and invalidating that snapshot afterward. This is real draw submission, not a
+duplicate explicit fence or Present.
+
+The stack walker suspends the sampled render worker and inflated that research
+run to 119 ms, so only its caller chain is retained; its timing is not a
+benchmark. A non-flushing event-query prototype was also rejected and removed:
+it could not guarantee query completion without either restoring the original
+flush or weakening the engine's CPU/GPU ordering and latency contract. The
+shipping tracer records only worker, concrete fence, and Present timing. It no
+longer clones or timestamps every queued command.
 
 ### Static projected-light rebuild
 

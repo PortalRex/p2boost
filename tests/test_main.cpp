@@ -60,6 +60,20 @@ bool TestPointerImmediatePatch() {
     return installed && points_to_replacement && removed;
 }
 
+bool TestInlineDetour() {
+    auto* memory = static_cast<unsigned char*>(VirtualAlloc(
+        nullptr, 64, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE));
+    if (!memory) return false;
+    const std::vector<std::uint8_t> expected{0xa1, 1, 2, 3, 4};
+    std::memcpy(memory, expected.data(), expected.size());
+    p2boost::InlineDetour hook;
+    const bool installed = hook.Install(memory, expected, reinterpret_cast<void*>(&Replacement));
+    const bool encoded = installed && memory[0] == 0xe9 && hook.Previous() != nullptr;
+    const bool removed = hook.Remove() && std::memcmp(memory, expected.data(), expected.size()) == 0;
+    VirtualFree(memory, 0, MEM_RELEASE);
+    return installed && encoded && removed;
+}
+
 bool TestKnownHash() {
     wchar_t path[MAX_PATH]{};
     GetModuleFileNameW(nullptr, path, MAX_PATH);
@@ -99,11 +113,13 @@ int main() {
     const bool hook = TestHookChain();
     const bool callsite = TestCallSitePatch();
     const bool pointer = TestPointerImmediatePatch();
+    const bool inline_detour = TestInlineDetour();
     const bool hash = TestKnownHash();
     const bool metrics = TestMetrics();
     const bool phase = TestFramePhaseCarry();
-    std::printf("hook_chain=%s callsite=%s pointer=%s hash=%s metrics=%s phase=%s\n",
+    std::printf("hook_chain=%s callsite=%s pointer=%s inline=%s hash=%s metrics=%s phase=%s\n",
                 hook ? "ok" : "FAIL", callsite ? "ok" : "FAIL", pointer ? "ok" : "FAIL",
+                inline_detour ? "ok" : "FAIL",
                 hash ? "ok" : "FAIL", metrics ? "ok" : "FAIL", phase ? "ok" : "FAIL");
-    return hook && callsite && pointer && hash && metrics && phase ? 0 : 1;
+    return hook && callsite && pointer && inline_detour && hash && metrics && phase ? 0 : 1;
 }

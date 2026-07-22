@@ -151,6 +151,12 @@ public class ExportP2Analysis extends GhidraScript {
                 0x10014a50L, 0x1000ed60L, 0x1000eeb0L
             };
             for (long address : hardwareSyncTargets) addFunctionAndCallers(targets, address, 2);
+            long[] driverSerializationTargets = {
+                // Correlated co-op paint stack samples enter these shader API paths
+                // before blocking in the native D3D9 driver.
+                0x1000aa11L, 0x1000b28cL, 0x1001ee55L, 0x1001ee77L
+            };
+            for (long address : driverSerializationTargets) addFunctionAndCallers(targets, address, 3);
             addFunctionsReferencingString(targets, "CMeshMgr::DiscardVertexBuffers", 2);
             addFunctionsReferencingString(targets, "TexGroup_global_Dynamic_Verts", 2);
             addFunctionsReferencingString(targets, "TexGroup_global_Dynamic_Indices", 2);
@@ -182,9 +188,33 @@ public class ExportP2Analysis extends GhidraScript {
                 0x1002e980L, 0x10029fc0L, 0x100394e0L
             };
             for (long address : threadedEndFrameTargets) addFunctionAndCallers(targets, address, 2);
+            addFunctionAndCallers(targets, 0x1003ac67L, 3);
+            addFunctionAndCallers(targets, 0x1003b514L, 3);
             addFunctionsReferencingString(targets, "mat_bufferprimitives", 2);
             addFunctionsReferencingString(targets,
                 "%d calls queued for %d bytes in parameters and overhead, %d bytes verts, %d bytes indices, %d bytes other\n", 2);
+        }
+        if (base.equalsIgnoreCase("studiorender.dll")) {
+            long[] queuedStudioRenderTargets = {
+                // Real co-op paint gameplay: the three leaf callbacks reached
+                // through the material-system queued command wrapper. +0x4e710
+                // owns the 15-20 ms command inside the largest 60-90 ms batch.
+                0x1004e710L, 0x1004caa0L, 0x1004e540L
+            };
+            for (long address : queuedStudioRenderTargets)
+                addFunctionAndCallers(targets, address, 3);
+        }
+        if (base.equalsIgnoreCase("stdshader_dx9.dll")) {
+            long[] driverSerializationCallers = {
+                // Shader leaves present on every sample of the deterministic
+                // co-op paint driver-serialization burst.
+                0x1004aeb3L, 0x1000c7f6L, 0x1004a5c5L,
+                0x10044509L, 0x100445c7L, 0x1001a5b5L,
+                0x1001723cL, 0x1003feeeL, 0x10040059L,
+                0x10038ff4L
+            };
+            for (long address : driverSerializationCallers)
+                addFunctionAndCallers(targets, address, 3);
         }
         if (base.equalsIgnoreCase("filesystem_stdio.dll")) {
             long[] steadyReadTargets = {

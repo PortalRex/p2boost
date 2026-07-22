@@ -2,7 +2,7 @@ param(
     [string]$GameRoot = 'D:\SteamLibrary\steamapps\common\Portal 2',
     [string]$GhidraRoot = '',
     [string]$JavaHome = '',
-    [ValidateSet('all','engine','shaderapidx9','materialsystem','filesystem_stdio','client','server')]
+    [ValidateSet('all','engine','shaderapidx9','materialsystem','studiorender','stdshader_dx9','filesystem_stdio','client','server')]
     [string[]]$Module = @('all'),
     [switch]$Fresh
 )
@@ -28,6 +28,8 @@ $binaries = @(
     'bin\engine.dll',
     'bin\shaderapidx9.dll',
     'bin\materialsystem.dll',
+    'bin\studiorender.dll',
+    'bin\stdshader_dx9.dll',
     'bin\filesystem_stdio.dll',
     'portal2\bin\client.dll',
     'portal2\bin\server.dll'

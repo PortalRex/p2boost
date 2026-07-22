@@ -42,7 +42,12 @@ void Metrics::RecordShadowUpdate(double milliseconds, bool same_projection, bool
 void Metrics::RecordRenderWorker(long long begin_qpc, long long end_qpc,
                                  unsigned long long cycles, unsigned int queued_calls,
                                  unsigned int parameter_bytes, unsigned int vertex_bytes,
-                                 unsigned int index_bytes) noexcept {
+                                 unsigned int index_bytes, unsigned int hardware_sync_count,
+                                 long long hardware_sync_qpc, long long max_hardware_sync_qpc,
+                                 unsigned long long hardware_sync_cycles, int sync_index_before,
+                                 unsigned int sync_pending_before, unsigned int sync_pending_after,
+                                 unsigned int present_count, long long present_qpc,
+                                 long long max_present_qpc) noexcept {
     if (!Tracing()) return;
     std::lock_guard<std::mutex> lock(render_worker_mutex_);
     if (pending_render_worker_begin_qpc_ == 0 || begin_qpc < pending_render_worker_begin_qpc_)
@@ -57,6 +62,9 @@ void Metrics::RecordRenderWorker(long long begin_qpc, long long end_qpc,
     pending_render_worker_index_bytes_ += index_bytes;
     render_worker_samples_[render_worker_cursor_] = {
         begin_qpc, end_qpc, cycles, queued_calls, parameter_bytes, vertex_bytes, index_bytes,
+        hardware_sync_count, hardware_sync_qpc, max_hardware_sync_qpc, hardware_sync_cycles,
+        sync_index_before, sync_pending_before, sync_pending_after,
+        present_count, present_qpc, max_present_qpc,
         GetCurrentThreadId()};
     render_worker_cursor_ = (render_worker_cursor_ + 1) % Capacity;
     if (render_worker_count_ < Capacity) ++render_worker_count_;
@@ -166,7 +174,7 @@ bool Metrics::Dump(const std::string& path) const {
         path + "_render_workers.csv";
     std::ofstream worker_output(worker_path, std::ios::trunc);
     if (!worker_output) return false;
-    worker_output << "begin_qpc,end_qpc,wall_ms,cycles,queued_calls,parameter_bytes,vertex_bytes,index_bytes,thread_id\n"
+    worker_output << "begin_qpc,end_qpc,wall_ms,cycles,queued_calls,parameter_bytes,vertex_bytes,index_bytes,hardware_sync_count,hardware_sync_ms,max_hardware_sync_ms,hardware_sync_cycles,sync_index_before,sync_pending_before,sync_pending_after,present_count,present_ms,max_present_ms,thread_id\n"
                   << std::fixed << std::setprecision(6);
     {
         std::lock_guard<std::mutex> lock(render_worker_mutex_);
@@ -178,7 +186,19 @@ bool Metrics::Dump(const std::string& path) const {
                                  static_cast<double>(frequency_.QuadPart)
                           << ',' << sample.cycles << ',' << sample.queued_calls << ','
                           << sample.parameter_bytes << ',' << sample.vertex_bytes << ','
-                          << sample.index_bytes << ',' << sample.thread_id << '\n';
+                          << sample.index_bytes << ',' << sample.hardware_sync_count << ','
+                          << static_cast<double>(sample.hardware_sync_qpc) * 1000.0 /
+                                 static_cast<double>(frequency_.QuadPart) << ','
+                          << static_cast<double>(sample.max_hardware_sync_qpc) * 1000.0 /
+                                 static_cast<double>(frequency_.QuadPart) << ','
+                          << sample.hardware_sync_cycles << ',' << sample.sync_index_before << ','
+                          << sample.sync_pending_before << ',' << sample.sync_pending_after << ','
+                          << sample.present_count << ','
+                          << static_cast<double>(sample.present_qpc) * 1000.0 /
+                                 static_cast<double>(frequency_.QuadPart) << ','
+                          << static_cast<double>(sample.max_present_qpc) * 1000.0 /
+                                 static_cast<double>(frequency_.QuadPart) << ','
+                          << sample.thread_id << '\n';
         }
     }
     return frame_output_good && worker_output.good();

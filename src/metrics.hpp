@@ -26,7 +26,12 @@ public:
     void RecordRenderWorker(long long begin_qpc, long long end_qpc,
                             unsigned long long cycles, unsigned int queued_calls,
                             unsigned int parameter_bytes, unsigned int vertex_bytes,
-                            unsigned int index_bytes) noexcept;
+                            unsigned int index_bytes, unsigned int hardware_sync_count,
+                            long long hardware_sync_qpc, long long max_hardware_sync_qpc,
+                            unsigned long long hardware_sync_cycles, int sync_index_before,
+                            unsigned int sync_pending_before, unsigned int sync_pending_after,
+                            unsigned int present_count, long long present_qpc,
+                            long long max_present_qpc) noexcept;
     bool Dump(const std::string& path) const;
     size_t Count() const noexcept { return count_; }
 
@@ -67,6 +72,16 @@ private:
         unsigned int parameter_bytes;
         unsigned int vertex_bytes;
         unsigned int index_bytes;
+        unsigned int hardware_sync_count;
+        long long hardware_sync_qpc;
+        long long max_hardware_sync_qpc;
+        unsigned long long hardware_sync_cycles;
+        int sync_index_before;
+        unsigned int sync_pending_before;
+        unsigned int sync_pending_after;
+        unsigned int present_count;
+        long long present_qpc;
+        long long max_present_qpc;
         unsigned int thread_id;
     };
     LARGE_INTEGER frequency_{};

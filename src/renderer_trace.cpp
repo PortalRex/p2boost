@@ -15,6 +15,21 @@ namespace {
 bool HasBytes(const std::uint8_t* address, const std::initializer_list<std::uint8_t>& bytes) {
     return address && std::memcmp(address, bytes.begin(), bytes.size()) == 0;
 }
+
+struct WorkerGpuTrace {
+    bool active = false;
+    unsigned int hardware_sync_count = 0;
+    long long hardware_sync_qpc = 0;
+    long long max_hardware_sync_qpc = 0;
+    unsigned long long hardware_sync_cycles = 0;
+    int sync_index_before = -1;
+    unsigned int sync_pending_before = 0;
+    unsigned int sync_pending_after = 0;
+    unsigned int present_count = 0;
+    long long present_qpc = 0;
+    long long max_present_qpc = 0;
+};
+thread_local WorkerGpuTrace worker_gpu_trace;
 }
 
 RendererTrace::~RendererTrace() { Remove(); }
@@ -67,6 +82,19 @@ bool RendererTrace::Install(Metrics* metrics) {
     void* shader_device = *reinterpret_cast<void**>(module + 0xda594);
     void* resource_callbacks = *reinterpret_cast<void**>(module + 0xda5a4);
     void* frame_sync = module + 0xd5bb0;
+    void* shader_api = *reinterpret_cast<void**>(material_module + 0x120720);
+    void* present_device = *reinterpret_cast<void**>(material_module + 0x120728);
+    if (!shader_api || !present_device) {
+        Remove();
+        return false;
+    }
+    auto** shader_api_vtable = *reinterpret_cast<void***>(shader_api);
+    auto** present_vtable = *reinterpret_cast<void***>(present_device);
+    if (!shader_api_vtable || shader_api_vtable[136] != module + 0x14a50 ||
+        !present_vtable || present_vtable[10] != module + 0x24940) {
+        Remove();
+        return false;
+    }
     std::vector<std::uint8_t> lighting_call(5);
     lighting_call[0] = 0xe8;
     const auto lighting_displacement = static_cast<std::int32_t>(
@@ -85,6 +113,10 @@ bool RendererTrace::Install(Metrics* metrics) {
         reinterpret_cast<std::uintptr_t>(material_module + 0xf3f0));
     std::memcpy(render_worker_pointer.data() + 1, &render_worker_original,
                 sizeof(render_worker_original));
+    std::vector<std::uint8_t> hardware_sync_entry{0xa1, 0, 0, 0, 0};
+    const auto frame_sync_cvar = static_cast<std::uint32_t>(
+        reinterpret_cast<std::uintptr_t>(module + 0xd6efc));
+    std::memcpy(hardware_sync_entry.data() + 1, &frame_sync_cvar, sizeof(frame_sync_cvar));
     if (!needs_reset_.Install(module + 0x247f7, expected_call(0x247f7), reinterpret_cast<void*>(&ReacquireHook)) ||
         !other_app_.Install(module + 0x2484b, expected_call(0x2484b), reinterpret_cast<void*>(&ReacquireHook)) ||
         !lighting_restore_.Install(engine_module + 0xf8bb4, lighting_call,
@@ -95,6 +127,9 @@ bool RendererTrace::Install(Metrics* metrics) {
         !install_slot(frame_sync_, frame_sync, 3, reinterpret_cast<void*>(&FrameSyncHook)) ||
         !install_slot(resource_callbacks_, resource_callbacks, 15,
                       reinterpret_cast<void*>(&ResourceCallbacksHook)) ||
+        !hardware_sync_.Install(module + 0x14a50, hardware_sync_entry,
+                                reinterpret_cast<void*>(&HardwareSyncHook)) ||
+        !present_.Install(present_vtable + 10, reinterpret_cast<void*>(&PresentHook)) ||
         !render_worker_.Install(material_module + 0x12c84,
                                 render_worker_pointer, 1,
                                 reinterpret_cast<void*>(&RenderWorkerHook))) {
@@ -106,6 +141,8 @@ bool RendererTrace::Install(Metrics* metrics) {
 
 void RendererTrace::Remove() {
     render_worker_.Remove();
+    present_.Remove();
+    hardware_sync_.Remove();
     resource_callbacks_.Remove();
     frame_sync_.Remove();
     shader_device_.Remove();
@@ -156,12 +193,76 @@ void __fastcall RendererTrace::RenderWorkerHook(void* self, void*, void* queued_
     unsigned long long end_cycles = 0;
     QueryPerformanceCounter(&begin);
     QueryThreadCycleTime(GetCurrentThread(), &begin_cycles);
+    worker_gpu_trace = {};
+    worker_gpu_trace.active = true;
     previous(self, queued_context);
+    worker_gpu_trace.active = false;
     QueryThreadCycleTime(GetCurrentThread(), &end_cycles);
     QueryPerformanceCounter(&end);
     instance->metrics_->RecordRenderWorker(
         begin.QuadPart, end.QuadPart, end_cycles - begin_cycles, queued_calls,
-        parameter_bytes, vertex_bytes, index_bytes);
+        parameter_bytes, vertex_bytes, index_bytes,
+        worker_gpu_trace.hardware_sync_count, worker_gpu_trace.hardware_sync_qpc,
+        worker_gpu_trace.max_hardware_sync_qpc, worker_gpu_trace.hardware_sync_cycles,
+        worker_gpu_trace.sync_index_before, worker_gpu_trace.sync_pending_before,
+        worker_gpu_trace.sync_pending_after, worker_gpu_trace.present_count,
+        worker_gpu_trace.present_qpc, worker_gpu_trace.max_present_qpc);
+}
+
+void __fastcall RendererTrace::HardwareSyncHook(void* self, void*) {
+    auto* instance = instance_;
+    if (!instance) return;
+    auto previous = reinterpret_cast<void(__thiscall*)(void*)>(instance->hardware_sync_.Previous());
+    if (!previous) return;
+    if (!worker_gpu_trace.active || !instance->metrics_ || !instance->metrics_->Tracing()) {
+        previous(self);
+        return;
+    }
+    auto* bytes = static_cast<std::uint8_t*>(self);
+    const int index_before = *reinterpret_cast<int*>(bytes - 0x18c);
+    const unsigned int pending_before =
+        static_cast<unsigned int>(*(bytes - 0x190) != 0) |
+        (static_cast<unsigned int>(*(bytes - 0x18f) != 0) << 1);
+    LARGE_INTEGER begin{}, end{};
+    unsigned long long begin_cycles = 0;
+    unsigned long long end_cycles = 0;
+    QueryPerformanceCounter(&begin);
+    QueryThreadCycleTime(GetCurrentThread(), &begin_cycles);
+    previous(self);
+    QueryThreadCycleTime(GetCurrentThread(), &end_cycles);
+    QueryPerformanceCounter(&end);
+    const long long elapsed = end.QuadPart - begin.QuadPart;
+    ++worker_gpu_trace.hardware_sync_count;
+    worker_gpu_trace.hardware_sync_qpc += elapsed;
+    worker_gpu_trace.hardware_sync_cycles += end_cycles - begin_cycles;
+    if (elapsed > worker_gpu_trace.max_hardware_sync_qpc) {
+        worker_gpu_trace.max_hardware_sync_qpc = elapsed;
+        worker_gpu_trace.sync_index_before = index_before;
+        worker_gpu_trace.sync_pending_before = pending_before;
+        worker_gpu_trace.sync_pending_after =
+            static_cast<unsigned int>(*(bytes - 0x190) != 0) |
+            (static_cast<unsigned int>(*(bytes - 0x18f) != 0) << 1);
+    }
+}
+
+void __fastcall RendererTrace::PresentHook(void* self, void*) {
+    auto* instance = instance_;
+    if (!instance) return;
+    auto previous = reinterpret_cast<void(__thiscall*)(void*)>(instance->present_.Previous());
+    if (!previous) return;
+    if (!worker_gpu_trace.active || !instance->metrics_ || !instance->metrics_->Tracing()) {
+        previous(self);
+        return;
+    }
+    LARGE_INTEGER begin{}, end{};
+    QueryPerformanceCounter(&begin);
+    previous(self);
+    QueryPerformanceCounter(&end);
+    const long long elapsed = end.QuadPart - begin.QuadPart;
+    ++worker_gpu_trace.present_count;
+    worker_gpu_trace.present_qpc += elapsed;
+    if (elapsed > worker_gpu_trace.max_present_qpc)
+        worker_gpu_trace.max_present_qpc = elapsed;
 }
 
 void __fastcall RendererTrace::ReacquireHook(void* self, void*, unsigned char release,

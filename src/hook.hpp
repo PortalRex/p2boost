@@ -61,4 +61,25 @@ private:
     bool installed_ = false;
 };
 
+// Five-byte x86 detour for a target whose first complete instruction span has
+// been validated by the caller. The trampoline owns the displaced bytes.
+class InlineDetour {
+public:
+    InlineDetour() = default;
+    ~InlineDetour();
+    InlineDetour(const InlineDetour&) = delete;
+    InlineDetour& operator=(const InlineDetour&) = delete;
+    bool Install(void* address, const std::vector<std::uint8_t>& expected, void* replacement);
+    bool Remove();
+    void* Previous() const noexcept { return trampoline_; }
+    bool Installed() const noexcept { return installed_; }
+
+private:
+    std::uint8_t* address_ = nullptr;
+    std::uint8_t* trampoline_ = nullptr;
+    std::vector<std::uint8_t> original_;
+    std::vector<std::uint8_t> patched_;
+    bool installed_ = false;
+};
+
 } // namespace p2boost
