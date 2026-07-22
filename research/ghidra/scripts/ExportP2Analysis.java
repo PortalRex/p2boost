@@ -58,6 +58,9 @@ public class ExportP2Analysis extends GhidraScript {
         Address targetAddress = currentProgram.getAddressFactory().getDefaultAddressSpace().getAddress(address);
         Function function = getFunctionAt(targetAddress);
         if (function == null) function = getFunctionContaining(targetAddress);
+        if (function == null && getInstructionAt(targetAddress) != null) {
+            function = createFunction(targetAddress, null);
+        }
         if (function == null || !targets.add(function) || depth <= 0) return;
         // Samples normally land inside a function. Once the containing
         // function is known, callers reference its entry point rather than
@@ -117,6 +120,12 @@ public class ExportP2Analysis extends GhidraScript {
                 0x10070f38L, 0x10218c8aL, 0x1026febcL
             };
             for (long address : profileTargets) addFunctionAndCallers(targets, address, 1);
+            long[] queuedSubmissionTargets = {
+                // Command identities which dominate the deterministic co-op
+                // paint burst in the research draw histogram.
+                0x100d7840L, 0x100d74f9L, 0x100d7b2fL, 0x100d7b5fL
+            };
+            for (long address : queuedSubmissionTargets) addFunctionAndCallers(targets, address, 3);
         }
         if (base.equalsIgnoreCase("shaderapidx9.dll")) {
             addFunctionAndCallers(targets, 0x100241a0L, 1);
@@ -188,6 +197,10 @@ public class ExportP2Analysis extends GhidraScript {
                 0x1002e980L, 0x10029fc0L, 0x100394e0L
             };
             for (long address : threadedEndFrameTargets) addFunctionAndCallers(targets, address, 2);
+            long[] queuedCommandTypes = {
+                0x10024d40L, 0x10024d80L, 0x10023e20L
+            };
+            for (long address : queuedCommandTypes) addFunctionAndCallers(targets, address, 3);
             addFunctionAndCallers(targets, 0x1003ac67L, 3);
             addFunctionAndCallers(targets, 0x1003b514L, 3);
             addFunctionsReferencingString(targets, "mat_bufferprimitives", 2);
@@ -199,7 +212,8 @@ public class ExportP2Analysis extends GhidraScript {
                 // Real co-op paint gameplay: the three leaf callbacks reached
                 // through the material-system queued command wrapper. +0x4e710
                 // owns the 15-20 ms command inside the largest 60-90 ms batch.
-                0x1004e710L, 0x1004caa0L, 0x1004e540L
+                0x1004e710L, 0x1004caa0L, 0x1004e540L,
+                0x1004d350L, 0x10009836L
             };
             for (long address : queuedStudioRenderTargets)
                 addFunctionAndCallers(targets, address, 3);

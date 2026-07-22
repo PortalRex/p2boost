@@ -28,8 +28,82 @@ struct WorkerGpuTrace {
     unsigned int present_count = 0;
     long long present_qpc = 0;
     long long max_present_qpc = 0;
+#ifdef P2BOOST_RESEARCH_DRAW_TRACE
+    unsigned int draw_count = 0;
+    long long draw_qpc = 0;
+    long long max_draw_qpc = 0;
+    unsigned int max_draw_method = 0;
+    unsigned int max_draw_primitive_type = 0;
+    unsigned int max_draw_primitive_count = 0;
+    unsigned int max_draw_vertex_count = 0;
+    void* max_draw_stack[16]{};
+    unsigned short max_draw_stack_depth = 0;
+    unsigned int command_keys[16]{};
+    unsigned int command_counts[16]{};
+    unsigned int dynamic_light_calls = 0;
+    unsigned int dynamic_light_unique_pairs = 0;
+    unsigned int dynamic_light_unique_tuples = 0;
+#endif
 };
 thread_local WorkerGpuTrace worker_gpu_trace;
+
+#ifdef P2BOOST_RESEARCH_DRAW_TRACE
+constexpr size_t DynamicLightTableSize = 8192;
+thread_local const std::uint8_t* dynamic_light_pair_table[DynamicLightTableSize]{};
+thread_local const std::uint8_t* dynamic_light_tuple_table[DynamicLightTableSize]{};
+
+std::uint32_t HashBytes(const std::uint8_t* bytes, size_t size) {
+    std::uint32_t hash = 2166136261u;
+    for (size_t index = 0; index < size; ++index) {
+        hash ^= bytes[index];
+        hash *= 16777619u;
+    }
+    return hash;
+}
+
+bool InsertDynamicLight(const std::uint8_t* tuple, size_t size,
+                        const std::uint8_t** table) {
+    size_t slot = HashBytes(tuple, size) & (DynamicLightTableSize - 1);
+    for (size_t probe = 0; probe < DynamicLightTableSize; ++probe) {
+        const auto* existing = table[slot];
+        if (!existing) {
+            table[slot] = tuple;
+            return true;
+        }
+        if (std::memcmp(existing, tuple, size) == 0) return false;
+        slot = (slot + 1) & (DynamicLightTableSize - 1);
+    }
+    return false;
+}
+
+void RecordDraw(long long begin_qpc, unsigned int method, unsigned int primitive_type,
+                unsigned int primitive_count, unsigned int vertex_count) {
+    if (!worker_gpu_trace.active) return;
+    LARGE_INTEGER end{};
+    QueryPerformanceCounter(&end);
+    const long long elapsed = end.QuadPart - begin_qpc;
+    ++worker_gpu_trace.draw_count;
+    worker_gpu_trace.draw_qpc += elapsed;
+    if (elapsed <= worker_gpu_trace.max_draw_qpc) return;
+    worker_gpu_trace.max_draw_qpc = elapsed;
+    worker_gpu_trace.max_draw_method = method;
+    worker_gpu_trace.max_draw_primitive_type = primitive_type;
+    worker_gpu_trace.max_draw_primitive_count = primitive_count;
+    worker_gpu_trace.max_draw_vertex_count = vertex_count;
+    static const long long capture_threshold = [] {
+        LARGE_INTEGER frequency{};
+        QueryPerformanceFrequency(&frequency);
+        return frequency.QuadPart / 500; // 2 ms
+    }();
+    if (elapsed < capture_threshold) {
+        worker_gpu_trace.max_draw_stack_depth = 0;
+        return;
+    }
+    worker_gpu_trace.max_draw_stack_depth = RtlCaptureStackBackTrace(
+        1, 16,
+        worker_gpu_trace.max_draw_stack, nullptr);
+}
+#endif
 }
 
 RendererTrace::~RendererTrace() { Remove(); }
@@ -73,6 +147,7 @@ bool RendererTrace::Install(Metrics* metrics) {
         return bytes;
     };
     metrics_ = metrics;
+    removing_.store(false, std::memory_order_release);
     instance_ = this;
     auto install_slot = [](VtableSlotHook& hook, void* object, size_t index, void* replacement) {
         if (!object) return false;
@@ -95,6 +170,22 @@ bool RendererTrace::Install(Metrics* metrics) {
         Remove();
         return false;
     }
+#ifdef P2BOOST_RESEARCH_DRAW_TRACE
+    void* d3d_device = *reinterpret_cast<void**>(module + 0xda5d8);
+    material_module_ = material_module;
+    engine_module_ = engine_module;
+    const bool draw_hooks = d3d_device &&
+        install_slot(draw_primitive_, d3d_device, 81,
+                     reinterpret_cast<void*>(&DrawPrimitiveHook)) &&
+        install_slot(draw_indexed_primitive_, d3d_device, 82,
+                     reinterpret_cast<void*>(&DrawIndexedPrimitiveHook)) &&
+        install_slot(draw_primitive_up_, d3d_device, 83,
+                     reinterpret_cast<void*>(&DrawPrimitiveUpHook)) &&
+        install_slot(draw_indexed_primitive_up_, d3d_device, 84,
+                     reinterpret_cast<void*>(&DrawIndexedPrimitiveUpHook));
+#else
+    const bool draw_hooks = true;
+#endif
     std::vector<std::uint8_t> lighting_call(5);
     lighting_call[0] = 0xe8;
     const auto lighting_displacement = static_cast<std::int32_t>(
@@ -111,6 +202,8 @@ bool RendererTrace::Install(Metrics* metrics) {
     std::vector<std::uint8_t> render_worker_pointer{0xb8, 0, 0, 0, 0};
     const auto render_worker_original = static_cast<std::uint32_t>(
         reinterpret_cast<std::uintptr_t>(material_module + 0xf3f0));
+    render_worker_original_ = reinterpret_cast<RenderWorkerFn>(
+        static_cast<std::uintptr_t>(render_worker_original));
     std::memcpy(render_worker_pointer.data() + 1, &render_worker_original,
                 sizeof(render_worker_original));
     std::vector<std::uint8_t> hardware_sync_entry{0xa1, 0, 0, 0, 0};
@@ -130,6 +223,7 @@ bool RendererTrace::Install(Metrics* metrics) {
         !hardware_sync_.Install(module + 0x14a50, hardware_sync_entry,
                                 reinterpret_cast<void*>(&HardwareSyncHook)) ||
         !present_.Install(present_vtable + 10, reinterpret_cast<void*>(&PresentHook)) ||
+        !draw_hooks ||
         !render_worker_.Install(material_module + 0x12c84,
                                 render_worker_pointer, 1,
                                 reinterpret_cast<void*>(&RenderWorkerHook))) {
@@ -140,7 +234,28 @@ bool RendererTrace::Install(Metrics* metrics) {
 }
 
 void RendererTrace::Remove() {
+    removing_.store(true, std::memory_order_release);
     render_worker_.Remove();
+    // The material render queue runs on a worker thread. Its call target can
+    // already have been fetched when the immediate is restored, so require a
+    // short zero-callback grace period before this DLL can be unloaded.
+    unsigned int quiet_milliseconds = 0;
+    while (quiet_milliseconds < 50) {
+        if (active_render_workers_.load(std::memory_order_acquire) == 0) {
+            ++quiet_milliseconds;
+        } else {
+            quiet_milliseconds = 0;
+        }
+        Sleep(1);
+    }
+#ifdef P2BOOST_RESEARCH_DRAW_TRACE
+    draw_indexed_primitive_up_.Remove();
+    draw_primitive_up_.Remove();
+    draw_indexed_primitive_.Remove();
+    draw_primitive_.Remove();
+    material_module_ = nullptr;
+    engine_module_ = nullptr;
+#endif
     present_.Remove();
     hardware_sync_.Remove();
     resource_callbacks_.Remove();
@@ -154,7 +269,9 @@ void RendererTrace::Remove() {
     original_ = nullptr;
     lighting_original_ = nullptr;
     lighting_cache_original_ = nullptr;
+    render_worker_original_ = nullptr;
     reacquire_depth_.store(0);
+    active_render_workers_.store(0, std::memory_order_release);
     material_system_ = nullptr;
     material_lock_ = nullptr;
     material_unlock_ = nullptr;
@@ -166,19 +283,65 @@ void RendererTrace::Remove() {
 void __fastcall RendererTrace::RenderWorkerHook(void* self, void*, void* queued_context) {
     auto* instance = instance_;
     if (!instance) return;
-    auto previous = reinterpret_cast<RenderWorkerFn>(instance->render_worker_.Previous());
+    instance->active_render_workers_.fetch_add(1, std::memory_order_acq_rel);
+    struct ActiveWorkerGuard {
+        RendererTrace* instance;
+        ~ActiveWorkerGuard() {
+            instance->active_render_workers_.fetch_sub(1, std::memory_order_acq_rel);
+        }
+    } guard{instance};
+    auto previous = instance->render_worker_original_;
     if (!previous) return;
-    const bool tracing = instance->metrics_ && instance->metrics_->Tracing() && queued_context;
+    const bool tracing = !instance->removing_.load(std::memory_order_acquire) &&
+        instance->metrics_ && instance->metrics_->Tracing() && queued_context;
     if (!tracing) {
         previous(self, queued_context);
         return;
     }
 
     auto* context = static_cast<std::uint8_t*>(queued_context);
+    worker_gpu_trace = {};
+#ifdef P2BOOST_RESEARCH_DRAW_TRACE
+    std::memset(dynamic_light_pair_table, 0, sizeof(dynamic_light_pair_table));
+    std::memset(dynamic_light_tuple_table, 0, sizeof(dynamic_light_tuple_table));
+#endif
     unsigned int queued_calls = 0;
     for (auto* node = *reinterpret_cast<std::uint8_t**>(context + 0x1f0);
          node && queued_calls < 1000000; node = *reinterpret_cast<std::uint8_t**>(node)) {
         ++queued_calls;
+#ifdef P2BOOST_RESEARCH_DRAW_TRACE
+        auto* object = node + sizeof(void*);
+        auto** vtable = *reinterpret_cast<void***>(object);
+        auto* execute = vtable ? reinterpret_cast<std::uint8_t*>(vtable[3]) : nullptr;
+        auto* key = execute;
+        if (execute == instance->material_module_ + 0x13e90) {
+            key = *reinterpret_cast<std::uint8_t**>(object + 0x10);
+            if (key == instance->material_module_ + 0xcfc0) {
+                auto* target = *reinterpret_cast<std::uint8_t**>(object + 0x14);
+                if (target) {
+                    auto* leaf = *reinterpret_cast<std::uint8_t**>(target + 0x10);
+                    if (leaf) key = leaf;
+                }
+            }
+            if (key == instance->engine_module_ + 0xd7840) {
+                const auto* tuple = object + 0x14;
+                ++worker_gpu_trace.dynamic_light_calls;
+                if (InsertDynamicLight(tuple, 8, dynamic_light_pair_table))
+                    ++worker_gpu_trace.dynamic_light_unique_pairs;
+                // dlight, surface, matrix3x4, flags, and two bools occupy 62 bytes.
+                if (InsertDynamicLight(tuple, 0x3e, dynamic_light_tuple_table))
+                    ++worker_gpu_trace.dynamic_light_unique_tuples;
+            }
+        }
+        const auto key32 = static_cast<unsigned int>(reinterpret_cast<std::uintptr_t>(key));
+        size_t slot = 0;
+        while (slot < 16 && worker_gpu_trace.command_counts[slot] != 0 &&
+               worker_gpu_trace.command_keys[slot] != key32) ++slot;
+        if (slot < 16) {
+            worker_gpu_trace.command_keys[slot] = key32;
+            ++worker_gpu_trace.command_counts[slot];
+        }
+#endif
     }
     const auto byte_delta = [context](size_t current, size_t start) {
         const int value = *reinterpret_cast<int*>(context + current) -
@@ -193,7 +356,6 @@ void __fastcall RendererTrace::RenderWorkerHook(void* self, void*, void* queued_
     unsigned long long end_cycles = 0;
     QueryPerformanceCounter(&begin);
     QueryThreadCycleTime(GetCurrentThread(), &begin_cycles);
-    worker_gpu_trace = {};
     worker_gpu_trace.active = true;
     previous(self, queued_context);
     worker_gpu_trace.active = false;
@@ -206,7 +368,20 @@ void __fastcall RendererTrace::RenderWorkerHook(void* self, void*, void* queued_
         worker_gpu_trace.max_hardware_sync_qpc, worker_gpu_trace.hardware_sync_cycles,
         worker_gpu_trace.sync_index_before, worker_gpu_trace.sync_pending_before,
         worker_gpu_trace.sync_pending_after, worker_gpu_trace.present_count,
-        worker_gpu_trace.present_qpc, worker_gpu_trace.max_present_qpc);
+        worker_gpu_trace.present_qpc, worker_gpu_trace.max_present_qpc
+#ifdef P2BOOST_RESEARCH_DRAW_TRACE
+        , worker_gpu_trace.draw_count, worker_gpu_trace.draw_qpc,
+        worker_gpu_trace.max_draw_qpc, worker_gpu_trace.max_draw_method,
+        worker_gpu_trace.max_draw_primitive_type,
+        worker_gpu_trace.max_draw_primitive_count,
+        worker_gpu_trace.max_draw_vertex_count,
+        worker_gpu_trace.max_draw_stack, worker_gpu_trace.max_draw_stack_depth,
+        worker_gpu_trace.command_keys, worker_gpu_trace.command_counts,
+        worker_gpu_trace.dynamic_light_calls,
+        worker_gpu_trace.dynamic_light_unique_pairs,
+        worker_gpu_trace.dynamic_light_unique_tuples
+#endif
+        );
 }
 
 void __fastcall RendererTrace::HardwareSyncHook(void* self, void*) {
@@ -264,6 +439,81 @@ void __fastcall RendererTrace::PresentHook(void* self, void*) {
     if (elapsed > worker_gpu_trace.max_present_qpc)
         worker_gpu_trace.max_present_qpc = elapsed;
 }
+
+#ifdef P2BOOST_RESEARCH_DRAW_TRACE
+HRESULT __stdcall RendererTrace::DrawPrimitiveHook(IDirect3DDevice9* self,
+                                                    D3DPRIMITIVETYPE primitive_type,
+                                                    UINT start_vertex, UINT primitive_count) {
+    auto* instance = instance_;
+    auto previous = instance ? reinterpret_cast<decltype(&DrawPrimitiveHook)>(
+        instance->draw_primitive_.Previous()) : nullptr;
+    if (!previous) return D3DERR_INVALIDCALL;
+    if (!worker_gpu_trace.active || !instance->metrics_ || !instance->metrics_->Tracing())
+        return previous(self, primitive_type, start_vertex, primitive_count);
+    LARGE_INTEGER begin{};
+    QueryPerformanceCounter(&begin);
+    const HRESULT result = previous(self, primitive_type, start_vertex, primitive_count);
+    RecordDraw(begin.QuadPart, 81, primitive_type, primitive_count, 0);
+    return result;
+}
+
+HRESULT __stdcall RendererTrace::DrawIndexedPrimitiveHook(
+    IDirect3DDevice9* self, D3DPRIMITIVETYPE primitive_type, INT base_vertex_index,
+    UINT min_vertex_index, UINT vertex_count, UINT start_index, UINT primitive_count) {
+    auto* instance = instance_;
+    auto previous = instance ? reinterpret_cast<decltype(&DrawIndexedPrimitiveHook)>(
+        instance->draw_indexed_primitive_.Previous()) : nullptr;
+    if (!previous) return D3DERR_INVALIDCALL;
+    if (!worker_gpu_trace.active || !instance->metrics_ || !instance->metrics_->Tracing())
+        return previous(self, primitive_type, base_vertex_index, min_vertex_index,
+                        vertex_count, start_index, primitive_count);
+    LARGE_INTEGER begin{};
+    QueryPerformanceCounter(&begin);
+    const HRESULT result = previous(self, primitive_type, base_vertex_index, min_vertex_index,
+                                    vertex_count, start_index, primitive_count);
+    RecordDraw(begin.QuadPart, 82, primitive_type, primitive_count, vertex_count);
+    return result;
+}
+
+HRESULT __stdcall RendererTrace::DrawPrimitiveUpHook(IDirect3DDevice9* self,
+                                                      D3DPRIMITIVETYPE primitive_type,
+                                                      UINT primitive_count,
+                                                      const void* vertex_data,
+                                                      UINT vertex_stride) {
+    auto* instance = instance_;
+    auto previous = instance ? reinterpret_cast<decltype(&DrawPrimitiveUpHook)>(
+        instance->draw_primitive_up_.Previous()) : nullptr;
+    if (!previous) return D3DERR_INVALIDCALL;
+    if (!worker_gpu_trace.active || !instance->metrics_ || !instance->metrics_->Tracing())
+        return previous(self, primitive_type, primitive_count, vertex_data, vertex_stride);
+    LARGE_INTEGER begin{};
+    QueryPerformanceCounter(&begin);
+    const HRESULT result = previous(self, primitive_type, primitive_count,
+                                    vertex_data, vertex_stride);
+    RecordDraw(begin.QuadPart, 83, primitive_type, primitive_count, 0);
+    return result;
+}
+
+HRESULT __stdcall RendererTrace::DrawIndexedPrimitiveUpHook(
+    IDirect3DDevice9* self, D3DPRIMITIVETYPE primitive_type, UINT min_vertex_index,
+    UINT vertex_count, UINT primitive_count, const void* index_data, D3DFORMAT index_format,
+    const void* vertex_data, UINT vertex_stride) {
+    auto* instance = instance_;
+    auto previous = instance ? reinterpret_cast<decltype(&DrawIndexedPrimitiveUpHook)>(
+        instance->draw_indexed_primitive_up_.Previous()) : nullptr;
+    if (!previous) return D3DERR_INVALIDCALL;
+    if (!worker_gpu_trace.active || !instance->metrics_ || !instance->metrics_->Tracing())
+        return previous(self, primitive_type, min_vertex_index, vertex_count, primitive_count,
+                        index_data, index_format, vertex_data, vertex_stride);
+    LARGE_INTEGER begin{};
+    QueryPerformanceCounter(&begin);
+    const HRESULT result = previous(self, primitive_type, min_vertex_index, vertex_count,
+                                    primitive_count, index_data, index_format, vertex_data,
+                                    vertex_stride);
+    RecordDraw(begin.QuadPart, 84, primitive_type, primitive_count, vertex_count);
+    return result;
+}
+#endif
 
 void __fastcall RendererTrace::ReacquireHook(void* self, void*, unsigned char release,
                                               unsigned char restore, const char* reason) {

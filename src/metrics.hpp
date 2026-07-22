@@ -4,6 +4,7 @@
 #include <array>
 #include <atomic>
 #include <cstddef>
+#include <cstdint>
 #include <mutex>
 #include <string>
 
@@ -31,7 +32,21 @@ public:
                             unsigned long long hardware_sync_cycles, int sync_index_before,
                             unsigned int sync_pending_before, unsigned int sync_pending_after,
                             unsigned int present_count, long long present_qpc,
-                            long long max_present_qpc) noexcept;
+                            long long max_present_qpc
+#ifdef P2BOOST_RESEARCH_DRAW_TRACE
+                            , unsigned int draw_count, long long draw_qpc,
+                            long long max_draw_qpc, unsigned int max_draw_method,
+                            unsigned int max_draw_primitive_type,
+                            unsigned int max_draw_primitive_count,
+                            unsigned int max_draw_vertex_count,
+                            void* const* max_draw_stack, unsigned short max_draw_stack_depth
+                            , const unsigned int* command_keys,
+                            const unsigned int* command_counts,
+                            unsigned int dynamic_light_calls,
+                            unsigned int dynamic_light_unique_pairs,
+                            unsigned int dynamic_light_unique_tuples
+#endif
+                            ) noexcept;
     bool Dump(const std::string& path) const;
     size_t Count() const noexcept { return count_; }
 
@@ -82,6 +97,22 @@ private:
         unsigned int present_count;
         long long present_qpc;
         long long max_present_qpc;
+#ifdef P2BOOST_RESEARCH_DRAW_TRACE
+        unsigned int draw_count;
+        long long draw_qpc;
+        long long max_draw_qpc;
+        unsigned int max_draw_method;
+        unsigned int max_draw_primitive_type;
+        unsigned int max_draw_primitive_count;
+        unsigned int max_draw_vertex_count;
+        std::array<std::uintptr_t, 16> max_draw_stack;
+        unsigned short max_draw_stack_depth;
+        std::array<unsigned int, 16> command_keys;
+        std::array<unsigned int, 16> command_counts;
+        unsigned int dynamic_light_calls;
+        unsigned int dynamic_light_unique_pairs;
+        unsigned int dynamic_light_unique_tuples;
+#endif
         unsigned int thread_id;
     };
     LARGE_INTEGER frequency_{};

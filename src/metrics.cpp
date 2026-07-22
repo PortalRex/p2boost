@@ -1,5 +1,6 @@
 #include "metrics.hpp"
 
+#include <algorithm>
 #include <fstream>
 #include <iomanip>
 #include <cstring>
@@ -47,7 +48,22 @@ void Metrics::RecordRenderWorker(long long begin_qpc, long long end_qpc,
                                  unsigned long long hardware_sync_cycles, int sync_index_before,
                                  unsigned int sync_pending_before, unsigned int sync_pending_after,
                                  unsigned int present_count, long long present_qpc,
-                                 long long max_present_qpc) noexcept {
+                                 long long max_present_qpc
+#ifdef P2BOOST_RESEARCH_DRAW_TRACE
+                                 , unsigned int draw_count, long long draw_qpc,
+                                 long long max_draw_qpc, unsigned int max_draw_method,
+                                 unsigned int max_draw_primitive_type,
+                                 unsigned int max_draw_primitive_count,
+                                 unsigned int max_draw_vertex_count,
+                                 void* const* max_draw_stack,
+                                 unsigned short max_draw_stack_depth
+                                 , const unsigned int* command_keys,
+                                 const unsigned int* command_counts,
+                                 unsigned int dynamic_light_calls,
+                                 unsigned int dynamic_light_unique_pairs,
+                                 unsigned int dynamic_light_unique_tuples
+#endif
+                                 ) noexcept {
     if (!Tracing()) return;
     std::lock_guard<std::mutex> lock(render_worker_mutex_);
     if (pending_render_worker_begin_qpc_ == 0 || begin_qpc < pending_render_worker_begin_qpc_)
@@ -60,12 +76,28 @@ void Metrics::RecordRenderWorker(long long begin_qpc, long long end_qpc,
     pending_render_worker_parameter_bytes_ += parameter_bytes;
     pending_render_worker_vertex_bytes_ += vertex_bytes;
     pending_render_worker_index_bytes_ += index_bytes;
-    render_worker_samples_[render_worker_cursor_] = {
+    RenderWorkerSample sample{
         begin_qpc, end_qpc, cycles, queued_calls, parameter_bytes, vertex_bytes, index_bytes,
         hardware_sync_count, hardware_sync_qpc, max_hardware_sync_qpc, hardware_sync_cycles,
         sync_index_before, sync_pending_before, sync_pending_after,
         present_count, present_qpc, max_present_qpc,
+#ifdef P2BOOST_RESEARCH_DRAW_TRACE
+        draw_count, draw_qpc, max_draw_qpc, max_draw_method, max_draw_primitive_type,
+        max_draw_primitive_count, max_draw_vertex_count, {}, max_draw_stack_depth, {}, {},
+        dynamic_light_calls, dynamic_light_unique_pairs, dynamic_light_unique_tuples,
+#endif
         GetCurrentThreadId()};
+#ifdef P2BOOST_RESEARCH_DRAW_TRACE
+    const auto depth = (std::min)(static_cast<size_t>(max_draw_stack_depth),
+                                  sample.max_draw_stack.size());
+    for (size_t index = 0; index < depth; ++index)
+        sample.max_draw_stack[index] = reinterpret_cast<std::uintptr_t>(max_draw_stack[index]);
+    for (size_t index = 0; index < sample.command_keys.size(); ++index) {
+        sample.command_keys[index] = command_keys[index];
+        sample.command_counts[index] = command_counts[index];
+    }
+#endif
+    render_worker_samples_[render_worker_cursor_] = sample;
     render_worker_cursor_ = (render_worker_cursor_ + 1) % Capacity;
     if (render_worker_count_ < Capacity) ++render_worker_count_;
 }
@@ -174,7 +206,13 @@ bool Metrics::Dump(const std::string& path) const {
         path + "_render_workers.csv";
     std::ofstream worker_output(worker_path, std::ios::trunc);
     if (!worker_output) return false;
-    worker_output << "begin_qpc,end_qpc,wall_ms,cycles,queued_calls,parameter_bytes,vertex_bytes,index_bytes,hardware_sync_count,hardware_sync_ms,max_hardware_sync_ms,hardware_sync_cycles,sync_index_before,sync_pending_before,sync_pending_after,present_count,present_ms,max_present_ms,thread_id\n"
+    worker_output << "begin_qpc,end_qpc,wall_ms,cycles,queued_calls,parameter_bytes,vertex_bytes,index_bytes,hardware_sync_count,hardware_sync_ms,max_hardware_sync_ms,hardware_sync_cycles,sync_index_before,sync_pending_before,sync_pending_after,present_count,present_ms,max_present_ms"
+#ifdef P2BOOST_RESEARCH_DRAW_TRACE
+                  << ",draw_count,draw_ms,max_draw_ms,max_draw_method,max_draw_primitive_type,max_draw_primitive_count,max_draw_vertex_count,draw_stack_0,draw_stack_1,draw_stack_2,draw_stack_3,draw_stack_4,draw_stack_5,draw_stack_6,draw_stack_7,draw_stack_8,draw_stack_9,draw_stack_10,draw_stack_11,draw_stack_12,draw_stack_13,draw_stack_14,draw_stack_15"
+                  << ",command_key_0,command_count_0,command_key_1,command_count_1,command_key_2,command_count_2,command_key_3,command_count_3,command_key_4,command_count_4,command_key_5,command_count_5,command_key_6,command_count_6,command_key_7,command_count_7,command_key_8,command_count_8,command_key_9,command_count_9,command_key_10,command_count_10,command_key_11,command_count_11,command_key_12,command_count_12,command_key_13,command_count_13,command_key_14,command_count_14,command_key_15,command_count_15"
+                  << ",dynamic_light_calls,dynamic_light_unique_pairs,dynamic_light_unique_tuples"
+#endif
+                  << ",thread_id\n"
                   << std::fixed << std::setprecision(6);
     {
         std::lock_guard<std::mutex> lock(render_worker_mutex_);
@@ -197,8 +235,25 @@ bool Metrics::Dump(const std::string& path) const {
                           << static_cast<double>(sample.present_qpc) * 1000.0 /
                                  static_cast<double>(frequency_.QuadPart) << ','
                           << static_cast<double>(sample.max_present_qpc) * 1000.0 /
+                                 static_cast<double>(frequency_.QuadPart);
+#ifdef P2BOOST_RESEARCH_DRAW_TRACE
+            worker_output << ',' << sample.draw_count << ','
+                          << static_cast<double>(sample.draw_qpc) * 1000.0 /
                                  static_cast<double>(frequency_.QuadPart) << ','
-                          << sample.thread_id << '\n';
+                          << static_cast<double>(sample.max_draw_qpc) * 1000.0 /
+                                 static_cast<double>(frequency_.QuadPart) << ','
+                          << sample.max_draw_method << ',' << sample.max_draw_primitive_type << ','
+                          << sample.max_draw_primitive_count << ',' << sample.max_draw_vertex_count;
+            for (const auto address : sample.max_draw_stack)
+                worker_output << ",0x" << std::hex << address << std::dec;
+            for (size_t command = 0; command < sample.command_keys.size(); ++command)
+                worker_output << ",0x" << std::hex << sample.command_keys[command] << std::dec
+                              << ',' << sample.command_counts[command];
+            worker_output << ',' << sample.dynamic_light_calls
+                          << ',' << sample.dynamic_light_unique_pairs
+                          << ',' << sample.dynamic_light_unique_tuples;
+#endif
+            worker_output << ',' << sample.thread_id << '\n';
         }
     }
     return frame_output_good && worker_output.good();

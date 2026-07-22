@@ -4,6 +4,10 @@
 
 #include <atomic>
 
+#ifdef P2BOOST_RESEARCH_DRAW_TRACE
+#include <d3d9.h>
+#endif
+
 namespace p2boost {
 class Metrics;
 
@@ -35,6 +39,16 @@ private:
     static void __fastcall RenderWorkerHook(void* self, void*, void* queued_context);
     static void __fastcall HardwareSyncHook(void* self, void*);
     static void __fastcall PresentHook(void* self, void*);
+#ifdef P2BOOST_RESEARCH_DRAW_TRACE
+    static HRESULT __stdcall DrawPrimitiveHook(IDirect3DDevice9*, D3DPRIMITIVETYPE, UINT, UINT);
+    static HRESULT __stdcall DrawIndexedPrimitiveHook(IDirect3DDevice9*, D3DPRIMITIVETYPE, INT,
+                                                       UINT, UINT, UINT, UINT);
+    static HRESULT __stdcall DrawPrimitiveUpHook(IDirect3DDevice9*, D3DPRIMITIVETYPE, UINT,
+                                                  const void*, UINT);
+    static HRESULT __stdcall DrawIndexedPrimitiveUpHook(IDirect3DDevice9*, D3DPRIMITIVETYPE,
+                                                         UINT, UINT, UINT, const void*,
+                                                         D3DFORMAT, const void*, UINT);
+#endif
     static void __cdecl StaticLightingRestoreHook();
     static void __cdecl StaticLightingCacheRestoreHook();
     static double NowMilliseconds() noexcept;
@@ -48,13 +62,24 @@ private:
     VtableSlotHook resource_callbacks_;
     InlineDetour hardware_sync_;
     VtableSlotHook present_;
+#ifdef P2BOOST_RESEARCH_DRAW_TRACE
+    VtableSlotHook draw_primitive_;
+    VtableSlotHook draw_indexed_primitive_;
+    VtableSlotHook draw_primitive_up_;
+    VtableSlotHook draw_indexed_primitive_up_;
+    std::uint8_t* material_module_ = nullptr;
+    std::uint8_t* engine_module_ = nullptr;
+#endif
     PointerImmediatePatch render_worker_;
+    RenderWorkerFn render_worker_original_ = nullptr;
     ReacquireFn original_ = nullptr;
     using StaticLightingRestoreFn = void(__cdecl*)();
     StaticLightingRestoreFn lighting_original_ = nullptr;
     StaticLightingRestoreFn lighting_cache_original_ = nullptr;
     Metrics* metrics_ = nullptr;
     std::atomic_uint reacquire_depth_{0};
+    std::atomic_uint active_render_workers_{0};
+    std::atomic_bool removing_{false};
     void* material_system_ = nullptr;
     MaterialLockFn material_lock_ = nullptr;
     MaterialUnlockFn material_unlock_ = nullptr;

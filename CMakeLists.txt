@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.24)
 project(p2boost VERSION 0.5.0 LANGUAGES CXX)
 
+option(P2BOOST_RESEARCH_DRAW_TRACE "Instrument native D3D9 draw calls for research captures" OFF)
+
 if(NOT WIN32)
   message(FATAL_ERROR "p2boost currently targets Portal 2 for Windows")
 endif()
@@ -26,6 +28,9 @@ add_library(p2boost SHARED
 )
 target_include_directories(p2boost PRIVATE src)
 target_compile_definitions(p2boost PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX P2BOOST_VERSION="${PROJECT_VERSION}")
+if(P2BOOST_RESEARCH_DRAW_TRACE)
+  target_compile_definitions(p2boost PRIVATE P2BOOST_RESEARCH_DRAW_TRACE=1)
+endif()
 target_compile_options(p2boost PRIVATE /W4 /WX /permissive- /Zc:__cplusplus /guard:cf)
 target_link_options(p2boost PRIVATE /DEF:${CMAKE_CURRENT_SOURCE_DIR}/src/p2boost.def /guard:cf /DEBUG:FULL)
 target_link_libraries(p2boost PRIVATE bcrypt)

@@ -57,6 +57,11 @@ files:
 .\scripts\uninstall.ps1
 ```
 
+The normal build compiles permanent per-draw instrumentation out. Reverse-
+engineering experiments can opt into it in a separate tree with
+`-DP2BOOST_RESEARCH_DRAW_TRACE=ON`; packaging and nightly releases always use
+the default `OFF` configuration.
+
 ## Commands
 
 - `p2boost_status` prints hashes/build support, native-D3D9 state, SAR state,

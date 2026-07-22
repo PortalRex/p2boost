@@ -126,6 +126,21 @@ occasional 9-31 ms queued-worker events in both portal and co-op gameplay.
 This variance is why the runner is retained and why the explicit GPU-fence
 path remains an open smoothness issue rather than being hidden by averages.
 
+After adding research-only draw/command classification, the normal Release
+build received another five-second patched-only pass through all three demos:
+
+| Gameplay segment | Average FPS | p99 ms | Maximum ms | Frames >8.3 ms |
+|---|---:|---:|---:|---:|
+| Trust Fling | 962.71 | 1.6099 | 7.0009 | 0 |
+| Co-op repulsion gel | 972.20 | 2.1623 | 10.7736 | 1 |
+| Co-op tractor beam | 949.77 | 1.4803 | 11.2378 | 1 |
+
+The two co-op maxima confirm that the remaining hitch classes are still
+observable in short real gameplay. The release does not claim them as fixed;
+the draw trace attributes the paint burst to unique dynamic-light surface jobs,
+while separate captures attribute the tractor/fence class to native D3D9
+serialization.
+
 ## Focus and portal results
 
 The original timestamped native-D3D9 harness completed 30 minimize/restore/

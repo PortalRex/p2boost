@@ -133,6 +133,34 @@ flush or weakening the engine's CPU/GPU ordering and latency contract. The
 shipping tracer records only worker, concrete fence, and Present timing. It no
 longer clones or timestamps every queued command.
 
+An opt-in `P2BOOST_RESEARCH_DRAW_TRACE` build then hooked the native D3D9 draw
+slots only while tracing. The first pass caught a 58.1783 ms worker batch with
+47.8942 ms inside 1,504 draws and one 10.5186 ms indexed draw. Repeating the
+same demo in the same process reduced the corresponding deterministic batch to
+10.1932 ms; its 2,989 draws totaled 4.9082 ms and the longest draw was only
+0.3483 ms. This separates a native-driver first-use submission cost from the
+repeatable engine workload. Because dummy rendering would only prewarm or move
+the first-use work, no prewarming is included.
+
+The repeatable co-op paint batch contained 7,561 queued calls. Command-identity
+accounting mapped 2,310 of them to `engine.dll+0xd7840`. Ghidra's recovered
+functor type identifies this as the per-surface dynamic-light renderer taking a
+`dlight_t*`, `msurface2_t*`, a `matrix3x4_t`, flags, and two lighting booleans.
+The function is fed by both immediate updates and the sorted deferred list
+finalized by `EndUpdateLightmaps` under the `Dynamic_Light_Rendering` VProf
+budget group.
+
+Exact research-only tuple accounting found 2,310 unique light/surface pairs
+and 2,310 unique complete argument tuples. That 9.5309 ms batch spent 4.2320 ms
+inside native D3D9 draws, 0.0032 ms in the explicit hardware sync, and the
+remainder in distinct surface/light work and queue dispatch. Therefore no
+duplicate light job can be removed without dropping a required surface update.
+An attempted timing-wrapper substitution for the temporary functor objects was
+rejected after an x86 ABI mismatch faulted at `engine.dll+0xd6b15`; it was
+removed and never enabled in the shipping build. Further work on this path
+requires a proven batching implementation with equivalent ordering and output,
+not skipped lights or reduced paint quality.
+
 ### Static projected-light rebuild
 
 The engine's hierarchical VProf report exposed a larger steady-state co-op
@@ -222,3 +250,10 @@ and byte-signature validation. Renderer diagnostic vtable hooks store their
 previous targets. Removal restores a location only while p2boost still owns
 it, so a later hook owner is never overwritten. The targets are outside SAR's
 public client timing hooks, and SAR 1.15.3 was present during A/B tests.
+
+An active-render unload stress test exposed a worker that could still return
+through `p2boost.dll` after Source had detached the plugin. The renderer hook
+now restores the queued-worker target first, tracks in-flight batches, and
+requires a 50 ms zero-callback grace interval before removing downstream
+hooks. Ten consecutive unload/reload cycles passed while the co-op paint demo
+was rendering with tracing enabled.
