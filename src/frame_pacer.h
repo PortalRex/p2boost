@@ -5,6 +5,7 @@
 #include <atomic>
 
 namespace p2boost {
+	class Metrics;
 
 	void __cdecl FrameCompleteHook( );
 	void __cdecl FrameCompleteDispatch( void* host_state, void* caller_frame );
@@ -18,7 +19,7 @@ namespace p2boost {
 		~FramePacer( );
 
 		// install or remove the verified limiter hook.
-		bool install( );
+		bool install( Metrics* metrics );
 		void remove( );
 
 		// control the reversible pacing fix.
@@ -39,6 +40,7 @@ namespace p2boost {
 
 		static FramePacer*	m_instance;
 		CallSitePatch		m_frame_complete;
+		Metrics*			m_metrics{ };
 		std::atomic< bool > m_enabled{ false };
 	};
 

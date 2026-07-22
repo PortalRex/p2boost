@@ -158,8 +158,10 @@ namespace {
 		worker.m_cycles		  = 75;
 		worker.m_queued_calls = 4;
 		metrics->record_render_worker( worker );
-		metrics->frame( true );
-		metrics->frame( false );
+		metrics->set_simulating( true );
+		metrics->frame( );
+		metrics->set_simulating( false );
+		metrics->frame( );
 		const std::string path = "p2boost-test-metrics.csv";
 		if( !metrics->dump( path ) )
 			return false;

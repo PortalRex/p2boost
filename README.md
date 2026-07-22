@@ -76,7 +76,9 @@ the default `OFF` configuration.
 - `p2boost_overlay 0|1` toggles a compact in-game profiler. Its one-second
   rolling panel shows current/average frame time, FPS, p99, maximum, hitch
   state, portal and render-worker time, shadow skips, focus events, SP/co-op,
-  SAR, and fix state. Collection and display stop completely when disabled.
+  SAR, and fix state. Frames are sampled at the verified `CEngine::Frame`
+  completion hook, not the 60 Hz server simulation callback. Collection and
+  display stop completely when disabled.
 - `p2boost_dump_metrics` writes `p2boost_metrics.csv` in the game root, including
   simulation, focus, local-co-op, resource-reacquisition, portal, and
   projected-shadow timings/cache decisions. When renderer-worker tracing has
@@ -93,11 +95,13 @@ No command writes or archives a game cvar.
 and exports symbols, strings, target decompilation, and callers. Generated
 projects/artifacts are ignored because they contain derived game-binary data.
 PresentMon capture and analysis scripts are under `scripts/`; the 30-cycle
-focus harness is `run-focus-portal-cycles.ps1`. The deterministic
-`run-coop-lobby-portals.ps1` runner creates two local players in the co-op
-lobby, equips them, places a linked portal pair, restores fixed camera poses,
-saves a proof screenshot, runs patched/unpatched captures, and restores the
-user's original `fps_max` and `sv_cheats` values.
+focus harness is `run-focus-portal-cycles.ps1`. It verifies that the game
+covers the selected monitor, alt-tabs away, then fires a fresh primary and
+secondary portal through real portal-gun inputs after every restore. The
+deterministic `run-coop-lobby-portals.ps1` runner creates two local players in
+the co-op lobby, equips them, places a linked portal pair, restores fixed camera
+poses, saves a proof screenshot, runs patched/unpatched captures, and restores
+the user's original `fps_max` and `sv_cheats` values.
 
 For a synchronized CPU, GPU, disk, module-load, and frame-time trace, start
 Portal 2 from an elevated PowerShell and run:
@@ -126,10 +130,11 @@ all visual and gameplay cvars alone.
 `run-live-gameplay.ps1` is the primary short performance check. It records
 matched single-player Laser Relays and two-player lobby runs while genuine
 player commands move and fire both portal guns. The SP route starts at the
-normal spawn and walks under collision through the main relay room for twelve
-seconds; it does not use noclip, a position override, or in-capture RCON
-traffic. Proof screenshots are saved beside the CSVs. The default 13-second
-duration includes the complete extended SP route.
+normal spawn, rides the elevator, and walks under collision into the far side
+of the main relay room for twenty seconds. It then fires a linked portal pair
+on separate walls and leaves a portal interior visible. It does not use noclip,
+a position override, or in-capture RCON traffic. Proof screenshots are saved
+beside the CSVs. The default 24-second duration includes the complete route.
 Start the game with `+ss_map mp_coop_lobby_2` before a combined run, then use:
 
 ```powershell

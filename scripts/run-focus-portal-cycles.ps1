@@ -29,15 +29,48 @@ using System.Runtime.InteropServices;
 public static class P2BoostFocusCaptureWindow {
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr window, int command);
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr window);
+    [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr window, out Rect rect);
+    [DllImport("user32.dll")] public static extern IntPtr MonitorFromWindow(IntPtr window, uint flags);
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    public static extern bool GetMonitorInfo(IntPtr monitor, ref MonitorInfo info);
+
+    public struct Rect { public int Left, Top, Right, Bottom; }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+    public struct MonitorInfo {
+        public int Size;
+        public Rect Monitor;
+        public Rect Work;
+        public uint Flags;
+    }
 }
 '@
 [P2BoostFocusCaptureWindow]::ShowWindow($gameProcess.MainWindowHandle, 9) | Out-Null
 [P2BoostFocusCaptureWindow]::SetForegroundWindow($gameProcess.MainWindowHandle) | Out-Null
 Start-Sleep -Milliseconds 500
+
+# The focus regression is specific to fullscreen-sized device restoration. A
+# windowed run is a different presentation path and must not silently pass.
+$windowRect = [P2BoostFocusCaptureWindow+Rect]::new()
+[P2BoostFocusCaptureWindow]::GetWindowRect($gameProcess.MainWindowHandle, [ref]$windowRect) | Out-Null
+$monitorInfo = [P2BoostFocusCaptureWindow+MonitorInfo]::new()
+$monitorInfo.Size = [Runtime.InteropServices.Marshal]::SizeOf($monitorInfo)
+$monitor = [P2BoostFocusCaptureWindow]::MonitorFromWindow($gameProcess.MainWindowHandle, 2)
+[P2BoostFocusCaptureWindow]::GetMonitorInfo($monitor, [ref]$monitorInfo) | Out-Null
+$coversMonitor = $windowRect.Left -eq $monitorInfo.Monitor.Left -and `
+    $windowRect.Top -eq $monitorInfo.Monitor.Top -and `
+    $windowRect.Right -eq $monitorInfo.Monitor.Right -and `
+    $windowRect.Bottom -eq $monitorInfo.Monitor.Bottom
+if (-not $coversMonitor) {
+    throw 'Portal 2 must cover the selected monitor for the fullscreen focus test.'
+}
 $listener = Get-NetTCPConnection -OwningProcess $gameProcess.Id -State Listen -ErrorAction Stop |
     Where-Object { $_.LocalPort -eq 27015 } | Select-Object -First 1
 if (-not $listener) { throw 'Launch Portal 2 with -usercon and a non-empty rcon_password.' }
-$duration = [Math]::Max(10, [int]([Math]::Ceiling($Cycles * 2.5 + 5)))
+# Each cycle includes one RCON setup round trip in addition to 2.45 seconds of
+# focus and delayed input. Budget its observed worst case so a 30-cycle release
+# run cannot outlive PresentMon on a busy machine.
+$duration = [Math]::Max(10, [int]([Math]::Ceiling($Cycles * 3.25 + 8)))
 $arguments = @(
     '--process_id', $gameProcess.Id, '--output_file', $outputPath, '--v2_metrics',
     '--qpc_time', '--timed', $duration, '--terminate_after_timed',
@@ -74,6 +107,6 @@ $lastFrameQpc = [double]$frames[-1].CPUStartQPC
 $firstPortalQpc = [double]$events[0].portal_qpc
 $lastPortalEndQpc = [double]$events[-1].portal_qpc + 0.1 * [Diagnostics.Stopwatch]::Frequency
 if ($firstFrameQpc -gt $firstPortalQpc -or $lastFrameQpc -lt $lastPortalEndQpc) {
-    throw "PresentMon did not overlap the action window (frames $firstFrameQpc..$lastFrameQpc; events $firstPortalQpc..$lastPortalEndQpc). Run this script from an elevated PowerShell session."
+    throw "PresentMon did not overlap the complete action window (frames $firstFrameQpc..$lastFrameQpc; events $firstPortalQpc..$lastPortalEndQpc)."
 }
 Write-Host "Completed $Cycles timestamped focus/portal cycles: $outputPath"

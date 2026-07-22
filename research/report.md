@@ -331,5 +331,48 @@ matching proof image. Unpatched recorded three frames above 8.3 ms and a
 12.9386 ms maximum; patched recorded no frame above 8.3 ms and a 5.5315 ms
 maximum. Average throughput improved from 612.68 to 731.02 FPS, while 1% low
 improved from 318.40 to 352.10 FPS. Median CPU-busy time fell from 1.5708 to
-1.2947 ms. This is the current valid SP gameplay result; the discarded Trust
-Fling and out-of-bounds noclip captures are not used in any comparison.
+1.2947 ms.
+
+The final route follows the user's full reproduction: twenty seconds of
+ordinary forward movement takes the elevator into the expensive chamber, then
+real primary and secondary attacks open linked portals on separate walls. A
+24-second A/B recorded 646.06 FPS unpatched and 812.89 FPS patched. The 1% low
+rose from 267.17 to 386.16 FPS, median CPU-busy time fell from 1.3892 to
+1.1134 ms, and neither variant exceeded 8.3 ms. The patched route's slowest
+one-second interval averaged 586.1 FPS; the connected-portal end view averaged
+more than 900 FPS. This is the current valid SP gameplay result; discarded
+Trust Fling and out-of-bounds noclip captures are not used in any comparison.
+
+## Profiler validation and connected-portal focus test
+
+The first overlay implementation sampled `IServerPluginCallbacks::GameFrame`,
+which is the simulation callback and therefore reported approximately 60 FPS
+at an actual render rate above 800 FPS. Frame collection now occurs after the
+verified `CEngine::Frame` completion call. In a simultaneous five-second
+capture, PresentMon reported 837.52 FPS, 1.0922 ms median, and 3.0146 ms p99;
+p2boost reported 842.55 FPS, 1.0816 ms median, and 2.8466 ms p99. The small
+boundary difference is expected because the two collectors start separately.
+
+The focus harness now rejects a window that does not cover its monitor. Before
+each cycle it fizzles both prior portals, alt-tabs away, restores the game, and
+uses delayed engine inputs to fire a new primary and secondary portal. This
+keeps RCON parsing out of the measured connected-portal frame. Five patched
+smoke cycles had a 1.8167 ms median post-connection maximum, 1.9831 ms worst
+frame, and zero cycles above 8.3 ms. The disabled-patch control measured
+1.9313 ms median and 2.2449 ms worst, also with no cycle above 8.3 ms.
+
+The full 30-cycle patched release gate then measured a 1.7618 ms median,
+2.1820 ms p95, and 2.5227 ms worst post-connection frame. No cycle exceeded
+8.3 ms. The harness duration includes its measured RCON setup latency, so the
+final event and analysis window remain inside the PresentMon capture.
+
+An elevated 25-second GeneralProfile trace of the same elevator route recorded
+728.51 FPS at the extra tracing overhead, 3.7184 ms p99, 6.8840 ms maximum,
+and no frame above 8.3 ms. GPU-busy p99 was 1.1074 ms. Exclusive CPU samples
+were distributed across the native NVIDIA D3D9 driver (26.74%), client view and
+render-list work (13.45%), engine BSP/world work (10.87%), shader API (6.49%),
+and material submission (4.60%). There was no gameplay-asset read; the only
+Portal file traffic was the active demo write. This leaves no single large
+semantics-preserving operation to remove: the remaining dominant paths submit
+real draws or build camera-dependent visibility. Further patches require proof
+of equivalent state or duplicated output before any work is skipped.

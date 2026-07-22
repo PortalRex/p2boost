@@ -113,8 +113,13 @@ namespace p2boost {
 			m_coop = coop;
 		}
 
-		// record one engine frame and its pending events.
-		void frame( bool simulating ) noexcept;
+		// Cache simulation state from the server tick callback.
+		void set_simulating( bool simulating ) noexcept {
+			m_simulating.store( simulating, std::memory_order_relaxed );
+		}
+
+		// Record one rendered engine frame and its pending events.
+		void frame( ) noexcept;
 
 		// record focus restore work and its three stages.
 		void record_reacquire( double milliseconds, const char* reason, Qpc::tick_t begin_qpc, Qpc::tick_t end_qpc ) noexcept;
@@ -169,6 +174,7 @@ namespace p2boost {
 		size_t						   m_count{ };
 		std::atomic< bool >			   m_tracing{ };
 		std::atomic< bool >			   m_overlay_collection{ };
+		std::atomic< bool >			   m_simulating{ };
 		bool						   m_coop{ };
 
 		bool collecting( ) const noexcept {

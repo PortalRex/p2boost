@@ -68,7 +68,7 @@ namespace p2boost {
 			++m_render_worker_count;
 	}
 
-	void Metrics::frame( bool simulating ) noexcept {
+	void Metrics::frame( ) noexcept {
 		if( !collecting( ) )
 			return;
 		const Qpc::tick_t now				 = Qpc::now( );
@@ -131,7 +131,7 @@ namespace p2boost {
 			render_worker_vertex_bytes,
 			render_worker_index_bytes,
 			m_pending_reacquire_reason,
-			simulating,
+			m_simulating.load( std::memory_order_relaxed ),
 			focused,
 			m_coop };
 		// counters below belong only to the frame that was just committed.

@@ -41,11 +41,47 @@ function Invoke-Game([string[]]$Commands) {
         }
     }
 }
+
+function Read-Cvar([string]$Name) {
+    $text = Invoke-Game @($Name) | Out-String
+    $match = [regex]::Match($text, '=\s*"([^"]+)"')
+    if (-not $match.Success) {
+        throw "Could not read $Name from: $text"
+    }
+
+    return $match.Groups[1].Value
+}
+
+$originalCheats = Read-Cvar 'sv_cheats'
 $events = [Collections.Generic.List[object]]::new()
 try {
     if ($TraceP2Boost) { Invoke-Game @('p2boost_trace 1') | Out-Null }
+
+    # Use a known pair of portalable walls in Laser Relays. Positioning is part
+    # of test setup only; each measured portal is still fired by the portal gun.
+    Invoke-Game @(
+        'sv_cheats 1',
+        'give weapon_portalgun',
+        'upgrade_portalgun',
+        'setpos -687.968750 -707.304016 64.031250',
+        'setang 0 -90 0',
+        'ent_fire prop_portal fizzle'
+    ) | Out-Null
+
     Start-Sleep -Seconds 2
     for ($index = 0; $index -lt $Cycles; ++$index) {
+        # Remove both old portals before focus is lost. The delayed commands
+        # below execute entirely inside the engine, avoiding an RCON parse in
+        # the frame whose first newly connected portal begins rendering.
+        Invoke-Game @(
+            'ent_fire prop_portal fizzle',
+            'setang 0 -90 0',
+            'hwait 75 +attack; hwait 81 -attack; ' +
+            'hwait 99 setang 0 0 0; hwait 105 +attack2; hwait 111 -attack2; ' +
+            'hwait 129 setang 0 -90 0'
+        ) | Out-Null
+        $scheduleQpc = [Diagnostics.Stopwatch]::GetTimestamp()
+
         $window = (Get-Game).MainWindowHandle
         if ($FocusMode -eq 'Minimize') {
             [P2BoostFocusActions]::ShowWindowAsync($window, 6) | Out-Null
@@ -56,17 +92,23 @@ try {
         if ($FocusMode -eq 'Minimize') { [P2BoostFocusActions]::ShowWindowAsync($window, 9) | Out-Null }
         [P2BoostFocusActions]::SetForegroundWindow($window) | Out-Null
         $restoreQpc = [Diagnostics.Stopwatch]::GetTimestamp()
-        Start-Sleep -Milliseconds 750
-        $portal = $index % 2
-        $x = if ($portal -eq 0) { -1000 } else { -900 }
-        $portalQpc = [Diagnostics.Stopwatch]::GetTimestamp()
-        Invoke-Game @("portal_place 0 $portal $x 0 -271 -90 0 0") | Out-Null
-        $events.Add([pscustomobject]@{cycle=$index;restore_qpc=$restoreQpc;portal_qpc=$portalQpc;portal=$portal})
-        Start-Sleep -Milliseconds 450
+
+        # hwait is expressed in 60 Hz simulation ticks. The second shot is the
+        # instant at which the first connected pair becomes renderable.
+        $primaryQpc = $scheduleQpc + 75.0 / 60.0 * [Diagnostics.Stopwatch]::Frequency
+        $connectedQpc = $scheduleQpc + 105.0 / 60.0 * [Diagnostics.Stopwatch]::Frequency
+        $events.Add([pscustomobject]@{
+            cycle = $index
+            restore_qpc = $restoreQpc
+            primary_qpc = $primaryQpc
+            portal_qpc = $connectedQpc
+        })
+        Start-Sleep -Milliseconds 2200
     }
     $events | Export-Csv -LiteralPath $EventPath -NoTypeInformation
     if ($TraceP2Boost) { Invoke-Game @('p2boost_dump_metrics', 'p2boost_trace 0') | Out-Null }
 } finally {
     if ($TraceP2Boost) { try { Invoke-Game @('p2boost_trace 0') | Out-Null } catch {} }
+    try { Invoke-Game @("sv_cheats $originalCheats") | Out-Null } catch {}
     if ($focusSink) { $focusSink.Dispose() }
 }

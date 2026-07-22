@@ -1,7 +1,7 @@
 param(
     [ValidateSet('Both', 'SinglePlayer', 'Coop')][string]$Scenario = 'Both',
     [string]$OutputDirectory = 'artifacts\benchmarks\live-gameplay',
-    [ValidateRange(13, 30)][int]$DurationSeconds = 13,
+    [ValidateRange(24, 30)][int]$DurationSeconds = 24,
     [ValidateSet(360, 500, 999)][int]$FpsMax = 999,
     [int]$ProcessId = 0,
     [string]$RconPassword = 'p2boostlab',
@@ -156,11 +156,16 @@ function Invoke-SinglePlayerActions {
     # Schedule real inputs before PresentMon starts. Sending one RCON packet per
     # action during a capture produced a false 33.7 ms main-thread hitch.
     Invoke-Game @(
-        # Laser Relays opens into its expensive main room by walking straight
-        # from the normal spawn. No position, view, or collision cheats are
-        # used, so the capture includes the real visibility transition.
-        'hwait 90 cmd1 +forward; hwait 300 cmd1 +attack; hwait 306 cmd1 -attack; ' +
-        'hwait 330 cmd1 +attack2; hwait 336 cmd1 -attack2; hwait 720 cmd1 -forward'
+        # Walk the complete normal route into the lift and keep moving until it
+        # deposits Chell at the far side of the expensive relay chamber. This
+        # captures the real area transition instead of stopping in the lift.
+        'hwait 90 cmd1 +forward; hwait 1200 cmd1 -forward; ' +
+        # Face the nearby portalable wall, fire the blue portal, then face the
+        # full relay room and fire orange. The final view leaves the connected
+        # blue portal on screen so recursive rendering remains in the sample.
+        'hwait 1212 setang 0 -90 0; hwait 1218 cmd1 +attack; hwait 1224 cmd1 -attack; ' +
+        'hwait 1254 setang 0 0 0; hwait 1260 cmd1 +attack2; hwait 1266 cmd1 -attack2; ' +
+        'hwait 1296 setang 0 -90 0'
     ) | Out-Null
 }
 

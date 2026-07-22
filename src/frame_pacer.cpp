@@ -1,6 +1,7 @@
 #include "frame_pacer.h"
 
 #include "address.h"
+#include "metrics.h"
 #include "pattern.h"
 #include "portal2.h"
 #include "stack.h"
@@ -18,7 +19,7 @@ namespace p2boost {
 		remove( );
 	}
 
-	bool FramePacer::install( ) {
+	bool FramePacer::install( Metrics* metrics ) {
 		if( m_instance || m_frame_complete.installed( ) )
 			return false;
 
@@ -35,8 +36,10 @@ namespace p2boost {
 		// preserve every displaced instruction as the reversible signature.
 		std::vector< std::uint8_t > expected{ 0x0f, 0x57, 0xc0, 0xf3, 0x0f, 0x11, 0x46, 0x18 };
 
+		m_metrics  = metrics;
 		m_instance = this;
 		if( !m_frame_complete.install( frame_complete.as< void* >( ), expected, reinterpret_cast< void* >( &FrameCompleteHook ) ) ) {
+			m_metrics  = nullptr;
 			m_instance = nullptr;
 			return false;
 		}
@@ -47,6 +50,7 @@ namespace p2boost {
 	void FramePacer::remove( ) {
 		m_frame_complete.remove( );
 		m_enabled.store( false, std::memory_order_relaxed );
+		m_metrics = nullptr;
 
 		if( m_instance == this )
 			m_instance = nullptr;
@@ -71,6 +75,12 @@ namespace p2boost {
 		float		target		= caller.local( portal2::frame::target_local ).to< float >( );
 
 		*accumulated = carry_frame_overshoot( *accumulated, target, instance && instance->enabled( ) );
+
+		// IServerPluginCallbacks::GameFrame follows the 60 Hz simulation tick.
+		// This verified CEngine::Frame tail runs once per presented engine frame,
+		// making it the correct source for FPS, p99, and hitch measurements.
+		if( instance && instance->m_metrics )
+			instance->m_metrics->frame( );
 	}
 
 	float carry_frame_overshoot( float elapsed, float target, bool enabled ) noexcept {

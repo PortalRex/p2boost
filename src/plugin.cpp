@@ -46,7 +46,7 @@ namespace p2boost {
 				m_verification.m_errors.emplace_back( "portal trace callsite signature mismatch" );
 			if( m_verification.m_supported && m_verification.m_native_d3d9 && !m_shadow_trace.install( &m_metrics ) )
 				m_verification.m_errors.emplace_back( "projected-shadow trace vtable mismatch" );
-			if( m_verification.m_supported && m_verification.m_native_d3d9 && !m_frame_pacer.install( ) ) {
+			if( m_verification.m_supported && m_verification.m_native_d3d9 && !m_frame_pacer.install( &m_metrics ) ) {
 				m_verification.m_errors.emplace_back( "frame-pacer callsite signature mismatch" );
 			}
 			// one state transition updates every reversible optimization.
@@ -89,6 +89,9 @@ namespace p2boost {
 			m_metrics.set_coop( client_max > 1 );
 		}
 		void GameFrame( bool simulating ) override {
+			// Simulation ticks only publish state. Render-frame timing is sampled
+			// at CEngine::Frame completion by the shared frame-pacer hook.
+			m_metrics.set_simulating( simulating );
 			// focus transitions invalidate cached shadow inputs owned by D3D9.
 			DWORD foreground_process = 0;
 			GetWindowThreadProcessId( GetForegroundWindow( ), &foreground_process );
@@ -97,10 +100,10 @@ namespace p2boost {
 				m_shadow_trace.invalidate( );
 				m_last_focused = focused;
 			}
-			m_metrics.frame( simulating );
 			m_profiler_overlay.draw( m_metrics, m_enabled, GetModuleHandleW( L"sar.dll" ) != nullptr );
 		}
 		void LevelShutdown( ) override {
+			m_metrics.set_simulating( false );
 			m_metrics.set_coop( false );
 			m_shadow_trace.invalidate( );
 		}
