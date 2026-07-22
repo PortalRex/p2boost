@@ -151,6 +151,42 @@ segment in that process reduced the maximum batch to 4.5257 ms and the longest
 draw to 0.8742 ms. This is retained as a first-use native-driver/resource cost;
 the project does not hide it with dummy prewarming.
 
+## Short live-gameplay A/B
+
+The new live-input runner replaces demo playback for the primary smoke matrix.
+It drives normal movement, jumping, and portal-gun input while linked portal
+interiors remain visible. Single-player uses Trust Fling; co-op uses two active
+local players in the lobby. Each variant below is a five-second native-D3D9
+capture with the user's visual configuration left intact.
+
+| Target | Scene | Variant | Average FPS | p99 ms | Maximum ms | 1% low FPS |
+|---:|---|---:|---:|---:|---:|---:|
+| 999 | SP Trust Fling | unpatched | 897.09 | 2.3865 | 3.9488 | 419.02 |
+| 999 | SP Trust Fling | patched | 943.68 | 2.1110 | 3.9090 | 473.71 |
+| 999 | Co-op lobby | unpatched | 469.58 | 4.2633 | 5.9362 | 234.56 |
+| 999 | Co-op lobby | patched | 546.38 | 3.1407 | 5.2133 | 318.40 |
+| 360 | SP Trust Fling | unpatched | 351.05 | 4.0257 | 6.0486 | 248.40 |
+| 360 | SP Trust Fling | patched | 360.12 | 3.8569 | 4.5146 | 259.28 |
+| 360 | Co-op lobby | unpatched | 335.98 | 4.9299 | 6.2144 | 202.84 |
+| 360 | Co-op lobby | patched | 359.84 | 3.7853 | 4.1052 | 264.18 |
+
+At the throughput-limited 999 target, the patch improves SP average FPS by
+5.2% and SP p99 by 11.5%. Co-op average FPS improves by 16.4%, p99 by 26.3%,
+and 1% low FPS by 35.7%. At the 360 target, co-op p99 improves by 23.2% and
+1% low FPS by 30.2%. None of the eight live captures contains a frame above
+8.3 ms. The 999 co-op sample clears the original 35% 1%-low target once, but
+the release gate remains provisional until repeated longer runs reproduce it.
+
+A clean reinstall then ran the combined co-op-to-SP 360 matrix end to end. The
+patched co-op repeat measured 359.55 FPS, 3.7712 ms p99, and 4.2334 ms maximum;
+the patched SP repeat measured 360.06 FPS, 3.9090 ms p99, and 4.3959 ms maximum.
+Again, neither scene produced a frame above 8.3 ms.
+
+The analyzer now removes PresentMon's undefined first interval separately for
+each process/swap chain. A trace beginning between presents previously produced
+one artificial interval approximately equal to the complete capture duration;
+that boundary row is not a game frame. No interior or final samples are trimmed.
+
 ## Focus and portal results
 
 The original timestamped native-D3D9 harness completed 30 minimize/restore/
@@ -218,9 +254,10 @@ not included in the current binary.
 ## Gate status
 
 - Post-focus portal frame <=8.3 ms: **met** in 30 valid timestamped cycles.
-- Co-op 1% low improvement >=35%: **not met**; the proven shadow fix improves
-  the lobby 1% low by 20.9%.
-- p99 <=1.25x median at 360: **not met** (1.3145), though cadence and p99 improve.
+- Co-op 1% low improvement >=35%: **provisional**; the short live 999 run
+  improves by 35.7%, but longer repeated live runs are still required.
+- p99 <=1.25x median at 360: **not met**; the live SP and co-op ratios are
+  1.3898 and 1.3648 respectively, though both cadence and p99 improve.
 - <=2% SP throughput regression: **met**; measured throughput improves.
 - 100 map/focus cycles and lossless visual/state equivalence: **not yet completed**.
 

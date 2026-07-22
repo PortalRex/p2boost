@@ -119,6 +119,23 @@ tractor beam), validating the map embedded in Source's accepted `playdemo`
 response before every five-second default capture. It restores `fps_max` and leaves
 all visual and gameplay cvars alone.
 
+`run-live-gameplay.ps1` is the primary short performance check. It records
+matched single-player Trust Fling and two-player lobby runs while genuine
+player commands move, jump, and fire both portal guns. Linked portals remain
+visible in every capture, and proof screenshots are saved beside the CSVs.
+The default eight-second duration keeps a complete SP/co-op A/B run short.
+Start the game with `+ss_map mp_coop_lobby_2` before a combined run, then use:
+
+```powershell
+.\scripts\run-live-gameplay.ps1 -Scenario Both -FpsMax 360
+.\scripts\run-live-gameplay.ps1 -Scenario Both -FpsMax 999
+```
+
+The runner restores `fps_max`, `sv_cheats`, all held inputs, tracing, and the
+enabled patch state even after a failed capture. PresentMon's undefined first
+interval on each swap chain is excluded by `analyze-presentmon.ps1`; otherwise
+that trace-boundary sample can be misreported as a multi-second game hitch.
+
 `p2profile.exe` is a research-only x86 user-mode sampler for systems where
 kernel ETW collection is unavailable without elevation. Its default mode
 records low-overhead main-thread instruction pointers. Explicit `--stack` mode

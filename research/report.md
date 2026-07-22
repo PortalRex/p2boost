@@ -40,6 +40,15 @@ the same co-op paint demo at `fps_max 360`, the existing patch measured 358.49
 FPS with a 4.10 ms p99; the prototype measured 358.48 FPS with a 4.13 ms p99.
 It was neutral and has been removed rather than adding an unproven timing hook.
 
+A later live-gameplay prototype used the remaining interval already calculated
+at `[ebp-8] - [esi+18h]`, waited once, and kept a bounded 0.15 ms QPC polling
+tail. The verified import call is `push 1; call [ThreadSleep]` at RVA
+`0x1f9edc`; its surrounding bytes are unique in the supported build. In a
+portal-visible 360 FPS co-op lobby run, the prototype reached 357.30 FPS with
+a 3.9244 ms p99, compared with 359.84 FPS and 3.7853 ms for the existing
+overshoot correction. This second design was also removed. The result rejects
+timer substitution as the remaining source of CPU frame-time variance.
+
 ## Device/focus causality
 
 `shaderapidx9.dll` RVA `0x24690` handles lost/reset states and calls RVA

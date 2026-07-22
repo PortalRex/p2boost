@@ -2,6 +2,17 @@ param([Parameter(Mandatory)][string]$InputCsv)
 $ErrorActionPreference = 'Stop'
 $rows = Import-Csv -LiteralPath $InputCsv
 if ($rows.Count -lt 100) { throw "capture contains only $($rows.Count) frames" }
+
+# PresentMon cannot calculate a complete frame interval for the first event it
+# observes on each swap chain. Depending on trace startup timing, that row may
+# span nearly the entire capture and look like a multi-second game hitch. Drop
+# only that undefined boundary sample; all subsequent gameplay frames remain.
+$rows = @($rows |
+    Group-Object ProcessID, SwapChainAddress |
+    ForEach-Object {
+        @($_.Group | Sort-Object { [double]$_.CPUStartTime }) | Select-Object -Skip 1
+    })
+
 $column = if ($rows[0].PSObject.Properties.Name -contains 'CPUFrameTime') { 'CPUFrameTime' }
           elseif ($rows[0].PSObject.Properties.Name -contains 'FrameTime') { 'FrameTime' }
           elseif ($rows[0].PSObject.Properties.Name -contains 'MsBetweenPresents') { 'MsBetweenPresents' }
