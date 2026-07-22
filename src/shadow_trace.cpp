@@ -2,6 +2,7 @@
 
 #include "address.h"
 #include "metrics.h"
+#include "pattern.h"
 #include "portal2.h"
 #include "qpc.h"
 
@@ -21,27 +22,37 @@ namespace p2boost {
 			return false;
 
 		const Address client{ GetModuleHandleW( L"client.dll" ) };
-		const Address shadow_manager = client.add( portal2::client::shadow_manager );
+		if( !client )
+			return false;
+
+		// recover the private manager object from a unique call xref.
+		const Address manager_xref	 = pattern::find_unique( client, portal2::signature::shadow_manager );
+		const Address shadow_manager = manager_xref.add( portal2::xref::shadow_manager_object ).at< Address >( );
 		auto**		  vtable		 = shadow_manager.to< void** >( );
-		if( !client || !vtable )
+		if( !shadow_manager || !vtable )
 			return false;
 
 		// slot 24 is CClientShadowMgr::UpdateProjectedTexture in build 23973718.
-		const Address update_projected{ vtable[ portal2::client::update_projected_slot ] };
-		const Address remove_dirty_call = update_projected.add( portal2::client::remove_dirty_call );
+		const Address update_projected{ vtable[ portal2::slot::update_projected ] };
+		const Address remove_dirty_call = update_projected.add( portal2::shadow::remove_dirty_call );
 		if( remove_dirty_call.at< std::uint8_t >( ) != 0xe8 )
 			return false;
 
 		// the second direct call removes this handle from the dirty list.
-		m_remove_dirty			   = remove_dirty_call.rel32( 1 ).as< RemoveDirty_t >( );
-		m_flashlight_models_parent = client.add( portal2::client::flashlight_models ).as< int** >( );
+		m_remove_dirty = remove_dirty_call.rel32( 1 ).as< RemoveDirty_t >( );
+
+		// recover the flashlight list global from its model-count xref.
+		const Address flashlight_xref = pattern::find_unique( client, portal2::signature::flashlight_models );
+		m_flashlight_models_parent =
+			flashlight_xref.add( portal2::xref::flashlight_models_global ).at< Address >( ).as< int** >( );
 		if( !m_remove_dirty || !m_flashlight_models_parent || !*m_flashlight_models_parent )
 			return false;
 
 		m_metrics = metrics;
 		m_states.reserve( 16 );
 		m_instance = this;
-		if( !m_update_projected.install( vtable + portal2::client::update_projected_slot, reinterpret_cast< void* >( &UpdateProjected ) ) ) {
+		if( !m_update_projected.install( vtable + portal2::slot::update_projected,
+				reinterpret_cast< void* >( &UpdateProjected ) ) ) {
 			m_instance = nullptr;
 			m_metrics  = nullptr;
 			return false;
@@ -67,6 +78,7 @@ namespace p2boost {
 	}
 
 	void ShadowTrace::set_enabled( bool enabled ) noexcept {
+		// stale comparisons must never cross an A/B state transition.
 		if( m_enabled.exchange( enabled, std::memory_order_relaxed ) != enabled )
 			invalidate( );
 	}
@@ -81,12 +93,15 @@ namespace p2boost {
 			return;
 
 		const bool tracing = instance->m_metrics && instance->m_metrics->tracing( );
+		// Source uses 0xffff as the invalid projected-texture handle.
 		if( ( handle & 0xffffu ) == 0xffffu ) {
 			previous( self, handle, force );
 			return;
 		}
 
-		auto* entries = *reinterpret_cast< std::uint8_t** >( static_cast< std::uint8_t* >( self ) + portal2::shadow::entries );
+		// handles index a fixed-stride CUtlVector owned by the manager.
+		auto* entries =
+			*reinterpret_cast< std::uint8_t** >( static_cast< std::uint8_t* >( self ) + portal2::shadow::entries );
 		if( !entries ) {
 			previous( self, handle, force );
 			return;
@@ -102,9 +117,15 @@ namespace p2boost {
 			}
 		}
 
-		auto*	   flashlight_models_parent = *instance->m_flashlight_models_parent;
-		const int  flashlight_models		= flashlight_models_parent ? *reinterpret_cast< int* >( reinterpret_cast< std::uint8_t* >( flashlight_models_parent ) + portal2::shadow::flashlight_models ) : 0;
-		const bool same						= prior != instance->m_states.end( ) && prior->m_flashlight_models == flashlight_models && std::memcmp( prior->m_bytes.data( ), shadow, prior->m_bytes.size( ) ) == 0;
+		auto* flashlight_models_parent = *instance->m_flashlight_models_parent;
+		// model-list changes affect the generated projection despite equal bytes.
+		const int flashlight_models =
+			flashlight_models_parent
+				? *reinterpret_cast< int* >( reinterpret_cast< std::uint8_t* >( flashlight_models_parent ) +
+											 portal2::shadow::flashlight_models )
+				: 0;
+		const bool same = prior != instance->m_states.end( ) && prior->m_flashlight_models == flashlight_models &&
+						  std::memcmp( prior->m_bytes.data( ), shadow, prior->m_bytes.size( ) ) == 0;
 
 		// preserve dirty-list cleanup while omitting only the identical rebuild.
 		if( instance->m_enabled.load( std::memory_order_relaxed ) && same ) {
@@ -121,6 +142,7 @@ namespace p2boost {
 			instance->m_metrics->record_shadow_update( timer.elapsed_ms( ), same, same, false );
 
 		if( prior == instance->m_states.end( ) ) {
+			// create cache state only after the engine completed a real rebuild.
 			instance->m_states.push_back( { } );
 			prior			= instance->m_states.end( ) - 1;
 			prior->m_handle = static_cast< std::uint16_t >( index );

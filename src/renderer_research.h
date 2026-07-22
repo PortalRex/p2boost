@@ -26,21 +26,22 @@ namespace p2boost::renderer_research {
 
 	void reset_worker_state( ) noexcept;
 	void count_queued_command( RenderWorkerMetrics& metrics,
-							   std::uint8_t*		node,
-							   std::uint8_t*		material_module ) noexcept;
+		std::uint8_t*								node,
+		void*										queued_functor_execute,
+		void*										queued_functor_leaf ) noexcept;
 	void capture_dynamic_light( RenderWorkerMetrics& metrics, const void* command ) noexcept;
 
 	void							  set_texture( DWORD stage, IDirect3DBaseTexture9* texture ) noexcept;
 	void							  set_vertex_shader( IDirect3DVertexShader9* shader ) noexcept;
 	void							  set_pixel_shader( IDirect3DPixelShader9* shader ) noexcept;
 	[[nodiscard]] PipelineObservation observe_pipeline( ) noexcept;
-	void							  record_draw( RenderWorkerMetrics&		  metrics,
-												   Qpc::tick_t				  begin_qpc,
-												   unsigned int				  method,
-												   unsigned int				  primitive_type,
-												   unsigned int				  primitive_count,
-												   unsigned int				  vertex_count,
-												   const PipelineObservation& pipeline ) noexcept;
+	void							  record_draw( RenderWorkerMetrics& metrics,
+									 Qpc::tick_t						begin_qpc,
+									 unsigned int						method,
+									 unsigned int						primitive_type,
+									 unsigned int						primitive_count,
+									 unsigned int						vertex_count,
+									 const PipelineObservation&			pipeline ) noexcept;
 
 }
 

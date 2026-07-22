@@ -44,8 +44,7 @@ namespace p2boost {
 		Qpc::tick_t m_begin;
 
 	public:
-		__forceinline explicit Stopwatch( bool enabled = true ) noexcept
-			: m_begin{ enabled ? Qpc::now( ) : 0 } {
+		__forceinline explicit Stopwatch( bool enabled = true ) noexcept : m_begin{ enabled ? Qpc::now( ) : 0 } {
 		}
 
 		// return elapsed counter ticks.

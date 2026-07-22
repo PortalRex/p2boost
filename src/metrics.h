@@ -95,7 +95,8 @@ namespace p2boost {
 		void frame( bool simulating ) noexcept;
 
 		// record focus restore work and its three stages.
-		void record_reacquire( double milliseconds, const char* reason, Qpc::tick_t begin_qpc, Qpc::tick_t end_qpc ) noexcept;
+		void record_reacquire(
+			double milliseconds, const char* reason, Qpc::tick_t begin_qpc, Qpc::tick_t end_qpc ) noexcept;
 		void record_reacquire_stage( size_t stage, double milliseconds ) noexcept;
 
 		// record renderer work attributed by the hooks.

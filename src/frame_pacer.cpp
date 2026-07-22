@@ -1,6 +1,7 @@
 #include "frame_pacer.h"
 
 #include "address.h"
+#include "pattern.h"
 #include "portal2.h"
 #include "stack.h"
 
@@ -25,11 +26,19 @@ namespace p2boost {
 		if( !engine )
 			return false;
 
-		// xref: CEngine::Frame clears [esi+18h] after each limiter wait.
+		// find the unique CEngine::Frame tail that clears [esi+18h].
+		const Address frame_tail	 = pattern::find_unique( engine, portal2::signature::frame_complete );
+		const Address frame_complete = frame_tail.add( portal2::xref::frame_complete );
+		if( !frame_complete )
+			return false;
+
+		// preserve every displaced instruction as the reversible signature.
 		std::vector< std::uint8_t > expected{ 0x0f, 0x57, 0xc0, 0xf3, 0x0f, 0x11, 0x46, 0x18 };
 
 		m_instance = this;
-		if( !m_frame_complete.install( engine.add( portal2::engine::frame_complete ).as< void* >( ), expected, reinterpret_cast< void* >( &FrameCompleteHook ) ) ) {
+		if( !m_frame_complete.install( frame_complete.as< void* >( ),
+				expected,
+				reinterpret_cast< void* >( &FrameCompleteHook ) ) ) {
 			m_instance = nullptr;
 			return false;
 		}
@@ -60,15 +69,16 @@ namespace p2boost {
 		FramePacer* instance = FramePacer::m_instance;
 		Address		host{ host_state };
 		Stack		caller{ caller_frame };
-		float*		accumulated = host.add( portal2::engine::frame_accumulator ).as< float* >( );
-		float		target		= caller.local( portal2::engine::frame_target_local ).to< float >( );
+		float*		accumulated = host.add( portal2::frame::accumulator ).as< float* >( );
+		float		target		= caller.local( portal2::frame::target_local ).to< float >( );
 
 		*accumulated = carry_frame_overshoot( *accumulated, target, instance && instance->enabled( ) );
 	}
 
 	float carry_frame_overshoot( float elapsed, float target, bool enabled ) noexcept {
 		// carry only normal deadline polling drift.
-		if( enabled && std::isfinite( target ) && std::isfinite( elapsed ) && target > 0.f && elapsed >= target && elapsed < target * 1.10f )
+		if( enabled && std::isfinite( target ) && std::isfinite( elapsed ) && target > 0.f && elapsed >= target &&
+			elapsed < target * 1.10f )
 			return elapsed - target;
 
 		// reset phase after real renderer work or a hitch.
