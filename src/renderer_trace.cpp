@@ -40,42 +40,11 @@ struct WorkerGpuTrace {
     unsigned short max_draw_stack_depth = 0;
     unsigned int command_keys[16]{};
     unsigned int command_counts[16]{};
-    unsigned int dynamic_light_calls = 0;
-    unsigned int dynamic_light_unique_pairs = 0;
-    unsigned int dynamic_light_unique_tuples = 0;
 #endif
 };
 thread_local WorkerGpuTrace worker_gpu_trace;
 
 #ifdef P2BOOST_RESEARCH_DRAW_TRACE
-constexpr size_t DynamicLightTableSize = 8192;
-thread_local const std::uint8_t* dynamic_light_pair_table[DynamicLightTableSize]{};
-thread_local const std::uint8_t* dynamic_light_tuple_table[DynamicLightTableSize]{};
-
-std::uint32_t HashBytes(const std::uint8_t* bytes, size_t size) {
-    std::uint32_t hash = 2166136261u;
-    for (size_t index = 0; index < size; ++index) {
-        hash ^= bytes[index];
-        hash *= 16777619u;
-    }
-    return hash;
-}
-
-bool InsertDynamicLight(const std::uint8_t* tuple, size_t size,
-                        const std::uint8_t** table) {
-    size_t slot = HashBytes(tuple, size) & (DynamicLightTableSize - 1);
-    for (size_t probe = 0; probe < DynamicLightTableSize; ++probe) {
-        const auto* existing = table[slot];
-        if (!existing) {
-            table[slot] = tuple;
-            return true;
-        }
-        if (std::memcmp(existing, tuple, size) == 0) return false;
-        slot = (slot + 1) & (DynamicLightTableSize - 1);
-    }
-    return false;
-}
-
 void RecordDraw(long long begin_qpc, unsigned int method, unsigned int primitive_type,
                 unsigned int primitive_count, unsigned int vertex_count) {
     if (!worker_gpu_trace.active) return;
@@ -173,7 +142,6 @@ bool RendererTrace::Install(Metrics* metrics) {
 #ifdef P2BOOST_RESEARCH_DRAW_TRACE
     void* d3d_device = *reinterpret_cast<void**>(module + 0xda5d8);
     material_module_ = material_module;
-    engine_module_ = engine_module;
     const bool draw_hooks = d3d_device &&
         install_slot(draw_primitive_, d3d_device, 81,
                      reinterpret_cast<void*>(&DrawPrimitiveHook)) &&
@@ -254,7 +222,6 @@ void RendererTrace::Remove() {
     draw_indexed_primitive_.Remove();
     draw_primitive_.Remove();
     material_module_ = nullptr;
-    engine_module_ = nullptr;
 #endif
     present_.Remove();
     hardware_sync_.Remove();
@@ -301,10 +268,6 @@ void __fastcall RendererTrace::RenderWorkerHook(void* self, void*, void* queued_
 
     auto* context = static_cast<std::uint8_t*>(queued_context);
     worker_gpu_trace = {};
-#ifdef P2BOOST_RESEARCH_DRAW_TRACE
-    std::memset(dynamic_light_pair_table, 0, sizeof(dynamic_light_pair_table));
-    std::memset(dynamic_light_tuple_table, 0, sizeof(dynamic_light_tuple_table));
-#endif
     unsigned int queued_calls = 0;
     for (auto* node = *reinterpret_cast<std::uint8_t**>(context + 0x1f0);
          node && queued_calls < 1000000; node = *reinterpret_cast<std::uint8_t**>(node)) {
@@ -322,15 +285,6 @@ void __fastcall RendererTrace::RenderWorkerHook(void* self, void*, void* queued_
                     auto* leaf = *reinterpret_cast<std::uint8_t**>(target + 0x10);
                     if (leaf) key = leaf;
                 }
-            }
-            if (key == instance->engine_module_ + 0xd7840) {
-                const auto* tuple = object + 0x14;
-                ++worker_gpu_trace.dynamic_light_calls;
-                if (InsertDynamicLight(tuple, 8, dynamic_light_pair_table))
-                    ++worker_gpu_trace.dynamic_light_unique_pairs;
-                // dlight, surface, matrix3x4, flags, and two bools occupy 62 bytes.
-                if (InsertDynamicLight(tuple, 0x3e, dynamic_light_tuple_table))
-                    ++worker_gpu_trace.dynamic_light_unique_tuples;
             }
         }
         const auto key32 = static_cast<unsigned int>(reinterpret_cast<std::uintptr_t>(key));
@@ -376,10 +330,7 @@ void __fastcall RendererTrace::RenderWorkerHook(void* self, void*, void* queued_
         worker_gpu_trace.max_draw_primitive_count,
         worker_gpu_trace.max_draw_vertex_count,
         worker_gpu_trace.max_draw_stack, worker_gpu_trace.max_draw_stack_depth,
-        worker_gpu_trace.command_keys, worker_gpu_trace.command_counts,
-        worker_gpu_trace.dynamic_light_calls,
-        worker_gpu_trace.dynamic_light_unique_pairs,
-        worker_gpu_trace.dynamic_light_unique_tuples
+        worker_gpu_trace.command_keys, worker_gpu_trace.command_counts
 #endif
         );
 }

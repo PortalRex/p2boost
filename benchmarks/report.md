@@ -137,9 +137,10 @@ build received another five-second patched-only pass through all three demos:
 
 The two co-op maxima confirm that the remaining hitch classes are still
 observable in short real gameplay. The release does not claim them as fixed;
-the draw trace attributes the paint burst to unique dynamic-light surface jobs,
-while separate captures attribute the tractor/fence class to native D3D9
-serialization.
+the draw trace attributes the paint burst to native D3D9 submission while
+separate captures attribute the tractor/fence class to explicit native D3D9
+serialization. A tentative dynamic-light list-node interpretation was rejected
+after disassembly proved its assumed functor ABI wrong.
 
 ## Focus and portal results
 

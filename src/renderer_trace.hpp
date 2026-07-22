@@ -68,7 +68,6 @@ private:
     VtableSlotHook draw_primitive_up_;
     VtableSlotHook draw_indexed_primitive_up_;
     std::uint8_t* material_module_ = nullptr;
-    std::uint8_t* engine_module_ = nullptr;
 #endif
     PointerImmediatePatch render_worker_;
     RenderWorkerFn render_worker_original_ = nullptr;

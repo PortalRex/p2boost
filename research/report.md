@@ -142,24 +142,22 @@ same demo in the same process reduced the corresponding deterministic batch to
 repeatable engine workload. Because dummy rendering would only prewarm or move
 the first-use work, no prewarming is included.
 
-The repeatable co-op paint batch contained 7,561 queued calls. Command-identity
-accounting mapped 2,310 of them to `engine.dll+0xd7840`. Ghidra's recovered
-functor type identifies this as the per-surface dynamic-light renderer taking a
-`dlight_t*`, `msurface2_t*`, a `matrix3x4_t`, flags, and two lighting booleans.
-The function is fed by both immediate updates and the sorted deferred list
-finalized by `EndUpdateLightmaps` under the `Dynamic_Light_Rendering` VProf
-budget group.
+The repeatable co-op paint batch contained 7,561 queued calls. An initial
+command-identity pass associated 2,310 list nodes with
+`engine.dll+0xd7840`, an address which Ghidra also finds in creation code for a
+six-argument per-surface dynamic-light functor. That correlation is not enough
+to identify the list-node payload: disassembly of the observed executor at
+`materialsystem.dll+0x13e90` shows a different ABI. It loads only `ECX` from
+node offset `+0x14` and tail-jumps through offset `+0x10`.
 
-Exact research-only tuple accounting found 2,310 unique light/surface pairs
-and 2,310 unique complete argument tuples. That 9.5309 ms batch spent 4.2320 ms
-inside native D3D9 draws, 0.0032 ms in the explicit hardware sync, and the
-remainder in distinct surface/light work and queue dispatch. Therefore no
-duplicate light job can be removed without dropping a required surface update.
-An attempted timing-wrapper substitution for the temporary functor objects was
-rejected after an x86 ABI mismatch faulted at `engine.dll+0xd6b15`; it was
-removed and never enabled in the shipping build. Further work on this path
-requires a proven batching implementation with equivalent ordering and output,
-not skipped lights or reduced paint quality.
+Consequently, a follow-up interpretation of the raw node bytes as
+`dlight_t*`/`msurface2_t*` arguments was invalid and has been removed. A timing
+wrapper based on that incorrect six-argument assumption faulted at
+`engine.dll+0xd6b15`; the experiment was rejected and never enabled in the
+shipping build. The valid result is narrower: the 9.5309 ms repeated batch
+spent 4.2320 ms inside native D3D9 draws and 0.0032 ms in the explicit hardware
+sync. No light/surface deduplication or culling claim is made until the exact
+executor-specific object layout and call ABI are proven.
 
 ### Static projected-light rebuild
 

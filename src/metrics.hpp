@@ -41,10 +41,7 @@ public:
                             unsigned int max_draw_vertex_count,
                             void* const* max_draw_stack, unsigned short max_draw_stack_depth
                             , const unsigned int* command_keys,
-                            const unsigned int* command_counts,
-                            unsigned int dynamic_light_calls,
-                            unsigned int dynamic_light_unique_pairs,
-                            unsigned int dynamic_light_unique_tuples
+                            const unsigned int* command_counts
 #endif
                             ) noexcept;
     bool Dump(const std::string& path) const;
@@ -109,9 +106,6 @@ private:
         unsigned short max_draw_stack_depth;
         std::array<unsigned int, 16> command_keys;
         std::array<unsigned int, 16> command_counts;
-        unsigned int dynamic_light_calls;
-        unsigned int dynamic_light_unique_pairs;
-        unsigned int dynamic_light_unique_tuples;
 #endif
         unsigned int thread_id;
     };
