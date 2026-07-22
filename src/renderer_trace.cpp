@@ -135,7 +135,9 @@ namespace p2boost {
 		}
 		const Address hardware_sync{ shader_api_vtable[ portal2::slot::hardware_sync ] };
 		const Address present{ present_vtable[ portal2::slot::present ] };
-		if( !has_bytes( hardware_sync, { 0xa1 } ) || !has_bytes( present, { 0x56, 0x8b, 0xf1 } ) ) {
+		// Present uses a stack frame before saving ESI; validate its complete stable prologue.
+		if( !has_bytes( hardware_sync, { 0xa1 } ) ||
+			!has_bytes( present, { 0x55, 0x8b, 0xec, 0x83, 0xec, 0x40, 0x56, 0x8b, 0xf1 } ) ) {
 			remove( );
 			return false;
 		}
