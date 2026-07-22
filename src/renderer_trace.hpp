@@ -48,6 +48,8 @@ private:
     static HRESULT __stdcall DrawIndexedPrimitiveUpHook(IDirect3DDevice9*, D3DPRIMITIVETYPE,
                                                          UINT, UINT, UINT, const void*,
                                                          D3DFORMAT, const void*, UINT);
+    using DynamicLightExecuteFn = void(__thiscall*)(void*);
+    static void __fastcall DynamicLightExecuteHook(void*, void*);
 #endif
     static void __cdecl StaticLightingRestoreHook();
     static void __cdecl StaticLightingCacheRestoreHook();
@@ -67,7 +69,10 @@ private:
     VtableSlotHook draw_indexed_primitive_;
     VtableSlotHook draw_primitive_up_;
     VtableSlotHook draw_indexed_primitive_up_;
+    VtableSlotHook dynamic_light_execute_unsigned_;
+    VtableSlotHook dynamic_light_execute_signed_;
     std::uint8_t* material_module_ = nullptr;
+    DynamicLightExecuteFn dynamic_light_execute_original_ = nullptr;
 #endif
     PointerImmediatePatch render_worker_;
     RenderWorkerFn render_worker_original_ = nullptr;

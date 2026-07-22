@@ -126,7 +126,10 @@ public class ExportP2Analysis extends GhidraScript {
                 // executor ABI must be resolved before treating node bytes as
                 // these functions' semantic arguments.
                 0x100d6b00L, 0x100d7320L, 0x100d7430L, 0x100d76e0L,
-                0x100d7840L, 0x100d74f9L, 0x100d7b2fL, 0x100d7b5fL
+                0x100d7840L, 0x100d74f9L, 0x100d7b2fL, 0x100d7b5fL,
+                // Whole-world lightmap update producer observed in the
+                // paint-heavy co-op demo.
+                0x100d8350L
             };
             for (long address : queuedSubmissionTargets) addFunctionAndCallers(targets, address, 3);
         }

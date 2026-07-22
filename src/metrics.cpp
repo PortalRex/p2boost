@@ -58,7 +58,17 @@ void Metrics::RecordRenderWorker(long long begin_qpc, long long end_qpc,
                                  void* const* max_draw_stack,
                                  unsigned short max_draw_stack_depth
                                  , const unsigned int* command_keys,
-                                 const unsigned int* command_counts
+                                 const unsigned int* command_counts,
+                                 unsigned int dynamic_light_count,
+                                 long long dynamic_light_qpc,
+                                 unsigned int dynamic_light_unique_lights,
+                                 unsigned int dynamic_light_unique_surfaces,
+                                 std::uint32_t dynamic_light_first_light,
+                                 std::uint32_t dynamic_light_first_surface,
+                                 std::uint32_t dynamic_light_first_flags,
+                                 std::uint8_t dynamic_light_first_bool_a,
+                                 std::uint8_t dynamic_light_first_bool_b,
+                                 const std::uint32_t* dynamic_light_words
 #endif
                                  ) noexcept {
     if (!Tracing()) return;
@@ -81,6 +91,10 @@ void Metrics::RecordRenderWorker(long long begin_qpc, long long end_qpc,
 #ifdef P2BOOST_RESEARCH_DRAW_TRACE
         draw_count, draw_qpc, max_draw_qpc, max_draw_method, max_draw_primitive_type,
         max_draw_primitive_count, max_draw_vertex_count, {}, max_draw_stack_depth, {}, {},
+        dynamic_light_count, dynamic_light_qpc, dynamic_light_unique_lights,
+        dynamic_light_unique_surfaces, dynamic_light_first_light,
+        dynamic_light_first_surface, dynamic_light_first_flags,
+        dynamic_light_first_bool_a, dynamic_light_first_bool_b, {},
 #endif
         GetCurrentThreadId()};
 #ifdef P2BOOST_RESEARCH_DRAW_TRACE
@@ -92,6 +106,8 @@ void Metrics::RecordRenderWorker(long long begin_qpc, long long end_qpc,
         sample.command_keys[index] = command_keys[index];
         sample.command_counts[index] = command_counts[index];
     }
+    std::copy_n(dynamic_light_words, sample.dynamic_light_words.size(),
+                sample.dynamic_light_words.begin());
 #endif
     render_worker_samples_[render_worker_cursor_] = sample;
     render_worker_cursor_ = (render_worker_cursor_ + 1) % Capacity;
@@ -206,6 +222,7 @@ bool Metrics::Dump(const std::string& path) const {
 #ifdef P2BOOST_RESEARCH_DRAW_TRACE
                   << ",draw_count,draw_ms,max_draw_ms,max_draw_method,max_draw_primitive_type,max_draw_primitive_count,max_draw_vertex_count,draw_stack_0,draw_stack_1,draw_stack_2,draw_stack_3,draw_stack_4,draw_stack_5,draw_stack_6,draw_stack_7,draw_stack_8,draw_stack_9,draw_stack_10,draw_stack_11,draw_stack_12,draw_stack_13,draw_stack_14,draw_stack_15"
                   << ",command_key_0,command_count_0,command_key_1,command_count_1,command_key_2,command_count_2,command_key_3,command_count_3,command_key_4,command_count_4,command_key_5,command_count_5,command_key_6,command_count_6,command_key_7,command_count_7,command_key_8,command_count_8,command_key_9,command_count_9,command_key_10,command_count_10,command_key_11,command_count_11,command_key_12,command_count_12,command_key_13,command_count_13,command_key_14,command_count_14,command_key_15,command_count_15"
+                  << ",dynamic_light_count,dynamic_light_ms,dynamic_light_unique_lights,dynamic_light_unique_surfaces,dynamic_light_ptr,dynamic_light_surface_ptr,dynamic_light_update_flags,dynamic_light_bool_a,dynamic_light_bool_b,dynamic_light_flags,dynamic_light_origin_x,dynamic_light_origin_y,dynamic_light_origin_z,dynamic_light_radius,dynamic_light_color,dynamic_light_die,dynamic_light_decay,dynamic_light_minlight,dynamic_light_key,dynamic_light_style"
 #endif
                   << ",thread_id\n"
                   << std::fixed << std::setprecision(6);
@@ -244,6 +261,29 @@ bool Metrics::Dump(const std::string& path) const {
             for (size_t command = 0; command < sample.command_keys.size(); ++command)
                 worker_output << ",0x" << std::hex << sample.command_keys[command] << std::dec
                               << ',' << sample.command_counts[command];
+            worker_output << ',' << sample.dynamic_light_count << ','
+                          << static_cast<double>(sample.dynamic_light_qpc) * 1000.0 /
+                                 static_cast<double>(frequency_.QuadPart)
+                          << ',' << sample.dynamic_light_unique_lights
+                          << ',' << sample.dynamic_light_unique_surfaces;
+            worker_output << ",0x" << std::hex << sample.dynamic_light_first_light
+                          << ",0x" << sample.dynamic_light_first_surface
+                          << ",0x" << sample.dynamic_light_first_flags << std::dec
+                          << ',' << static_cast<unsigned int>(sample.dynamic_light_first_bool_a)
+                          << ',' << static_cast<unsigned int>(sample.dynamic_light_first_bool_b);
+            const auto light_float = [&sample](size_t word) {
+                float value = 0.0f;
+                std::memcpy(&value, &sample.dynamic_light_words[word], sizeof(value));
+                return value;
+            };
+            worker_output << ",0x" << std::hex << sample.dynamic_light_words[0] << std::dec
+                          << ',' << light_float(1) << ',' << light_float(2)
+                          << ',' << light_float(3) << ',' << light_float(4)
+                          << ",0x" << std::hex << sample.dynamic_light_words[5] << std::dec
+                          << ',' << light_float(6) << ',' << light_float(7)
+                          << ',' << light_float(8)
+                          << ',' << static_cast<std::int32_t>(sample.dynamic_light_words[9])
+                          << ',' << static_cast<std::int32_t>(sample.dynamic_light_words[10]);
 #endif
             worker_output << ',' << sample.thread_id << '\n';
         }

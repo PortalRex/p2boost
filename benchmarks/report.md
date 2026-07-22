@@ -142,6 +142,15 @@ separate captures attribute the tractor/fence class to explicit native D3D9
 serialization. A tentative dynamic-light list-node interpretation was rejected
 after disassembly proved its assumed functor ABI wrong.
 
+A later exact-functor trace separated map setup from steady gameplay. The
+2,310-surface callback burst is `R_RedownloadAllLightmaps` during map/demo
+initialization, not a steady dynamic-light pass. With tracing delayed until
+after initialization, a 360 FPS cold process still contained one 9.8429 ms
+worker batch whose longest native draw was 6.6628 ms. Replaying the identical
+segment in that process reduced the maximum batch to 4.5257 ms and the longest
+draw to 0.8742 ms. This is retained as a first-use native-driver/resource cost;
+the project does not hide it with dummy prewarming.
+
 ## Focus and portal results
 
 The original timestamped native-D3D9 harness completed 30 minimize/restore/

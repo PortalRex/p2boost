@@ -159,6 +159,32 @@ spent 4.2320 ms inside native D3D9 draws and 0.0032 ms in the explicit hardware
 sync. No light/surface deduplication or culling claim is made until the exact
 executor-specific object layout and call ABI are proven.
 
+The executor ABI was subsequently proven independently of those generic list
+nodes. Ghidra resolves `engine.dll+0xd7b40` as the concrete `CFunctor6`
+executor: callback at `+0x10`, `dlight_t*` at `+0x14`, `msurface2_t*` at
+`+0x18`, the copied matrix at `+0x1c`, flags at `+0x4c`, and two booleans at
+`+0x50/+0x51`. A research-only, chain-aware hook on both matching functor
+vtable slots observed 2,310 calls, one light pointer, and 2,310 distinct
+surfaces in the co-op paint setup burst.
+
+That count is not a dynamic-light culling defect. The light pointer is the
+all-zero engine sentinel at preferred address `engine.dll+0x50ce70`, the flags
+are zero, and only the second update boolean is set. Ghidra identifies the
+producer at `engine.dll+0xd8350` as `R_RedownloadAllLightmaps`: it intentionally
+enumerates every world surface between the material system's begin/end update
+callbacks. Moving the trace window beyond map/demo initialization produces no
+such calls. Skipping or culling this setup work would leave incomplete
+lightmaps, so no permanent change is made.
+
+The delayed steady-state window instead reproduced one deterministic cold
+native-D3D9 submission. At `fps_max 360`, the cold pass reached 9.8429 ms with
+8.0993 ms in draw calls and a 6.6628 ms longest indexed draw through the
+`VertexLitGeneric` path. Replaying the same segment in the same process reduced
+the maximum worker batch to 4.5257 ms and the longest draw to 0.8742 ms. This
+confirms first-use driver/resource work rather than a recurring engine
+lightmap defect. Dummy rendering or issuing the draw during loading would only
+prewarm or move the stall, so neither is included.
+
 ### Static projected-light rebuild
 
 The engine's hierarchical VProf report exposed a larger steady-state co-op

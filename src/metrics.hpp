@@ -41,7 +41,17 @@ public:
                             unsigned int max_draw_vertex_count,
                             void* const* max_draw_stack, unsigned short max_draw_stack_depth
                             , const unsigned int* command_keys,
-                            const unsigned int* command_counts
+                            const unsigned int* command_counts,
+                            unsigned int dynamic_light_count,
+                            long long dynamic_light_qpc,
+                            unsigned int dynamic_light_unique_lights,
+                            unsigned int dynamic_light_unique_surfaces,
+                            std::uint32_t dynamic_light_first_light,
+                            std::uint32_t dynamic_light_first_surface,
+                            std::uint32_t dynamic_light_first_flags,
+                            std::uint8_t dynamic_light_first_bool_a,
+                            std::uint8_t dynamic_light_first_bool_b,
+                            const std::uint32_t* dynamic_light_words
 #endif
                             ) noexcept;
     bool Dump(const std::string& path) const;
@@ -106,6 +116,16 @@ private:
         unsigned short max_draw_stack_depth;
         std::array<unsigned int, 16> command_keys;
         std::array<unsigned int, 16> command_counts;
+        unsigned int dynamic_light_count;
+        long long dynamic_light_qpc;
+        unsigned int dynamic_light_unique_lights;
+        unsigned int dynamic_light_unique_surfaces;
+        std::uint32_t dynamic_light_first_light;
+        std::uint32_t dynamic_light_first_surface;
+        std::uint32_t dynamic_light_first_flags;
+        std::uint8_t dynamic_light_first_bool_a;
+        std::uint8_t dynamic_light_first_bool_b;
+        std::array<std::uint32_t, 11> dynamic_light_words;
 #endif
         unsigned int thread_id;
     };

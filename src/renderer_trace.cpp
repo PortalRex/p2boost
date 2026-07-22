@@ -40,11 +40,39 @@ struct WorkerGpuTrace {
     unsigned short max_draw_stack_depth = 0;
     unsigned int command_keys[16]{};
     unsigned int command_counts[16]{};
+    unsigned int dynamic_light_count = 0;
+    long long dynamic_light_qpc = 0;
+    unsigned int dynamic_light_unique_lights = 0;
+    unsigned int dynamic_light_unique_surfaces = 0;
+    std::uint32_t dynamic_light_first_light = 0;
+    std::uint32_t dynamic_light_first_surface = 0;
+    std::uint32_t dynamic_light_first_flags = 0;
+    std::uint8_t dynamic_light_first_bool_a = 0;
+    std::uint8_t dynamic_light_first_bool_b = 0;
+    std::uint32_t dynamic_light_words[11]{};
 #endif
 };
 thread_local WorkerGpuTrace worker_gpu_trace;
 
 #ifdef P2BOOST_RESEARCH_DRAW_TRACE
+constexpr size_t DynamicLightPointerTableSize = 8192;
+thread_local std::uint32_t dynamic_light_table[DynamicLightPointerTableSize]{};
+thread_local std::uint32_t dynamic_surface_table[DynamicLightPointerTableSize]{};
+
+bool InsertPointer(std::uint32_t value, std::uint32_t* table) {
+    if (!value) return false;
+    size_t slot = (value * 2654435761u) & (DynamicLightPointerTableSize - 1);
+    for (size_t probe = 0; probe < DynamicLightPointerTableSize; ++probe) {
+        if (table[slot] == value) return false;
+        if (table[slot] == 0) {
+            table[slot] = value;
+            return true;
+        }
+        slot = (slot + 1) & (DynamicLightPointerTableSize - 1);
+    }
+    return false;
+}
+
 void RecordDraw(long long begin_qpc, unsigned int method, unsigned int primitive_type,
                 unsigned int primitive_count, unsigned int vertex_count) {
     if (!worker_gpu_trace.active) return;
@@ -142,6 +170,10 @@ bool RendererTrace::Install(Metrics* metrics) {
 #ifdef P2BOOST_RESEARCH_DRAW_TRACE
     void* d3d_device = *reinterpret_cast<void**>(module + 0xda5d8);
     material_module_ = material_module;
+    auto** unsigned_execute_slot = reinterpret_cast<void**>(engine_module + 0x36e1dc) + 3;
+    auto** signed_execute_slot = reinterpret_cast<void**>(engine_module + 0x36e1fc) + 3;
+    dynamic_light_execute_original_ = reinterpret_cast<DynamicLightExecuteFn>(
+        engine_module + 0xd7b40);
     const bool draw_hooks = d3d_device &&
         install_slot(draw_primitive_, d3d_device, 81,
                      reinterpret_cast<void*>(&DrawPrimitiveHook)) &&
@@ -151,8 +183,16 @@ bool RendererTrace::Install(Metrics* metrics) {
                      reinterpret_cast<void*>(&DrawPrimitiveUpHook)) &&
         install_slot(draw_indexed_primitive_up_, d3d_device, 84,
                      reinterpret_cast<void*>(&DrawIndexedPrimitiveUpHook));
+    const bool dynamic_light_hooks =
+        *unsigned_execute_slot == engine_module + 0xd7b40 &&
+        *signed_execute_slot == engine_module + 0xd7b40 &&
+        dynamic_light_execute_unsigned_.Install(
+            unsigned_execute_slot, reinterpret_cast<void*>(&DynamicLightExecuteHook)) &&
+        dynamic_light_execute_signed_.Install(
+            signed_execute_slot, reinterpret_cast<void*>(&DynamicLightExecuteHook));
 #else
     const bool draw_hooks = true;
+    const bool dynamic_light_hooks = true;
 #endif
     std::vector<std::uint8_t> lighting_call(5);
     lighting_call[0] = 0xe8;
@@ -192,6 +232,7 @@ bool RendererTrace::Install(Metrics* metrics) {
                                 reinterpret_cast<void*>(&HardwareSyncHook)) ||
         !present_.Install(present_vtable + 10, reinterpret_cast<void*>(&PresentHook)) ||
         !draw_hooks ||
+        !dynamic_light_hooks ||
         !render_worker_.Install(material_module + 0x12c84,
                                 render_worker_pointer, 1,
                                 reinterpret_cast<void*>(&RenderWorkerHook))) {
@@ -217,11 +258,14 @@ void RendererTrace::Remove() {
         Sleep(1);
     }
 #ifdef P2BOOST_RESEARCH_DRAW_TRACE
+    dynamic_light_execute_signed_.Remove();
+    dynamic_light_execute_unsigned_.Remove();
     draw_indexed_primitive_up_.Remove();
     draw_primitive_up_.Remove();
     draw_indexed_primitive_.Remove();
     draw_primitive_.Remove();
     material_module_ = nullptr;
+    dynamic_light_execute_original_ = nullptr;
 #endif
     present_.Remove();
     hardware_sync_.Remove();
@@ -268,6 +312,10 @@ void __fastcall RendererTrace::RenderWorkerHook(void* self, void*, void* queued_
 
     auto* context = static_cast<std::uint8_t*>(queued_context);
     worker_gpu_trace = {};
+#ifdef P2BOOST_RESEARCH_DRAW_TRACE
+    std::memset(dynamic_light_table, 0, sizeof(dynamic_light_table));
+    std::memset(dynamic_surface_table, 0, sizeof(dynamic_surface_table));
+#endif
     unsigned int queued_calls = 0;
     for (auto* node = *reinterpret_cast<std::uint8_t**>(context + 0x1f0);
          node && queued_calls < 1000000; node = *reinterpret_cast<std::uint8_t**>(node)) {
@@ -330,7 +378,16 @@ void __fastcall RendererTrace::RenderWorkerHook(void* self, void*, void* queued_
         worker_gpu_trace.max_draw_primitive_count,
         worker_gpu_trace.max_draw_vertex_count,
         worker_gpu_trace.max_draw_stack, worker_gpu_trace.max_draw_stack_depth,
-        worker_gpu_trace.command_keys, worker_gpu_trace.command_counts
+        worker_gpu_trace.command_keys, worker_gpu_trace.command_counts,
+        worker_gpu_trace.dynamic_light_count, worker_gpu_trace.dynamic_light_qpc,
+        worker_gpu_trace.dynamic_light_unique_lights,
+        worker_gpu_trace.dynamic_light_unique_surfaces,
+        worker_gpu_trace.dynamic_light_first_light,
+        worker_gpu_trace.dynamic_light_first_surface,
+        worker_gpu_trace.dynamic_light_first_flags,
+        worker_gpu_trace.dynamic_light_first_bool_a,
+        worker_gpu_trace.dynamic_light_first_bool_b,
+        worker_gpu_trace.dynamic_light_words
 #endif
         );
 }
@@ -392,6 +449,41 @@ void __fastcall RendererTrace::PresentHook(void* self, void*) {
 }
 
 #ifdef P2BOOST_RESEARCH_DRAW_TRACE
+void __fastcall RendererTrace::DynamicLightExecuteHook(void* self, void*) {
+    auto* instance = instance_;
+    auto previous = instance ? instance->dynamic_light_execute_original_ : nullptr;
+    if (!previous) return;
+    if (!worker_gpu_trace.active || !instance->metrics_ || !instance->metrics_->Tracing()) {
+        previous(self);
+        return;
+    }
+    const auto* bytes = static_cast<const std::uint8_t*>(self);
+    const auto light = *reinterpret_cast<const std::uint32_t*>(bytes + 0x14);
+    const auto surface = *reinterpret_cast<const std::uint32_t*>(bytes + 0x18);
+    if (InsertPointer(light, dynamic_light_table))
+        ++worker_gpu_trace.dynamic_light_unique_lights;
+    if (InsertPointer(surface, dynamic_surface_table))
+        ++worker_gpu_trace.dynamic_light_unique_surfaces;
+    if (worker_gpu_trace.dynamic_light_count == 0) {
+        worker_gpu_trace.dynamic_light_first_light = light;
+        worker_gpu_trace.dynamic_light_first_surface = surface;
+        worker_gpu_trace.dynamic_light_first_flags =
+            *reinterpret_cast<const std::uint32_t*>(bytes + 0x4c);
+        worker_gpu_trace.dynamic_light_first_bool_a = *(bytes + 0x50);
+        worker_gpu_trace.dynamic_light_first_bool_b = *(bytes + 0x51);
+        if (light)
+            std::memcpy(worker_gpu_trace.dynamic_light_words,
+                        reinterpret_cast<const void*>(static_cast<std::uintptr_t>(light)),
+                        sizeof(worker_gpu_trace.dynamic_light_words));
+    }
+    LARGE_INTEGER begin{}, end{};
+    QueryPerformanceCounter(&begin);
+    previous(self);
+    QueryPerformanceCounter(&end);
+    ++worker_gpu_trace.dynamic_light_count;
+    worker_gpu_trace.dynamic_light_qpc += end.QuadPart - begin.QuadPart;
+}
+
 HRESULT __stdcall RendererTrace::DrawPrimitiveHook(IDirect3DDevice9* self,
                                                     D3DPRIMITIVETYPE primitive_type,
                                                     UINT start_vertex, UINT primitive_count) {
