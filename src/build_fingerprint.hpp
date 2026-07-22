@@ -25,4 +25,3 @@ std::string Sha256File(const std::wstring& path);
 VerificationResult VerifyRuntime();
 
 } // namespace p2boost
-

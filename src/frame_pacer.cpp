@@ -1,5 +1,8 @@
 #include "frame_pacer.hpp"
 
+#include "address.hpp"
+#include "stack_frame.hpp"
+
 #include <Windows.h>
 #include <cmath>
 #include <cstdint>
@@ -9,20 +12,23 @@ namespace p2boost {
 
 FramePacer* FramePacer::instance_ = nullptr;
 
-FramePacer::~FramePacer() { Remove(); }
+FramePacer::~FramePacer() {
+    Remove();
+}
 
 bool FramePacer::Install() {
-    if (instance_ || frame_complete_.Installed()) return false;
-    auto* engine = reinterpret_cast<std::uint8_t*>(GetModuleHandleW(L"engine.dll"));
-    if (!engine) return false;
+    if (instance_ || frame_complete_.Installed())
+        return false;
+    const Address engine(GetModuleHandleW(L"engine.dll"));
+    if (!engine.Valid())
+        return false;
     // CEngine::Frame's limiter accumulator is normally reset with:
     //   xorps xmm0,xmm0; movss [esi+18h],xmm0
     // The replacement preserves only ordinary deadline-poll overshoot.
-    const std::vector<std::uint8_t> expected = {
-        0x0f, 0x57, 0xc0, 0xf3, 0x0f, 0x11, 0x46, 0x18
-    };
+    const std::vector<std::uint8_t> expected = {0x0f, 0x57, 0xc0, 0xf3, 0x0f, 0x11, 0x46, 0x18};
     instance_ = this;
-    if (!frame_complete_.Install(engine + 0x1fa043, expected,
+    if (!frame_complete_.Install(engine.Add(0x1fa043).As<void*>(),
+                                 expected,
                                  reinterpret_cast<void*>(&FrameCompleteHook))) {
         instance_ = nullptr;
         return false;
@@ -33,7 +39,8 @@ bool FramePacer::Install() {
 void FramePacer::Remove() {
     frame_complete_.Remove();
     enabled_.store(false, std::memory_order_relaxed);
-    if (instance_ == this) instance_ = nullptr;
+    if (instance_ == this)
+        instance_ = nullptr;
 }
 
 void __declspec(naked) __cdecl FrameCompleteHook() {
@@ -48,9 +55,10 @@ void __declspec(naked) __cdecl FrameCompleteHook() {
 
 void __cdecl FrameCompleteDispatch(void* host_state, void* caller_frame) {
     auto* instance = FramePacer::instance_;
-    auto* accumulated = reinterpret_cast<float*>(static_cast<std::uint8_t*>(host_state) + 0x18);
-    const float target = *reinterpret_cast<const float*>(
-        static_cast<const std::uint8_t*>(caller_frame) - 8);
+    const Address host(host_state);
+    const StackFrame caller(caller_frame);
+    auto* accumulated = host.Add(0x18).As<float*>();
+    const float target = caller.LocalAddress(8).Read<float>();
     *accumulated = CarryFrameOvershoot(*accumulated, target, instance && instance->Enabled());
 }
 

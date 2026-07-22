@@ -25,6 +25,10 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v6
 
+      - name: Check C++ formatting
+        shell: pwsh
+        run: ./scripts/format.ps1 -Check
+
       - name: Configure x86 Release build
         shell: pwsh
         run: cmake --preset vs2022-x86

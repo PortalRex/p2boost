@@ -4,7 +4,7 @@ $repo = Split-Path -Parent $PSScriptRoot
 $destination = Join-Path $repo "out\p2boost-$Configuration"
 if (Test-Path -LiteralPath $destination) { Remove-Item -LiteralPath $destination -Recurse -Force }
 New-Item -ItemType Directory -Force $destination | Out-Null
-foreach ($name in 'README.md','LICENSE','THIRD_PARTY_NOTICES.md','CMakeLists.txt','CMakePresets.json') {
+foreach ($name in '.clang-format','README.md','LICENSE','THIRD_PARTY_NOTICES.md','CMakeLists.txt','CMakePresets.json') {
     Copy-Item -LiteralPath (Join-Path $repo $name) -Destination $destination
 }
 foreach ($directory in 'src','tests','tools','scripts','cfg','.github') {
@@ -20,5 +20,7 @@ Copy-Item -LiteralPath (Join-Path $binaryDirectory 'p2boost.dll') -Destination $
 Copy-Item -LiteralPath (Join-Path $binaryDirectory 'p2boost.pdb') -Destination $destination
 Copy-Item -LiteralPath (Join-Path $binaryDirectory 'p2profile.exe') -Destination $destination
 $archive = "${destination}.zip"
-Compress-Archive -Path "$destination\*" -DestinationPath $archive -Force
+# PowerShell's wildcard omits root dotfiles, so add the format policy
+# explicitly while keeping the archive rooted at its contents.
+Compress-Archive -Path "$destination\*", "$destination\.clang-format" -DestinationPath $archive -Force
 Write-Host "Packaged $archive"

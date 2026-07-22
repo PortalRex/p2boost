@@ -10,6 +10,68 @@
 
 namespace p2boost {
 
+// One execution of the material system's queued render worker. The hook fills
+// this record locally, then Metrics copies it under a short lock. A named
+// record keeps the renderer/metrics boundary reviewable as research evolves.
+struct RenderWorkerMetrics {
+    long long begin_qpc = 0;
+    long long end_qpc = 0;
+    unsigned long long cycles = 0;
+    unsigned int queued_calls = 0;
+    unsigned int parameter_bytes = 0;
+    unsigned int vertex_bytes = 0;
+    unsigned int index_bytes = 0;
+    unsigned int hardware_sync_count = 0;
+    long long hardware_sync_qpc = 0;
+    long long max_hardware_sync_qpc = 0;
+    unsigned long long hardware_sync_cycles = 0;
+    int sync_index_before = -1;
+    unsigned int sync_pending_before = 0;
+    unsigned int sync_pending_after = 0;
+    unsigned int present_count = 0;
+    long long present_qpc = 0;
+    long long max_present_qpc = 0;
+#ifdef P2BOOST_RESEARCH_DRAW_TRACE
+    unsigned int draw_count = 0;
+    long long draw_qpc = 0;
+    long long max_draw_qpc = 0;
+    unsigned int max_draw_method = 0;
+    unsigned int max_draw_primitive_type = 0;
+    unsigned int max_draw_primitive_count = 0;
+    unsigned int max_draw_vertex_count = 0;
+    std::uint32_t max_draw_vertex_shader = 0;
+    std::uint32_t max_draw_pixel_shader = 0;
+    std::array<std::uint32_t, 4> max_draw_textures{};
+    std::uint8_t max_draw_first_vertex_shader = 0;
+    std::uint8_t max_draw_first_pixel_shader = 0;
+    std::uint8_t max_draw_first_pipeline = 0;
+    std::uint8_t max_draw_first_texture_mask = 0;
+    std::uint32_t max_draw_texture0_type = 0;
+    std::uint32_t max_draw_texture0_format = 0;
+    std::uint32_t max_draw_texture0_width = 0;
+    std::uint32_t max_draw_texture0_height = 0;
+    std::uint32_t max_draw_texture0_usage = 0;
+    std::uint32_t max_draw_texture0_pool = 0;
+    std::uint32_t max_draw_texture0_levels = 0;
+    std::uint64_t max_draw_texture0_hash = 0;
+    std::array<std::uintptr_t, 16> max_draw_stack{};
+    unsigned short max_draw_stack_depth = 0;
+    std::array<unsigned int, 16> command_keys{};
+    std::array<unsigned int, 16> command_counts{};
+    unsigned int dynamic_light_count = 0;
+    long long dynamic_light_qpc = 0;
+    unsigned int dynamic_light_unique_lights = 0;
+    unsigned int dynamic_light_unique_surfaces = 0;
+    std::uint32_t dynamic_light_first_light = 0;
+    std::uint32_t dynamic_light_first_surface = 0;
+    std::uint32_t dynamic_light_first_flags = 0;
+    std::uint8_t dynamic_light_first_bool_a = 0;
+    std::uint8_t dynamic_light_first_bool_b = 0;
+    std::array<std::uint32_t, 11> dynamic_light_words{};
+#endif
+    unsigned int thread_id = 0;
+};
+
 class Metrics {
 public:
     static constexpr size_t Capacity = 1u << 16;
@@ -18,42 +80,17 @@ public:
     bool Tracing() const noexcept { return tracing_.load(std::memory_order_relaxed); }
     void SetCoop(bool coop) noexcept { coop_ = coop; }
     void Frame(bool simulating) noexcept;
-    void RecordReacquire(double milliseconds, const char* reason, long long begin_qpc,
+    void RecordReacquire(double milliseconds,
+                         const char* reason,
+                         long long begin_qpc,
                          long long end_qpc) noexcept;
     void RecordReacquireStage(size_t stage, double milliseconds) noexcept;
     void RecordPortalRender(double milliseconds) noexcept;
-    void RecordShadowUpdate(double milliseconds, bool same_projection, bool same_full,
+    void RecordShadowUpdate(double milliseconds,
+                            bool same_projection,
+                            bool same_full,
                             bool skipped) noexcept;
-    void RecordRenderWorker(long long begin_qpc, long long end_qpc,
-                            unsigned long long cycles, unsigned int queued_calls,
-                            unsigned int parameter_bytes, unsigned int vertex_bytes,
-                            unsigned int index_bytes, unsigned int hardware_sync_count,
-                            long long hardware_sync_qpc, long long max_hardware_sync_qpc,
-                            unsigned long long hardware_sync_cycles, int sync_index_before,
-                            unsigned int sync_pending_before, unsigned int sync_pending_after,
-                            unsigned int present_count, long long present_qpc,
-                            long long max_present_qpc
-#ifdef P2BOOST_RESEARCH_DRAW_TRACE
-                            , unsigned int draw_count, long long draw_qpc,
-                            long long max_draw_qpc, unsigned int max_draw_method,
-                            unsigned int max_draw_primitive_type,
-                            unsigned int max_draw_primitive_count,
-                            unsigned int max_draw_vertex_count,
-                            void* const* max_draw_stack, unsigned short max_draw_stack_depth
-                            , const unsigned int* command_keys,
-                            const unsigned int* command_counts,
-                            unsigned int dynamic_light_count,
-                            long long dynamic_light_qpc,
-                            unsigned int dynamic_light_unique_lights,
-                            unsigned int dynamic_light_unique_surfaces,
-                            std::uint32_t dynamic_light_first_light,
-                            std::uint32_t dynamic_light_first_surface,
-                            std::uint32_t dynamic_light_first_flags,
-                            std::uint8_t dynamic_light_first_bool_a,
-                            std::uint8_t dynamic_light_first_bool_b,
-                            const std::uint32_t* dynamic_light_words
-#endif
-                            ) noexcept;
+    void RecordRenderWorker(RenderWorkerMetrics sample) noexcept;
     bool Dump(const std::string& path) const;
     size_t Count() const noexcept { return count_; }
 
@@ -86,49 +123,6 @@ private:
         bool focused;
         bool coop;
     };
-    struct RenderWorkerSample {
-        long long begin_qpc;
-        long long end_qpc;
-        unsigned long long cycles;
-        unsigned int queued_calls;
-        unsigned int parameter_bytes;
-        unsigned int vertex_bytes;
-        unsigned int index_bytes;
-        unsigned int hardware_sync_count;
-        long long hardware_sync_qpc;
-        long long max_hardware_sync_qpc;
-        unsigned long long hardware_sync_cycles;
-        int sync_index_before;
-        unsigned int sync_pending_before;
-        unsigned int sync_pending_after;
-        unsigned int present_count;
-        long long present_qpc;
-        long long max_present_qpc;
-#ifdef P2BOOST_RESEARCH_DRAW_TRACE
-        unsigned int draw_count;
-        long long draw_qpc;
-        long long max_draw_qpc;
-        unsigned int max_draw_method;
-        unsigned int max_draw_primitive_type;
-        unsigned int max_draw_primitive_count;
-        unsigned int max_draw_vertex_count;
-        std::array<std::uintptr_t, 16> max_draw_stack;
-        unsigned short max_draw_stack_depth;
-        std::array<unsigned int, 16> command_keys;
-        std::array<unsigned int, 16> command_counts;
-        unsigned int dynamic_light_count;
-        long long dynamic_light_qpc;
-        unsigned int dynamic_light_unique_lights;
-        unsigned int dynamic_light_unique_surfaces;
-        std::uint32_t dynamic_light_first_light;
-        std::uint32_t dynamic_light_first_surface;
-        std::uint32_t dynamic_light_first_flags;
-        std::uint8_t dynamic_light_first_bool_a;
-        std::uint8_t dynamic_light_first_bool_b;
-        std::array<std::uint32_t, 11> dynamic_light_words;
-#endif
-        unsigned int thread_id;
-    };
     LARGE_INTEGER frequency_{};
     long long last_qpc_ = 0;
     std::array<Sample, Capacity> samples_{};
@@ -148,7 +142,7 @@ private:
     unsigned int pending_shadow_same_full_count_ = 0;
     unsigned int pending_shadow_skipped_count_ = 0;
     mutable std::mutex render_worker_mutex_;
-    std::array<RenderWorkerSample, Capacity> render_worker_samples_{};
+    std::array<RenderWorkerMetrics, Capacity> render_worker_samples_{};
     size_t render_worker_cursor_ = 0;
     size_t render_worker_count_ = 0;
     long long pending_render_worker_begin_qpc_ = 0;

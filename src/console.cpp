@@ -17,7 +17,8 @@ void ConsolePrint(const char* format, ...) {
         HMODULE tier0 = GetModuleHandleW(L"tier0.dll");
         return tier0 ? reinterpret_cast<MsgFn>(GetProcAddress(tier0, "Msg")) : nullptr;
     }();
-    if (msg) msg("%s", buffer);
+    if (msg)
+        msg("%s", buffer);
     OutputDebugStringA(buffer);
 }
 

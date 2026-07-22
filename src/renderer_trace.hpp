@@ -25,12 +25,12 @@ public:
     unsigned int StaticLightingSkips() const noexcept { return lighting_skips_.load(); }
 
 private:
-    static void __fastcall ReacquireHook(void* self, void*, unsigned char release, unsigned char restore,
-                                         const char* reason);
+    static void __fastcall ReacquireHook(
+        void* self, void*, unsigned char release, unsigned char restore, const char* reason);
     using ReacquireFn = void(__thiscall*)(void*, unsigned char, unsigned char, const char*);
     using NoArgsFn = void(__thiscall*)(void*);
     using ResourceCallbacksFn = void(__thiscall*)(void*, void*, int);
-    using MaterialLockFn = void* (__thiscall*)(void*);
+    using MaterialLockFn = void*(__thiscall*)(void*);
     using MaterialUnlockFn = void(__thiscall*)(void*, void*);
     static void __fastcall ShaderDeviceHook(void* self, void*);
     static void __fastcall FrameSyncHook(void* self, void*);
@@ -41,13 +41,22 @@ private:
     static void __fastcall PresentHook(void* self, void*);
 #ifdef P2BOOST_RESEARCH_DRAW_TRACE
     static HRESULT __stdcall DrawPrimitiveHook(IDirect3DDevice9*, D3DPRIMITIVETYPE, UINT, UINT);
-    static HRESULT __stdcall DrawIndexedPrimitiveHook(IDirect3DDevice9*, D3DPRIMITIVETYPE, INT,
-                                                       UINT, UINT, UINT, UINT);
-    static HRESULT __stdcall DrawPrimitiveUpHook(IDirect3DDevice9*, D3DPRIMITIVETYPE, UINT,
-                                                  const void*, UINT);
-    static HRESULT __stdcall DrawIndexedPrimitiveUpHook(IDirect3DDevice9*, D3DPRIMITIVETYPE,
-                                                         UINT, UINT, UINT, const void*,
-                                                         D3DFORMAT, const void*, UINT);
+    static HRESULT __stdcall DrawIndexedPrimitiveHook(
+        IDirect3DDevice9*, D3DPRIMITIVETYPE, INT, UINT, UINT, UINT, UINT);
+    static HRESULT __stdcall DrawPrimitiveUpHook(
+        IDirect3DDevice9*, D3DPRIMITIVETYPE, UINT, const void*, UINT);
+    static HRESULT __stdcall DrawIndexedPrimitiveUpHook(IDirect3DDevice9*,
+                                                        D3DPRIMITIVETYPE,
+                                                        UINT,
+                                                        UINT,
+                                                        UINT,
+                                                        const void*,
+                                                        D3DFORMAT,
+                                                        const void*,
+                                                        UINT);
+    static HRESULT __stdcall SetTextureHook(IDirect3DDevice9*, DWORD, IDirect3DBaseTexture9*);
+    static HRESULT __stdcall SetVertexShaderHook(IDirect3DDevice9*, IDirect3DVertexShader9*);
+    static HRESULT __stdcall SetPixelShaderHook(IDirect3DDevice9*, IDirect3DPixelShader9*);
     using DynamicLightExecuteFn = void(__thiscall*)(void*);
     static void __fastcall DynamicLightExecuteHook(void*, void*);
 #endif
@@ -69,6 +78,9 @@ private:
     VtableSlotHook draw_indexed_primitive_;
     VtableSlotHook draw_primitive_up_;
     VtableSlotHook draw_indexed_primitive_up_;
+    VtableSlotHook set_texture_;
+    VtableSlotHook set_vertex_shader_;
+    VtableSlotHook set_pixel_shader_;
     VtableSlotHook dynamic_light_execute_unsigned_;
     VtableSlotHook dynamic_light_execute_signed_;
     std::uint8_t* material_module_ = nullptr;

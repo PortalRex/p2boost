@@ -6,6 +6,9 @@
 
 namespace p2boost {
 
+// Replaces one vtable entry without owning the whole table. Removal succeeds
+// only while our replacement still owns the slot, which preserves later hooks
+// and allows either SAR/plugin load order.
 class VtableSlotHook {
 public:
     VtableSlotHook() = default;
@@ -24,6 +27,8 @@ private:
     bool installed_ = false;
 };
 
+// Rewrites a validated x86 call site to CALL rel32 and restores the exact
+// displaced bytes. The expected byte sequence is the build signature.
 class CallSitePatch {
 public:
     CallSitePatch() = default;
@@ -41,14 +46,18 @@ private:
     bool installed_ = false;
 };
 
+// Replaces a 32-bit pointer embedded in a validated instruction. This is used
+// for queued functor targets where a code detour would be needlessly invasive.
 class PointerImmediatePatch {
 public:
     PointerImmediatePatch() = default;
     ~PointerImmediatePatch();
     PointerImmediatePatch(const PointerImmediatePatch&) = delete;
     PointerImmediatePatch& operator=(const PointerImmediatePatch&) = delete;
-    bool Install(void* address, const std::vector<std::uint8_t>& expected,
-                 size_t pointer_offset, void* replacement);
+    bool Install(void* address,
+                 const std::vector<std::uint8_t>& expected,
+                 size_t pointer_offset,
+                 void* replacement);
     bool Remove();
     void* Previous() const noexcept { return previous_; }
     bool Installed() const noexcept { return installed_; }

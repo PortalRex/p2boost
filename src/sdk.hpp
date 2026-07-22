@@ -38,7 +38,8 @@ private:
 
 class IServerPluginCallbacks {
 public:
-    virtual bool Load(CreateInterfaceFn interface_factory, CreateInterfaceFn game_server_factory) = 0;
+    virtual bool Load(CreateInterfaceFn interface_factory,
+                      CreateInterfaceFn game_server_factory) = 0;
     virtual void Unload() = 0;
     virtual void Pause() = 0;
     virtual void UnPause() = 0;
@@ -53,12 +54,19 @@ public:
     virtual void ClientPutInServer(edict_t* entity, const char* player_name) = 0;
     virtual void SetCommandClient(int index) = 0;
     virtual void ClientSettingsChanged(edict_t* edict) = 0;
-    virtual PluginResult ClientConnect(bool* allow_connect, edict_t* entity, const char* name,
-                                       const char* address, char* reject, int max_reject_length) = 0;
+    virtual PluginResult ClientConnect(bool* allow_connect,
+                                       edict_t* entity,
+                                       const char* name,
+                                       const char* address,
+                                       char* reject,
+                                       int max_reject_length) = 0;
     virtual PluginResult ClientCommand(edict_t* entity, const CCommand& args) = 0;
     virtual PluginResult NetworkIDValidated(const char* user_name, const char* network_id) = 0;
-    virtual void OnQueryCvarValueFinished(int cookie, edict_t* player, QueryStatus status,
-                                          const char* cvar_name, const char* cvar_value) = 0;
+    virtual void OnQueryCvarValueFinished(int cookie,
+                                          edict_t* player,
+                                          QueryStatus status,
+                                          const char* cvar_name,
+                                          const char* cvar_value) = 0;
     virtual void OnEdictAllocated(edict_t* edict) = 0;
     virtual void OnEdictFreed(const edict_t* edict) = 0;
 };

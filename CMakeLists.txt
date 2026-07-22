@@ -23,6 +23,7 @@ add_library(p2boost SHARED
   src/metrics.cpp
   src/plugin.cpp
   src/portal_trace.cpp
+  src/renderer_research.cpp
   src/renderer_trace.cpp
   src/shadow_trace.cpp
 )
@@ -49,6 +50,7 @@ add_executable(p2boost_tests
   src/hook.cpp
   src/metrics.cpp
   src/portal_trace.cpp
+  src/renderer_research.cpp
   src/renderer_trace.cpp
   src/shadow_trace.cpp
 )

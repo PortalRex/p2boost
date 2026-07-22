@@ -1,75 +1,121 @@
+#include "address.hpp"
 #include "build_fingerprint.hpp"
+#include "frame_pacer.hpp"
 #include "hook.hpp"
 #include "metrics.hpp"
-#include "frame_pacer.hpp"
+#include "stack_frame.hpp"
+#include "x86.hpp"
 
 #include <Windows.h>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <fstream>
 #include <memory>
-#include <cstring>
-#include <vector>
 #include <string>
+#include <vector>
 
 namespace {
 volatile int hook_marker = 0;
-__declspec(noinline) void Original() { hook_marker = 1; }
-__declspec(noinline) void Replacement() { hook_marker = 2; }
+__declspec(noinline) void Original() {
+    hook_marker = 1;
+}
+__declspec(noinline) void Replacement() {
+    hook_marker = 2;
+}
 
 bool TestHookChain() {
     void* table[1] = {reinterpret_cast<void*>(&Original)};
     p2boost::VtableSlotHook hook;
-    if (!hook.Install(&table[0], reinterpret_cast<void*>(&Replacement))) return false;
-    if (table[0] != reinterpret_cast<void*>(&Replacement) || hook.Previous() != reinterpret_cast<void*>(&Original)) return false;
+    if (!hook.Install(&table[0], reinterpret_cast<void*>(&Replacement)))
+        return false;
+    if (table[0] != reinterpret_cast<void*>(&Replacement) ||
+        hook.Previous() != reinterpret_cast<void*>(&Original))
+        return false;
     table[0] = reinterpret_cast<void*>(&Original); // Simulate a later owner replacing our slot.
-    if (hook.Remove()) return false; // Must not overwrite the later owner.
+    if (hook.Remove())
+        return false; // Must not overwrite the later owner.
     return table[0] == reinterpret_cast<void*>(&Original);
 }
 
+bool TestAddressAndStackFrame() {
+    std::uintptr_t frame[5]{};
+    frame[0] = reinterpret_cast<std::uintptr_t>(&frame[3]);
+    frame[1] = reinterpret_cast<std::uintptr_t>(&Original);
+    frame[2] = 0x12345678u;
+
+    const p2boost::Address address(frame);
+    const p2boost::StackFrame stack(address);
+    return address.Add(sizeof(std::uintptr_t)).Read<std::uintptr_t>() == frame[1] &&
+           stack.ReturnAddress().As<void*>() == reinterpret_cast<void*>(&Original) &&
+           stack.ArgumentAddress(0).Read<std::uintptr_t>() == frame[2] &&
+           stack.Next().Base().Value() == frame[0];
+}
+
+bool TestRelativeCallEncoding() {
+    std::uint8_t instruction[5]{};
+    const p2boost::Address call(instruction);
+    const auto encoded = p2boost::x86::RelativeCall(call, call.Add(0x105));
+    if (encoded.size() != 5 || encoded[0] != 0xe8)
+        return false;
+    std::int32_t displacement = 0;
+    std::memcpy(&displacement, encoded.data() + 1, sizeof(displacement));
+    std::memcpy(instruction + 1, &displacement, sizeof(displacement));
+    return displacement == 0x100 && call.Relative32(1).Value() == call.Add(0x105).Value();
+}
+
 bool TestCallSitePatch() {
-    auto* memory = static_cast<unsigned char*>(VirtualAlloc(nullptr, 64, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE));
-    if (!memory) return false;
+    auto* memory = static_cast<unsigned char*>(
+        VirtualAlloc(nullptr, 64, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE));
+    if (!memory)
+        return false;
     const std::vector<std::uint8_t> expected{0xff, 0x15, 1, 2, 3, 4};
     std::memcpy(memory, expected.data(), expected.size());
     p2boost::CallSitePatch patch;
     const bool installed = patch.Install(memory, expected, reinterpret_cast<void*>(&Replacement));
     const bool encoded = installed && memory[0] == 0xe8 && memory[5] == 0x90;
-    const bool removed = patch.Remove() && std::memcmp(memory, expected.data(), expected.size()) == 0;
+    const bool removed =
+        patch.Remove() && std::memcmp(memory, expected.data(), expected.size()) == 0;
     VirtualFree(memory, 0, MEM_RELEASE);
     return installed && encoded && removed;
 }
 
 bool TestPointerImmediatePatch() {
-    auto* memory = static_cast<unsigned char*>(VirtualAlloc(
-        nullptr, 64, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE));
-    if (!memory) return false;
+    auto* memory = static_cast<unsigned char*>(
+        VirtualAlloc(nullptr, 64, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE));
+    if (!memory)
+        return false;
     std::vector<std::uint8_t> expected{0xb8, 0, 0, 0, 0};
     const auto original = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(&Original));
     std::memcpy(expected.data() + 1, &original, sizeof(original));
     std::memcpy(memory, expected.data(), expected.size());
     p2boost::PointerImmediatePatch patch;
-    const bool installed = patch.Install(memory, expected, 1, reinterpret_cast<void*>(&Replacement));
+    const bool installed =
+        patch.Install(memory, expected, 1, reinterpret_cast<void*>(&Replacement));
     std::uint32_t encoded = 0;
     std::memcpy(&encoded, memory + 1, sizeof(encoded));
-    const bool points_to_replacement = installed && encoded ==
-        static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(&Replacement)) &&
+    const bool points_to_replacement =
+        installed &&
+        encoded == static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(&Replacement)) &&
         patch.Previous() == reinterpret_cast<void*>(&Original);
-    const bool removed = patch.Remove() && std::memcmp(memory, expected.data(), expected.size()) == 0;
+    const bool removed =
+        patch.Remove() && std::memcmp(memory, expected.data(), expected.size()) == 0;
     VirtualFree(memory, 0, MEM_RELEASE);
     return installed && points_to_replacement && removed;
 }
 
 bool TestInlineDetour() {
-    auto* memory = static_cast<unsigned char*>(VirtualAlloc(
-        nullptr, 64, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE));
-    if (!memory) return false;
+    auto* memory = static_cast<unsigned char*>(
+        VirtualAlloc(nullptr, 64, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE));
+    if (!memory)
+        return false;
     const std::vector<std::uint8_t> expected{0xa1, 1, 2, 3, 4};
     std::memcpy(memory, expected.data(), expected.size());
     p2boost::InlineDetour hook;
     const bool installed = hook.Install(memory, expected, reinterpret_cast<void*>(&Replacement));
     const bool encoded = installed && memory[0] == 0xe9 && hook.Previous() != nullptr;
-    const bool removed = hook.Remove() && std::memcmp(memory, expected.data(), expected.size()) == 0;
+    const bool removed =
+        hook.Remove() && std::memcmp(memory, expected.data(), expected.size()) == 0;
     VirtualFree(memory, 0, MEM_RELEASE);
     return installed && encoded && removed;
 }
@@ -85,18 +131,31 @@ bool TestKnownHash() {
 bool TestMetrics() {
     auto metrics = std::make_unique<p2boost::Metrics>();
     metrics->SetTracing(true);
+    p2boost::RenderWorkerMetrics worker{};
+    worker.begin_qpc = 100;
+    worker.end_qpc = 200;
+    worker.cycles = 75;
+    worker.queued_calls = 4;
+    metrics->RecordRenderWorker(worker);
     metrics->Frame(true);
     metrics->Frame(false);
     const std::string path = "p2boost-test-metrics.csv";
-    if (!metrics->Dump(path)) return false;
+    if (!metrics->Dump(path))
+        return false;
     std::ifstream input(path);
     std::string line;
     int lines = 0;
-    while (std::getline(input, line)) ++lines;
+    while (std::getline(input, line))
+        ++lines;
     input.close();
+    std::ifstream workers("p2boost-test-metrics_render_workers.csv");
+    int worker_lines = 0;
+    while (std::getline(workers, line))
+        ++worker_lines;
+    workers.close();
     DeleteFileA(path.c_str());
     DeleteFileA("p2boost-test-metrics_render_workers.csv");
-    return lines == 3;
+    return lines == 3 && worker_lines == 2;
 }
 
 bool TestFramePhaseCarry() {
@@ -110,6 +169,8 @@ bool TestFramePhaseCarry() {
 } // namespace
 
 int main() {
+    const bool address = TestAddressAndStackFrame();
+    const bool relative_call = TestRelativeCallEncoding();
     const bool hook = TestHookChain();
     const bool callsite = TestCallSitePatch();
     const bool pointer = TestPointerImmediatePatch();
@@ -117,9 +178,20 @@ int main() {
     const bool hash = TestKnownHash();
     const bool metrics = TestMetrics();
     const bool phase = TestFramePhaseCarry();
-    std::printf("hook_chain=%s callsite=%s pointer=%s inline=%s hash=%s metrics=%s phase=%s\n",
-                hook ? "ok" : "FAIL", callsite ? "ok" : "FAIL", pointer ? "ok" : "FAIL",
+    std::printf("address=%s rel32=%s hook_chain=%s callsite=%s pointer=%s inline=%s hash=%s "
+                "metrics=%s "
+                "phase=%s\n",
+                address ? "ok" : "FAIL",
+                relative_call ? "ok" : "FAIL",
+                hook ? "ok" : "FAIL",
+                callsite ? "ok" : "FAIL",
+                pointer ? "ok" : "FAIL",
                 inline_detour ? "ok" : "FAIL",
-                hash ? "ok" : "FAIL", metrics ? "ok" : "FAIL", phase ? "ok" : "FAIL");
-    return hook && callsite && pointer && inline_detour && hash && metrics && phase ? 0 : 1;
+                hash ? "ok" : "FAIL",
+                metrics ? "ok" : "FAIL",
+                phase ? "ok" : "FAIL");
+    return address && relative_call && hook && callsite && pointer && inline_detour && hash &&
+                   metrics && phase
+               ? 0
+               : 1;
 }

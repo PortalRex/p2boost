@@ -48,6 +48,10 @@ Requirements are Visual Studio 2022 with the x86 C++ toolchain and CMake 3.24+.
 .\scripts\install.ps1
 ```
 
+Run `.\scripts\format.ps1` before committing C++ changes. The same pinned
+`.clang-format` policy is checked by GitHub Actions; use `-Check` for a
+non-mutating local verification.
+
 The build is C++17, Win32, `/MT`, CFG-enabled, and exports only
 `CreateInterface`. Installation adds an idempotent marked block to
 `portal2/cfg/autoexec.cfg`; uninstall removes only that block and p2boost's own
