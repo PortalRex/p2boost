@@ -72,6 +72,38 @@ load, so it is not smuggled in as an unverified proxy or renderer replacement.
 
 ## Portal and co-op findings
 
+### Static projected-light rebuild
+
+The engine's hierarchical VProf report exposed a larger steady-state co-op
+cost than the portal stencil itself. `CClientShadowMgr::UpdateProjectedTexture`
+entered `UpdateBrushShadow`/`BuildFlashlight` once per rendered frame, spending
+about 0.565 ms rebuilding BSP and client-leaf receiver projection. Split-screen
+then rendered the required shadow-depth views separately; those render calls
+are not removed.
+
+Valve's public Source SDK 2013 implementation documents that projective lights
+are created without cached vertices because they are expected to change every
+frame, alongside a FIXME suggesting optional caching for static entity lights.
+Portal 2's `C_EnvProjectedTexture` still calls `UpdateProjectedTexture(...,
+true)` every simulation pass even when it does not update the flashlight
+state. Ghidra maps the Portal 2 routines to `client.dll` RVAs `0xf81a0`
+(public update), `0xf8100` (internal update), `0xf7d20` (brush update), and
+`0xf6440` (flashlight projection).
+
+A trace-only vtable hook copied the full 0x114-byte Portal 2 shadow record
+before every call while always executing the original function. In five
+seconds, 2,237 of 2,238 records were byte-identical and the calls consumed
+1,199.066 ms total. The permanent fix therefore skips only a byte-identical
+projection rebuild. It still calls RVA `0xf5640` to preserve the public
+function's dirty-list removal. The exact state cache includes the relevant
+`r_flashlightmodels` value and invalidates on any state change, cvar change,
+map transition, focus transition, plugin toggle, load, or unload.
+
+Changing `r_flashlightmodels` twice produced two measured cache misses, and
+each focus resource reacquisition produced an uncached rebuild before hits
+resumed. The cache occupies storage only for observed projected-light handles;
+it does not reserve the engine's full 16-bit handle space.
+
 `client.dll` RVA `0x1ee590` is the profiled
 `CViewRender::ViewDrawScene_PortalStencil` routine. Both verified callers (RVAs
 `0x285c91` and `0x2c57db`) are traced. With local split-screen and two active
@@ -91,6 +123,25 @@ leaves at RVAs `0xe4240`, `0x120bd0`, and `0x1249f0` build/mark BSP surface and
 visibility data. Disabling hardware occlusion for an isolated A/B did not
 improve p99. None of these calls had equivalent camera state, so removing one
 would be a rendering-quality or visibility change.
+
+A subsequent synchronized 15-second GeneralProfile ETW and PresentMon capture
+recorded 6,623 portal-visible lobby frames. The only frame above 8.3 ms was
+8.4279 ms. Its GPU busy time was 1.59 ms; 6.79 ms was classified as GPU wait,
+so the frame was a CPU submission/work burst rather than GPU saturation.
+Main-thread samples mapped by the ETL image-load rundown enter the client
+renderable filtering path around preferred address `0x100e205a` and engine BSP
+leaf/surface traversal around `0x10124adb`/`0x10124da2`. Ghidra resolves these
+to normal view-dependent visibility marking feeding portal rendering.
+
+Kernel disk events recorded no Portal asset reads during that capture. The
+only Portal file traffic was small periodic writes to `workshop_log.txt` and
+the active demo, neither aligned with the 8.43 ms frame. This invalidates an
+earlier filesystem-streaming hypothesis that came from mapping samples with
+inferred module bases and unreliable x86 stack-unwind frames. All retained
+sample addresses are now rebased from each ETL's authoritative image-load
+rundown. The visibility burst is a real remaining target, but the two
+split-screen cameras have different view state; no pass will be cached or
+skipped until instrumentation proves identical inputs and output equivalence.
 
 The sampler also observed periodic XInput/SetupAPI and Steam-overlay frames.
 They are recorded as a possible external hitch contributor, not patched:

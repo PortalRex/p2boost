@@ -5,6 +5,7 @@
 #include "metrics.hpp"
 #include "portal_trace.hpp"
 #include "renderer_trace.hpp"
+#include "shadow_trace.hpp"
 #include "sdk.hpp"
 
 #include <Windows.h>
@@ -36,6 +37,8 @@ public:
             verification_.errors.emplace_back("static-lighting restore callsite signature mismatch");
         if (verification_.supported && verification_.native_d3d9 && !portal_trace_.Install(&metrics_))
             verification_.errors.emplace_back("portal trace callsite signature mismatch");
+        if (verification_.supported && verification_.native_d3d9 && !shadow_trace_.Install(&metrics_))
+            verification_.errors.emplace_back("projected-shadow trace vtable mismatch");
         enabled_ = verification_.supported && verification_.native_d3d9 &&
                    renderer_trace_.FocusSyncAvailable() && renderer_trace_.StaticLightingFixAvailable();
         if (verification_.supported && verification_.native_d3d9 && !frame_pacer_.Install()) {
@@ -44,21 +47,29 @@ public:
         }
         frame_pacer_.SetEnabled(enabled_);
         renderer_trace_.SetFixEnabled(enabled_);
+        shadow_trace_.SetEnabled(enabled_);
         ConsolePrint("[p2boost] loaded v%s; frame_pacer=%s\n", P2BOOST_VERSION,
                      frame_pacer_.Installed() ? (enabled_ ? "enabled" : "disabled") : "unavailable");
         for (const auto& error : verification_.errors) ConsolePrint("[p2boost] %s\n", error.c_str());
         return true;
     }
-    void Unload() override { commands_.Disconnect(); portal_trace_.Remove(); renderer_trace_.Remove(); frame_pacer_.Remove(); active_client_ = nullptr; engine_server_ = nullptr; instance_ = nullptr; ConsolePrint("[p2boost] unloaded\n"); }
-    void Pause() override { enabled_ = false; frame_pacer_.SetEnabled(false); renderer_trace_.SetFixEnabled(false); }
-    void UnPause() override { enabled_ = verification_.supported && verification_.native_d3d9 && renderer_trace_.FocusSyncAvailable() && renderer_trace_.StaticLightingFixAvailable(); frame_pacer_.SetEnabled(enabled_); renderer_trace_.SetFixEnabled(enabled_); }
+    void Unload() override { commands_.Disconnect(); shadow_trace_.Remove(); portal_trace_.Remove(); renderer_trace_.Remove(); frame_pacer_.Remove(); active_client_ = nullptr; engine_server_ = nullptr; instance_ = nullptr; ConsolePrint("[p2boost] unloaded\n"); }
+    void Pause() override { enabled_ = false; frame_pacer_.SetEnabled(false); renderer_trace_.SetFixEnabled(false); shadow_trace_.SetEnabled(false); }
+    void UnPause() override { enabled_ = verification_.supported && verification_.native_d3d9 && renderer_trace_.FocusSyncAvailable() && renderer_trace_.StaticLightingFixAvailable(); frame_pacer_.SetEnabled(enabled_); renderer_trace_.SetFixEnabled(enabled_); shadow_trace_.SetEnabled(enabled_); }
     const char* GetPluginDescription() override { return "p2boost native-D3D9 performance patch v" P2BOOST_VERSION; }
-    void LevelInit(const char*) override {}
+    void LevelInit(const char*) override { shadow_trace_.Invalidate(); }
     void ServerActivate(sdk::edict_t*, int, int client_max) override { metrics_.SetCoop(client_max > 1); }
     void GameFrame(bool simulating) override {
+        DWORD foreground_process = 0;
+        GetWindowThreadProcessId(GetForegroundWindow(), &foreground_process);
+        const bool focused = foreground_process == GetCurrentProcessId();
+        if (focused != last_focused_) {
+            shadow_trace_.Invalidate();
+            last_focused_ = focused;
+        }
         metrics_.Frame(simulating);
     }
-    void LevelShutdown() override { metrics_.SetCoop(false); }
+    void LevelShutdown() override { metrics_.SetCoop(false); shadow_trace_.Invalidate(); }
     void ClientFullyConnect(sdk::edict_t* entity) override { if (!active_client_) active_client_ = entity; }
     void ClientActive(sdk::edict_t* entity) override { if (!active_client_) active_client_ = entity; }
     void ClientDisconnect(sdk::edict_t* entity) override { if (active_client_ == entity) active_client_ = nullptr; }
@@ -70,10 +81,10 @@ public:
         const char* command = args.Arg(0);
         if (_stricmp(command, "p2boost_status") == 0) {
             const bool sar_loaded = GetModuleHandleW(L"sar.dll") != nullptr;
-            ConsolePrint("[p2boost] build=23973718 supported=%d native_d3d9=%d enabled=%d pacer_installed=%d tracing=%d sar=%d samples=%zu focus_sync=%d lighting_fix=%d lighting_skips=%u root=%s\n",
+            ConsolePrint("[p2boost] build=23973718 supported=%d native_d3d9=%d enabled=%d pacer_installed=%d tracing=%d sar=%d samples=%zu focus_sync=%d lighting_fix=%d lighting_skips=%u shadow_cache=%d shadow_skips=%u root=%s\n",
                 verification_.supported, verification_.native_d3d9, enabled_, frame_pacer_.Installed(),
                 metrics_.Tracing(), sar_loaded, metrics_.Count(), renderer_trace_.FocusSyncAvailable(),
-                renderer_trace_.StaticLightingFixAvailable(), renderer_trace_.StaticLightingSkips(),
+                renderer_trace_.StaticLightingFixAvailable(), renderer_trace_.StaticLightingSkips(), shadow_trace_.Installed(), shadow_trace_.Skips(),
                 verification_.game_root.c_str());
             return sdk::Stop;
         }
@@ -84,6 +95,7 @@ public:
             else ConsolePrint("[p2boost] cannot enable: unsupported build/backend or invalid value\n");
             frame_pacer_.SetEnabled(enabled_);
             renderer_trace_.SetFixEnabled(enabled_);
+            shadow_trace_.SetEnabled(enabled_);
             return sdk::Stop;
         }
         if (_stricmp(command, "p2boost_trace") == 0) {
@@ -114,10 +126,12 @@ private:
     FramePacer frame_pacer_;
     PortalTrace portal_trace_;
     RendererTrace renderer_trace_;
+    ShadowTrace shadow_trace_;
     ConsoleCommandRegistry commands_;
     void* engine_server_ = nullptr;
     sdk::edict_t* active_client_ = nullptr;
     bool enabled_ = false;
+    bool last_focused_ = false;
 };
 
 Plugin* Plugin::instance_ = nullptr;

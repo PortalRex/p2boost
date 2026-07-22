@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(p2boost VERSION 0.4.0 LANGUAGES CXX)
+project(p2boost VERSION 0.5.0 LANGUAGES CXX)
 
 if(NOT WIN32)
   message(FATAL_ERROR "p2boost currently targets Portal 2 for Windows")
@@ -22,6 +22,7 @@ add_library(p2boost SHARED
   src/plugin.cpp
   src/portal_trace.cpp
   src/renderer_trace.cpp
+  src/shadow_trace.cpp
 )
 target_include_directories(p2boost PRIVATE src)
 target_compile_definitions(p2boost PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX P2BOOST_VERSION="${PROJECT_VERSION}")
@@ -44,6 +45,7 @@ add_executable(p2boost_tests
   src/metrics.cpp
   src/portal_trace.cpp
   src/renderer_trace.cpp
+  src/shadow_trace.cpp
 )
 target_include_directories(p2boost_tests PRIVATE src)
 target_compile_definitions(p2boost_tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)

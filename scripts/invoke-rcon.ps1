@@ -8,11 +8,13 @@ $ErrorActionPreference = 'Stop'
 $process = if ($ProcessId) { Get-Process -Id $ProcessId -ErrorAction Stop } else {
     Get-Process portal2 -ErrorAction Stop | Select-Object -First 1
 }
-$listener = Get-NetTCPConnection -OwningProcess $process.Id -State Listen -ErrorAction Stop |
+$listener = Get-NetTCPConnection -OwningProcess $process.Id -State Listen -ErrorAction SilentlyContinue |
     Where-Object LocalPort -eq 27015 | Select-Object -First 1
 if (-not $listener) { throw 'Portal 2 RCON listener not found; launch with -usercon.' }
 $client = [Net.Sockets.TcpClient]::new($listener.LocalAddress, 27015)
 $stream = $client.GetStream()
+$stream.ReadTimeout = $ResponseTimeoutSeconds * 1000
+$stream.WriteTimeout = $ResponseTimeoutSeconds * 1000
 function Send-Packet([int]$id, [int]$type, [string]$payload) {
     $text = [Text.Encoding]::ASCII.GetBytes($payload)
     $writer = [IO.BinaryWriter]::new($stream, [Text.Encoding]::ASCII, $true)

@@ -26,21 +26,39 @@ function Read-Cvar([string]$Name) {
     if (-not $match.Success) { throw "Could not read $Name from: $text" }
     return $match.Groups[1].Value
 }
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class P2BoostLobbyForeground {
+    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr window, int command);
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr window);
+}
+'@
 
 $originalFpsMax = Read-Cvar 'fps_max'
 $originalCheats = Read-Cvar 'sv_cheats'
 try {
     $session = Invoke-Game @('users', 'status') | Out-String
     if ($session -notmatch '(?m)^2 users\s*$' -or $session -notmatch 'map\s+:\s+mp_coop_lobby_2') {
-        Invoke-Game @('ss_map mp_coop_lobby_2') | Out-Null
-        Start-Sleep -Seconds 6
-    }
-    $deadline = (Get-Date).AddSeconds(30)
-    do {
-        $status = Invoke-Game @('users', 'status') | Out-String
-        if ($status -match '(?m)^2 users\s*$' -and $status -match 'map\s+:\s+mp_coop_lobby_2') { break }
-        Start-Sleep -Seconds 1
-    } until ((Get-Date) -ge $deadline)
+        # A command sent while the engine is finishing its startup map can be
+        # accepted by RCON and then discarded by the pending level transition.
+        # Retry the real split-screen transition instead of waiting 30 seconds
+        # on a zero-user server.
+        for ($attempt = 1; $attempt -le 3; ++$attempt) {
+            try { Invoke-Game @('ss_map mp_coop_lobby_2') | Out-Null } catch {
+                if (-not (Get-Process -Id $process.Id -ErrorAction SilentlyContinue)) { throw }
+            }
+            $deadline = (Get-Date).AddSeconds(10)
+            do {
+                Start-Sleep -Seconds 1
+                $status = Invoke-Game @('users', 'status') | Out-String
+                if ($status -match '(?m)^2 users\s*$' -and
+                    $status -match 'map\s+:\s+mp_coop_lobby_2') { break }
+            } until ((Get-Date) -ge $deadline)
+            if ($status -match '(?m)^2 users\s*$' -and
+                $status -match 'map\s+:\s+mp_coop_lobby_2') { break }
+        }
+    } else { $status = $session }
     if ($status -notmatch '(?m)^2 users\s*$' -or $status -notmatch 'map\s+:\s+mp_coop_lobby_2') {
         throw 'Local split-screen lobby did not reach two active players.'
     }
@@ -65,6 +83,12 @@ try {
     Start-Sleep -Milliseconds 500
     # Placement can teleport a camera when the portal volume initially overlaps
     # its hull, so restore the deterministic view after both portals are linked.
+    # Screenshot encoding is deferred until a rendered frame. Ensure the game
+    # is restored first; otherwise Source leaves a zero-byte JPEG while
+    # minimized and the proof wait can never succeed.
+    [P2BoostLobbyForeground]::ShowWindow($process.MainWindowHandle, 9) | Out-Null
+    [P2BoostLobbyForeground]::SetForegroundWindow($process.MainWindowHandle) | Out-Null
+    Start-Sleep -Milliseconds 500
     Invoke-Game @(
         'cmd1 setpos 6192 3850 -480', 'cmd1 setang 0 90 0',
         'cmd2 setpos 6250 3850 -480', 'cmd2 setang 0 90 0',
@@ -91,14 +115,6 @@ try {
         Write-Host "Lobby portal scene ready: pid=$($process.Id) proof=$prefix-proof.jpg"
         return
     }
-    Add-Type -TypeDefinition @'
-using System;
-using System.Runtime.InteropServices;
-public static class P2BoostLobbyForeground {
-    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr window, int command);
-    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr window);
-}
-'@
     [P2BoostLobbyForeground]::ShowWindow($process.MainWindowHandle, 9) | Out-Null
     [P2BoostLobbyForeground]::SetForegroundWindow($process.MainWindowHandle) | Out-Null
     Start-Sleep -Milliseconds 500

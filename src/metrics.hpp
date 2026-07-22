@@ -19,6 +19,8 @@ public:
                          long long end_qpc) noexcept;
     void RecordReacquireStage(size_t stage, double milliseconds) noexcept;
     void RecordPortalRender(double milliseconds) noexcept;
+    void RecordShadowUpdate(double milliseconds, bool same_projection, bool same_full,
+                            bool skipped) noexcept;
     bool Dump(const std::string& path) const;
     size_t Count() const noexcept { return count_; }
 
@@ -32,6 +34,11 @@ private:
         std::array<double, 3> reacquire_stages_ms;
         double portal_render_ms;
         unsigned int portal_render_count;
+        double shadow_update_ms;
+        unsigned int shadow_update_count;
+        unsigned int shadow_same_projection_count;
+        unsigned int shadow_same_full_count;
+        unsigned int shadow_skipped_count;
         int reacquire_reason;
         bool simulating;
         bool focused;
@@ -50,6 +57,11 @@ private:
     std::array<double, 3> pending_reacquire_stages_ms_{};
     double pending_portal_render_ms_ = 0.0;
     unsigned int pending_portal_render_count_ = 0;
+    double pending_shadow_update_ms_ = 0.0;
+    unsigned int pending_shadow_update_count_ = 0;
+    unsigned int pending_shadow_same_projection_count_ = 0;
+    unsigned int pending_shadow_same_full_count_ = 0;
+    unsigned int pending_shadow_skipped_count_ = 0;
     int pending_reacquire_reason_ = 0;
 };
 

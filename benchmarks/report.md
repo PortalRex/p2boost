@@ -54,6 +54,38 @@ co-op smoothness gate is still open. A 60-second throughput-limited 999 A/B was
 neutral within run-order/thermal variance (median 2.1269 ms unpatched and
 2.1618 ms patched); the limiter correctly does not hide renderer cost there.
 
+### Projected-shadow cache A/B
+
+VProf and byte-for-byte state tracing proved that the lobby's static projected
+light rebuilt its receiver projection every rendered frame. The v0.5.0 cache
+removes only identical rebuilds while retaining shadow-depth rendering and all
+visual settings.
+
+| Target | Variant | Average FPS | Median ms | p99 ms | Maximum ms | 1% low FPS |
+|---|---|---:|---:|---:|---:|---:|
+| 999 | unpatched | 414.23 | 2.3789 | 3.1668 | 4.6796 | 315.78 |
+| 999 | patched | 538.14 | 1.8310 | 2.6190 | 4.8432 | 381.83 |
+| 360 | unpatched | 350.56 | 2.8395 | 3.7745 | 5.5016 | 264.94 |
+| 360 | patched | 360.06 | 2.7692 | 3.6634 | 4.0343 | 272.97 |
+
+At the throughput-limited target this is a 29.9% average-FPS increase, 23.0%
+median frame-time reduction, 17.3% p99 reduction, and 20.9% improvement in 1%
+low FPS. At 360 FPS, display repeats fell from 0.114% to 0.028%. GPU-busy time
+was unchanged (approximately 0.89 ms median), confirming a CPU-only saving.
+
+Paused 2560x1440 lossless TGA comparisons measured 44.42 dB PSNR between
+patched/unpatched frames versus 43.93 dB between two unpatched control frames;
+the patch difference is within the scene's real-time material/particle noise.
+Focus testing also confirmed that each resource reacquisition invalidated the
+cache and executed a fresh projection before cache hits resumed.
+
+The packaged v0.5.0 build received a final five-second smoke A/B after its
+cache storage was reduced to observed handles only. It measured 392.73 versus
+518.62 FPS (+32.1%), 1% low 283.94 versus 350.25 FPS (+23.4%), and p99 3.5219
+versus 2.8551 ms. The patched maximum was 3.8876 ms with no frame above 8.3 ms.
+Both SAR→p2boost and p2boost→SAR runtime load orders retained a validated
+shadow-cache hook and native-D3D9 status.
+
 ## Focus and portal results
 
 The original timestamped native-D3D9 harness completed 30 minimize/restore/
@@ -95,10 +127,34 @@ patched (-0.18%). Patched p99 improved from 3.3256 to 3.2363 ms, 1% low from
 8.4888 ms patched frame remains; this result confirms no throughput regression
 but does not claim that ordinary steady-state hitches are solved.
 
+## Synchronized ETW hitch capture
+
+A 15-second GeneralProfile trace of the deterministic two-player lobby with a
+linked portal pair visible recorded 6,623 frames:
+
+| Metric | Result |
+|---|---:|
+| Average FPS | 441.82 |
+| Median | 2.1692 ms |
+| p95 | 3.1012 ms |
+| p99 | 3.5445 ms |
+| Maximum | 8.4279 ms |
+| 1% low | 282.13 FPS |
+| p99 / median | 1.634 |
+
+There was one frame above 8.3 ms and none above 16.7 ms. That frame contained
+only 1.59 ms of GPU-busy work and no coincident Portal asset read. ETW samples
+place its main-thread work in client renderable filtering and engine BSP
+visibility traversal. This confirms a remaining intermittent CPU visibility
+burst, but not a redundant call: each local player and each portal has distinct
+view state. A permanent cache or skip would therefore be speculative and is
+not included in the current binary.
+
 ## Gate status
 
 - Post-focus portal frame <=8.3 ms: **met** in 30 valid timestamped cycles.
-- Co-op 1% low improvement >=35%: **not met**; no quality-neutral redundant work proven.
+- Co-op 1% low improvement >=35%: **not met**; the proven shadow fix improves
+  the lobby 1% low by 20.9%.
 - p99 <=1.25x median at 360: **not met** (1.3145), though cadence and p99 improve.
 - <=2% SP throughput regression: **met**; measured throughput improves.
 - 100 map/focus cycles and lossless visual/state equivalence: **not yet completed**.

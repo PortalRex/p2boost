@@ -16,6 +16,7 @@ import ghidra.app.script.GhidraScript;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.data.StringDataInstance;
 import ghidra.program.model.listing.Data;
+import ghidra.program.model.listing.DataIterator;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.FunctionIterator;
 import ghidra.program.model.listing.Instruction;
@@ -56,10 +57,29 @@ public class ExportP2Analysis extends GhidraScript {
     private void addFunctionAndCallers(Set<Function> targets, long address, int depth) {
         Address targetAddress = currentProgram.getAddressFactory().getDefaultAddressSpace().getAddress(address);
         Function function = getFunctionAt(targetAddress);
+        if (function == null) function = getFunctionContaining(targetAddress);
         if (function == null || !targets.add(function) || depth <= 0) return;
-        for (Reference reference : getReferencesTo(targetAddress)) {
+        // Samples normally land inside a function. Once the containing
+        // function is known, callers reference its entry point rather than
+        // the sampled instruction, so walk references to the entry address.
+        for (Reference reference : getReferencesTo(function.getEntryPoint())) {
             Function caller = containingFunction(reference.getFromAddress());
             if (caller != null) addFunctionAndCallers(targets, caller.getEntryPoint().getOffset(), depth - 1);
+        }
+    }
+
+    private void addFunctionsReferencingString(Set<Function> targets, String value, int depth) {
+        DataIterator data = currentProgram.getListing().getDefinedData(true);
+        while (data.hasNext()) {
+            Data item = data.next();
+            Object itemValue = item.getValue();
+            if (!(itemValue instanceof String) || !value.equals(itemValue)) continue;
+            for (Reference reference : getReferencesTo(item.getAddress())) {
+                Function function = containingFunction(reference.getFromAddress());
+                if (function != null) {
+                    addFunctionAndCallers(targets, function.getEntryPoint().getOffset(), depth);
+                }
+            }
         }
     }
 
@@ -80,7 +100,13 @@ public class ExportP2Analysis extends GhidraScript {
                 0x100ea960L, 0x10127b60L, 0x10127380L, 0x100dd330L,
                 0x100ea5b0L, 0x100dc590L, 0x100dbd20L, 0x1015bff0L,
                 0x100f8b30L, 0x101a9460L, 0x101a9ad0L, 0x101ad1c0L,
-                0x101ae7f0L, 0x100dc8a0L
+                0x101ae7f0L, 0x100dc8a0L, 0x100eab1fL, 0x1019601cL,
+                0x101983f9L, 0x10198773L, 0x101a736bL, 0x101a74baL,
+                0x101a7554L, 0x101fa00dL, 0x101f8df0L, 0x101f8f0fL,
+                0x101f995eL,
+                // 2026-07-22 synchronized ETW/PresentMon 8.43 ms lobby frame.
+                0x10124adbL, 0x1031224aL, 0x100e1a90L, 0x10124da2L,
+                0x10070f38L, 0x10218c8aL, 0x1026febcL
             };
             for (long address : profileTargets) addFunctionAndCallers(targets, address, 1);
         }
@@ -97,6 +123,11 @@ public class ExportP2Analysis extends GhidraScript {
                 0x10026ed0L, 0x1000b0e0L, 0x1000d420L
             };
             for (long address : focusCrashTargets) addFunctionAndCallers(targets, address, 1);
+            long[] steadyRenderTargets = {
+                0x10025df5L, 0x1002042fL, 0x10024553L, 0x100247fcL,
+                0x10024ae8L, 0x1002637bL, 0x1002649bL, 0x1001a31dL
+            };
+            for (long address : steadyRenderTargets) addFunctionAndCallers(targets, address, 1);
         }
         if (base.equalsIgnoreCase("materialsystem.dll")) {
             addFunctionAndCallers(targets, 0x10011230L, 2);
@@ -108,6 +139,19 @@ public class ExportP2Analysis extends GhidraScript {
                 0x10025080L, 0x1000f3f0L, 0x10024ed0L
             };
             for (long address : focusCrashTargets) addFunctionAndCallers(targets, address, 1);
+            long[] steadyRenderTargets = {
+                0x10032c55L, 0x10033105L, 0x10033ce5L, 0x10033d81L,
+                0x1002f92aL, 0x10044e8fL, 0x10088798L, 0x1004c091L
+            };
+            for (long address : steadyRenderTargets) addFunctionAndCallers(targets, address, 1);
+        }
+        if (base.equalsIgnoreCase("filesystem_stdio.dll")) {
+            long[] steadyReadTargets = {
+                0x10001d3eL, 0x10004fdbL, 0x1000b8beL, 0x1000b923L,
+                0x1000bbd8L, 0x1000c035L, 0x1000c54fL, 0x1002c3b1L,
+                0x10001f9aL, 0x10002e5dL
+            };
+            for (long address : steadyReadTargets) addFunctionAndCallers(targets, address, 2);
         }
         if (base.equalsIgnoreCase("client.dll")) {
             addFunctionAndCallers(targets, 0x101ee590L, 2);
@@ -121,6 +165,18 @@ public class ExportP2Analysis extends GhidraScript {
                 0x101f0e30L, 0x101ec9e0L, 0x101ec8b0L
             };
             for (long address : profileTargets) addFunctionAndCallers(targets, address, 1);
+            long[] lobbyHitchTargets = {
+                // Main-thread samples during the synchronized 8.43 ms portal frame.
+                0x100e2df5L, 0x100e205aL, 0x106b20f2L, 0x106b2692L,
+                0x10285c91L, 0x102c57dbL
+            };
+            for (long address : lobbyHitchTargets) addFunctionAndCallers(targets, address, 2);
+            addFunctionsReferencingString(targets, "CClientShadowMgr::BuildFlashlight", 2);
+            addFunctionsReferencingString(targets, "CClientShadowMgr::UpdateBrushShadow", 2);
+            addFunctionsReferencingString(targets,
+                "CClientShadowMgr::UpdateProjectedTextureInternal", 2);
+            addFunctionsReferencingString(targets,
+                "CClientShadowMgr::UpdateProjectedTexture can only be used with flashlights!\n", 2);
         }
 
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(new File(output, base + "-functions.tsv")))) {

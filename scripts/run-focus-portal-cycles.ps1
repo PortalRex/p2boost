@@ -13,6 +13,9 @@ $rcon = Join-Path $PSScriptRoot 'invoke-rcon.ps1'
 $outputPath = [IO.Path]::GetFullPath((Join-Path $repo $Output))
 $eventPath = [IO.Path]::ChangeExtension($outputPath, '.events.csv')
 New-Item -ItemType Directory -Force (Split-Path $outputPath) | Out-Null
+foreach ($oldOutput in @($outputPath, $eventPath)) {
+    if (Test-Path -LiteralPath $oldOutput) { Remove-Item -LiteralPath $oldOutput -Force }
+}
 function Get-GameProcess {
     $process = Get-Process portal2 -ErrorAction Stop |
         Where-Object { $_.MainWindowHandle -ne [IntPtr]::Zero } | Select-Object -First 1
@@ -20,12 +23,23 @@ function Get-GameProcess {
     return $process
 }
 $gameProcess = Get-GameProcess
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class P2BoostFocusCaptureWindow {
+    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr window, int command);
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr window);
+}
+'@
+[P2BoostFocusCaptureWindow]::ShowWindow($gameProcess.MainWindowHandle, 9) | Out-Null
+[P2BoostFocusCaptureWindow]::SetForegroundWindow($gameProcess.MainWindowHandle) | Out-Null
+Start-Sleep -Milliseconds 500
 $listener = Get-NetTCPConnection -OwningProcess $gameProcess.Id -State Listen -ErrorAction Stop |
     Where-Object { $_.LocalPort -eq 27015 } | Select-Object -First 1
 if (-not $listener) { throw 'Launch Portal 2 with -usercon and a non-empty rcon_password.' }
-$duration = [Math]::Max(10, [int]($Cycles * 1.5 + 5))
+$duration = [Math]::Max(10, [int]([Math]::Ceiling($Cycles * 2.5 + 5)))
 $arguments = @(
-    '--process_name', 'portal2.exe', '--output_file', $outputPath, '--v2_metrics',
+    '--process_id', $gameProcess.Id, '--output_file', $outputPath, '--v2_metrics',
     '--qpc_time', '--timed', $duration, '--terminate_after_timed',
     '--no_console_stats', '--set_circular_buffer_size', '32768'
 )
@@ -38,9 +52,13 @@ $actions = Start-Process powershell.exe -ArgumentList $actionArgs -WindowStyle H
 $presentExit = $LASTEXITCODE
 $actions.WaitForExit()
 $actions.Refresh()
-if ($actions.ExitCode -ne 0) {
-    $errorText = Get-Content "$eventPath.err.txt" -Raw -ErrorAction SilentlyContinue
-    throw "focus action helper exited with $($actions.ExitCode): $errorText"
+$actionExit = $actions.ExitCode
+$errorText = Get-Content "$eventPath.err.txt" -Raw -ErrorAction SilentlyContinue
+if ($null -ne $actionExit -and $actionExit -ne 0) {
+    throw "focus action helper exited with ${actionExit}: $errorText"
+}
+if ($null -eq $actionExit -and $errorText) {
+    throw "focus action helper failed without an exit code: $errorText"
 }
 if ($presentExit -ne 0) { throw "PresentMon exited with $presentExit" }
 $events = @(Import-Csv -LiteralPath $eventPath)

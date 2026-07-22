@@ -2,7 +2,7 @@ param(
     [string]$GameRoot = 'D:\SteamLibrary\steamapps\common\Portal 2',
     [string]$GhidraRoot = '',
     [string]$JavaHome = '',
-    [ValidateSet('all','engine','shaderapidx9','materialsystem','client','server')]
+    [ValidateSet('all','engine','shaderapidx9','materialsystem','filesystem_stdio','client','server')]
     [string[]]$Module = @('all'),
     [switch]$Fresh
 )
@@ -28,6 +28,7 @@ $binaries = @(
     'bin\engine.dll',
     'bin\shaderapidx9.dll',
     'bin\materialsystem.dll',
+    'bin\filesystem_stdio.dll',
     'portal2\bin\client.dll',
     'portal2\bin\server.dll'
 )
@@ -43,7 +44,7 @@ foreach ($relative in $binaries) {
     $projectFile = Join-Path $projectRoot "$project.gpr"
     $args = @($projectRoot,$project)
     if ($Fresh -or -not (Test-Path -LiteralPath $projectFile)) { $args += @('-import',$binary) }
-    else { $args += @('-process',[IO.Path]::GetFileName($binary)) }
+    else { $args += @('-process',[IO.Path]::GetFileName($binary),'-noanalysis') }
     $args += @('-scriptPath',$scriptRoot,'-postScript','ExportP2Analysis.java',$exportRoot,'-analysisTimeoutPerFile','900')
     & $headless @args
     if ($LASTEXITCODE -ne 0) { throw "Ghidra failed for $relative ($LASTEXITCODE)" }
