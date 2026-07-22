@@ -296,6 +296,44 @@ executed the corresponding release-side state transition. A prototype that
 intercepted only the poll/reacquire side was rejected after a runtime failure
 and was removed. No partial lifecycle bypass ships.
 
+## Sphere Peek chamber-entry reproduction
+
+The Sphere Peek route now starts from the ordinary `sp_a2_sphere_peek` spawn,
+walks three seconds toward the entrance panel, moves left for one second,
+crosses the main chamber, then moves left for exactly twelve ticks before
+continuing forward. That final 0.2-second adjustment is the narrow line that
+hits the faith plate; longer left inputs walk past it. Position tracing
+confirmed the launch at `-1949.60 1568.21 437.02` and the subsequent landing.
+
+Early captures accidentally ran while another application owned the
+foreground window. Those results are discarded: Portal 2's background message
+wait dominated the main-thread samples and can produce misleading 60 Hz-like
+overlay behavior. Every grounded gameplay runner now activates Portal 2 and
+verifies its foreground process ID before accepting a capture.
+
+A corrected 23-second foreground run recorded 21,724 frames at 944.81 FPS,
+with a 1.0295 ms median, 1.8812 ms p99, and 6.9219 ms maximum. The repeatable
+maximum occurs about 8.2 seconds into capture while entering the chamber,
+before the twelve-tick catapult adjustment. It is CPU-busy: GPU busy was only
+1.5143 ms, while the portal renderer recorded zero work, the projected-shadow
+cache skipped an unchanged update, and no focus reacquisition occurred. A
+separate GeneralProfile trace of the same grounded route recorded no gameplay
+file read during the transition.
+
+PresentMon and the low-overhead main-thread sampler were then started together
+and correlated using their shared QPC timestamps. Sampling increased the
+maximum to 8.0124 ms, so that timing is research-only, but it isolated four
+non-system instructions inside the exact frame: `server.dll+0x33d840` and
+`engine.dll+0x285aec`, `engine.dll+0x304d9a`, and `engine.dll+0xe80fd`.
+Headless Ghidra resolves the engine samples to bit-buffer copying, CRT memory
+clearing, and the world-surface mesh construction loop respectively. The
+server sample constructs transformed entity bounds before a virtual spatial
+query. This establishes a mixed simulation/world-list burst rather than a
+portal-only or GPU-only stall. None of these operations is skipped yet: the
+trace has not proved duplicate inputs or equivalent cached output, and doing
+so without that proof could change collision, visibility, or rendered
+geometry.
+
 ## Hook compatibility
 
 Permanent fixes patch exact engine/shader callsites only after full module-hash

@@ -122,7 +122,12 @@ public class ExportP2Analysis extends GhidraScript {
                 // were initially mistaken for area streaming. Correlating the
                 // callers proved they belong to deferred new-game/config work.
                 0x10159590L, 0x10159a30L, 0x10158fd0L, 0x101593ccL,
-                0x10278380L, 0x101a6bc0L
+                0x10278380L, 0x101a6bc0L,
+                // Sphere Peek chamber-entry frame, synchronized directly by
+                // QPC with PresentMon on 2026-07-22. These samples account for
+                // three of the four engine instructions inside the 8.01 ms
+                // CPU-busy interval; the fourth sample is in server.dll.
+                0x10285aecL, 0x10304d9aL, 0x100e80fdL
             };
             for (long address : profileTargets) addFunctionAndCallers(targets, address, 1);
             long[] queuedSubmissionTargets = {
@@ -283,6 +288,12 @@ public class ExportP2Analysis extends GhidraScript {
                 "CClientShadowMgr::UpdateProjectedTextureInternal", 2);
             addFunctionsReferencingString(targets,
                 "CClientShadowMgr::UpdateProjectedTexture can only be used with flashlights!\n", 2);
+        }
+        if (base.equalsIgnoreCase("server.dll")) {
+            // The server-side instruction sampled inside the same Sphere Peek
+            // chamber-entry frame. Export its callers alongside the engine
+            // samples before assigning any gameplay or visibility semantics.
+            addFunctionAndCallers(targets, 0x1033d840L, 2);
         }
 
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(new File(output, base + "-functions.tsv")))) {

@@ -147,6 +147,23 @@ enabled patch state even after a failed capture. PresentMon's undefined first
 interval on each swap chain is excluded by `analyze-presentmon.ps1`; otherwise
 that trace-boundary sample can be misreported as a multi-second game hitch.
 
+`run-sphere-peek.ps1` reproduces the Sphere Peek chamber transition and faith
+plate from the normal spawn. It clears the entrance panel with a one-second
+left input, walks into the main room, then moves left for only twelve ticks
+before continuing forward onto the catapult. The runner verifies Portal 2 is
+the foreground process, writes a chronological top-hitch report, and can align
+research-only main-thread samples to PresentMon with `-SampleMainThread`.
+
+```powershell
+.\scripts\run-sphere-peek.ps1 -Variant Both -DurationSeconds 23
+.\scripts\run-sphere-peek.ps1 -Variant Patched -SampleMainThread
+```
+
+`run-laser-etw.ps1 -Scenario SpherePeek` performs the same grounded route
+inside an elevated GeneralProfile trace. The ETW helper reclaims interrupted
+WPR and PresentMon sessions before starting, so a stale global recorder cannot
+silently leave the artifact directory empty.
+
 `p2profile.exe` is a research-only x86 user-mode sampler for systems where
 kernel ETW collection is unavailable without elevation. Its default mode
 records low-overhead main-thread instruction pointers. Explicit `--stack` mode

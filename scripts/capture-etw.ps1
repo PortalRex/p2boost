@@ -52,7 +52,10 @@ try {
         if (Test-Path -LiteralPath $presentMonTarget) {
             Remove-Item -LiteralPath $presentMonTarget -Force
         }
-        $presentMonArguments = "--process_name $ProcessName.exe --output_file `"$presentMonTarget`" --v2_metrics --qpc_time --timed $DurationSeconds --terminate_after_timed --no_console_stats --set_circular_buffer_size 32768"
+        # An interrupted benchmark can leave PresentMon's global trace session
+        # alive even though its frontend process is gone. Reclaim that session
+        # explicitly so an elevated ETW run cannot silently produce no CSV.
+        $presentMonArguments = "--process_name $ProcessName.exe --output_file `"$presentMonTarget`" --v2_metrics --qpc_time --stop_existing_session --timed $DurationSeconds --terminate_after_timed --no_console_stats --set_circular_buffer_size 32768"
         $presentMonProcess = Start-Process -FilePath $presentMon -ArgumentList $presentMonArguments `
             -WindowStyle Hidden -PassThru
         Write-Host "PresentMon frame capture: $presentMonTarget"

@@ -1,7 +1,8 @@
 param(
-    [string]$Output = 'artifacts\etw\laser-route.etl',
+    [ValidateSet('LaserRelays', 'SpherePeek')][string]$Scenario = 'LaserRelays',
+    [string]$Output = '',
     [string]$RconPassword = 'p2boostlab',
-    [ValidateRange(24, 60)][int]$DurationSeconds = 25
+    [ValidateRange(23, 60)][int]$DurationSeconds = 25
 )
 
 $ErrorActionPreference = 'Stop'
@@ -9,9 +10,18 @@ $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 $capture = Join-Path $PSScriptRoot 'capture-etw.ps1'
 $rcon = Join-Path $PSScriptRoot 'invoke-rcon.ps1'
-$target = [IO.Path]::GetFullPath((Join-Path $repo $Output))
+$focusGame = Join-Path $PSScriptRoot 'set-game-foreground.ps1'
+$outputName = if ($Output) {
+    $Output
+} elseif ($Scenario -eq 'SpherePeek') {
+    'artifacts\etw\sphere-peek-route.etl'
+} else {
+    'artifacts\etw\laser-route.etl'
+}
+$target = [IO.Path]::GetFullPath((Join-Path $repo $outputName))
 $log = [IO.Path]::ChangeExtension($target, '.log')
 $errorLog = [IO.Path]::ChangeExtension($target, '.error.log')
+$game = Get-Process portal2 -ErrorAction Stop | Select-Object -First 1
 
 function Invoke-Game([string[]]$Commands) {
     return & $rcon -Password $RconPassword -ResponseTimeoutSeconds 10 -Command $Commands
@@ -30,8 +40,10 @@ function Read-Cvar([string]$Name) {
 $originalFpsMax = Read-Cvar 'fps_max'
 $originalCheats = Read-Cvar 'sv_cheats'
 
-# Start from the real spawn and prepare only the portal gun and instrumentation.
-Invoke-Game @('map sp_a2_laser_relays') | Out-Null
+# Start from the scenario's real spawn and prepare only the portal gun and
+# instrumentation. Route inputs remain collision-bound in both scenarios.
+$map = if ($Scenario -eq 'SpherePeek') { 'sp_a2_sphere_peek' } else { 'sp_a2_laser_relays' }
+Invoke-Game @("map $map") | Out-Null
 Start-Sleep -Seconds 4
 Invoke-Game @(
     'sv_cheats 1',
@@ -64,12 +76,23 @@ try {
         throw "The ETW capture did not start: $text $(Get-Content $errorLog -Raw -ErrorAction SilentlyContinue)"
     }
 
-    Invoke-Game @(
+    # ETW must observe the normal foreground scheduling/presentation path.
+    & $focusGame -ProcessId $game.Id
+
+    $actions = if ($Scenario -eq 'SpherePeek') {
+        # Enter the chamber around the panel, take the narrow twelve-tick line
+        # onto the faith plate, and retain the catapult launch and landing.
+        'hwait 30 +forward; hwait 210 -forward; hwait 210 +moveleft; ' +
+        'hwait 270 -moveleft; hwait 270 +forward; hwait 750 -forward; ' +
+        'hwait 750 +moveleft; hwait 762 -moveleft; hwait 762 +forward; ' +
+        'hwait 1230 -forward'
+    } else {
         'hwait 30 +forward; hwait 1200 -forward; ' +
         'hwait 1212 setang 0 -90 0; hwait 1218 +attack; hwait 1224 -attack; ' +
         'hwait 1254 setang 0 0 0; hwait 1260 +attack2; hwait 1266 -attack2; ' +
         'hwait 1296 setang 0 -90 0'
-    ) | Out-Null
+    }
+    Invoke-Game @($actions) | Out-Null
 
     $captureProcess.WaitForExit()
     $captureProcess.Refresh()
@@ -80,6 +103,7 @@ try {
     try {
         Invoke-Game @(
             '-forward',
+            '-moveleft',
             '-attack',
             '-attack2',
             'p2boost_enable 1',
