@@ -56,7 +56,7 @@ neutral within run-order/thermal variance (median 2.1269 ms unpatched and
 
 ## Focus and portal results
 
-The timestamped windowed native-D3D9 harness completed 30 minimize/restore/
+The original timestamped native-D3D9 harness completed 30 minimize/restore/
 portal-placement cycles. After allowing the synchronous reset to complete, the
 100 ms post-portal windows measured:
 
@@ -66,10 +66,27 @@ portal-placement cycles. After allowing the synchronous reset to complete, the
 - frames above 8.3 ms: 0.
 
 The apparent first-portal stall is therefore the preceding focus reset, not
-lazy first-portal rendering. Resource tracing measured roughly 275-317 ms in
-the material-system restore callback registry per reset. A fullscreen D3D9
-device loss genuinely requires those default-pool resources to be recreated;
-skipping or delaying the callbacks would only move the hitch or corrupt state.
+lazy first-portal rendering. In the portal-visible co-op lobby, the unpatched
+resource reacquisition averaged about 564 ms. Sampling isolated two redundant
+CPU static-lighting cache rebuilds inside that interval. With the focus
+synchronization and both scoped lighting skips enabled, three direct restores
+measured 245.36, 246.31, and 261.11 ms (250.93 ms average), a 55.5% reduction.
+A subsequent 30-cycle stability run averaged 258.75 ms, with 296.06 ms p95 and
+297.02 ms maximum. No static-lighting work appeared in the two seconds after
+the reacquisition interval, so the removed work was not deferred to the first
+portal frame.
+
+Frozen-camera before/after-focus image differences were within the temporal
+and JPEG noise of a no-focus control pair. A complete lossless fixed-tick image
+equivalence suite is still outstanding. The remaining roughly 250-280 ms is
+genuine D3D/studio-render resource recreation and driver work; p2boost does not
+skip, defer, or prewarm those callbacks.
+
+An additional 20-second portal-visible lobby throughput A/B at `fps_max 999`
+was neutral: 472.47 FPS unpatched versus 470.38 FPS patched (-0.44%). Median
+frame time was 2.0321 versus 2.0335 ms and p99 was 3.1350 versus 3.1899 ms.
+This is within the 2% throughput-regression gate and expected because the new
+hooks are inactive outside focus reacquisition.
 
 ## Gate status
 
@@ -77,6 +94,6 @@ skipping or delaying the callbacks would only move the hitch or corrupt state.
 - Co-op 1% low improvement >=35%: **not met**; no quality-neutral redundant work proven.
 - p99 <=1.25x median at 360: **not met** (1.3145), though cadence and p99 improve.
 - <=2% SP throughput regression: **met**; measured throughput improves.
-- 100 map/focus cycles and visual/state equivalence: **not yet completed**.
+- 100 map/focus cycles and lossless visual/state equivalence: **not yet completed**.
 
 No release should claim the full original acceptance plan is complete.

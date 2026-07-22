@@ -14,9 +14,7 @@ function Percentile([double[]]$Data, [double]$P) {
 $median = Percentile $values 0.5
 $p99 = Percentile $values 0.99
 $p1Fps = 1000.0 / (Percentile $values 0.99)
-$start = [double]$rows[0].CPUStartTime
-$last = $rows[-1]
-$durationSeconds = ([double]$last.CPUStartTime + [double]$last.FrameTime - $start) / 1000.0
+$durationSeconds = ($values | Measure-Object -Sum).Sum / 1000.0
 $cpuBusy = @($rows | ForEach-Object { [double]$_.CPUBusy } | Sort-Object)
 $gpuBusy = @($rows | Where-Object { $_.GPUBusy -ne 'NA' } | ForEach-Object { [double]$_.GPUBusy } | Sort-Object)
 $displayed = @($rows | Where-Object { $_.DisplayedTime -ne 'NA' } | ForEach-Object { [double]$_.DisplayedTime })

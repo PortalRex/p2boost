@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -68,13 +69,19 @@ const Module* FindModule(const std::vector<Module>& modules, std::uintptr_t addr
 }
 
 void PrintUsage() {
-    std::fputs("usage: p2profile <pid> <duration-seconds> <output.csv>\n", stderr);
+    std::fputs("usage: p2profile <pid> <duration-seconds> <output.csv> [--stack]\n"
+               "       default EIP sampling is low overhead; --stack is intrusive research mode\n", stderr);
 }
 
 } // namespace
 
 int main(int argc, char** argv) {
-    if (argc != 4) {
+    if (argc != 4 && argc != 5) {
+        PrintUsage();
+        return 2;
+    }
+    const bool stack_mode = argc == 5 && std::strcmp(argv[4], "--stack") == 0;
+    if (argc == 5 && !stack_mode) {
         PrintUsage();
         return 2;
     }
@@ -105,7 +112,7 @@ int main(int argc, char** argv) {
     LARGE_INTEGER frequency{}, begin{}, now{};
     QueryPerformanceFrequency(&frequency);
     QueryPerformanceCounter(&begin);
-    std::fputs("qpc,sample_id,depth,thread_id,module,rva,eip\n", output);
+    std::fputs("qpc,sample_id,depth,thread_id,module,rva,eip,suspend_us\n", output);
     std::uint64_t samples = 0;
     for (;;) {
         QueryPerformanceCounter(&now);
@@ -113,6 +120,8 @@ int main(int argc, char** argv) {
                                static_cast<double>(frequency.QuadPart);
         if (elapsed >= duration_seconds) break;
 
+        LARGE_INTEGER suspend_begin{}, suspend_end{};
+        QueryPerformanceCounter(&suspend_begin);
         if (SuspendThread(thread.value) != static_cast<DWORD>(-1)) {
             CONTEXT context{};
             context.ContextFlags = CONTEXT_CONTROL;
@@ -125,21 +134,34 @@ int main(int argc, char** argv) {
                 frame.AddrStack.Mode = AddrModeFlat;
                 frame.AddrFrame.Offset = context.Ebp;
                 frame.AddrFrame.Mode = AddrModeFlat;
-                for (unsigned int depth = 0; depth < 24 && frame.AddrPC.Offset; ++depth) {
+                struct CapturedFrame { std::uintptr_t address; unsigned int depth; };
+                std::vector<CapturedFrame> frames;
+                const unsigned int depth_limit = stack_mode ? 24u : 1u;
+                for (unsigned int depth = 0; depth < depth_limit && frame.AddrPC.Offset; ++depth) {
                     const auto address = static_cast<std::uintptr_t>(frame.AddrPC.Offset);
-                    const Module* module = FindModule(modules, address);
-                    std::fprintf(output, "%lld,%llu,%u,%lu,%s,0x%08llx,0x%08llx\n",
-                                 now.QuadPart, static_cast<unsigned long long>(samples), depth,
-                                 thread_id, module ? module->name.c_str() : "<unknown>",
-                                 static_cast<unsigned long long>(module ? address - module->begin : 0),
-                                 static_cast<unsigned long long>(address));
+                    frames.push_back({address, depth});
+                    if (depth + 1 >= depth_limit) break;
                     if (!StackWalk64(IMAGE_FILE_MACHINE_I386, process.value, thread.value, &frame,
                                      &context, nullptr, SymFunctionTableAccess64,
                                      SymGetModuleBase64, nullptr)) break;
                 }
+                QueryPerformanceCounter(&suspend_end);
+                ResumeThread(thread.value);
+                const double suspend_us = static_cast<double>(suspend_end.QuadPart - suspend_begin.QuadPart) *
+                                          1000000.0 / static_cast<double>(frequency.QuadPart);
+                for (const auto& captured_frame : frames) {
+                    const Module* module = FindModule(modules, captured_frame.address);
+                    std::fprintf(output, "%lld,%llu,%u,%lu,%s,0x%08llx,0x%08llx,%.3f\n",
+                                 now.QuadPart, static_cast<unsigned long long>(samples),
+                                 captured_frame.depth, thread_id,
+                                 module ? module->name.c_str() : "<unknown>",
+                                 static_cast<unsigned long long>(module ? captured_frame.address - module->begin : 0),
+                                 static_cast<unsigned long long>(captured_frame.address), suspend_us);
+                }
                 ++samples;
+            } else {
+                ResumeThread(thread.value);
             }
-            ResumeThread(thread.value);
         }
         Sleep(1);
     }

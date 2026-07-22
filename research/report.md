@@ -44,10 +44,31 @@ restores material shader objects and registered resource owners. After this
 reset settles, 30 portal placements produced no frame above 2.8055 ms. The
 portal is not lazily allocating the missing 300 ms; the D3D9 device reset is.
 
-Skipping, deferring, or prewarming this registry would violate resource
-lifetime correctness or merely move the stall. D3D9Ex would require device
-creation before a Source plugin can load, so it is not smuggled in as an
-unverified proxy or renderer replacement.
+A forced restore also produced a reproducible access violation at
+`d3d9.dll+0xefd7b` on the material-system queued-render worker. The saved
+minidump showed a stale/corrupt D3D object pointer in a shader-api draw chain.
+Portal 2's `VMaterialSystem080` slots 116 and 117 resolve to the public SDK's
+`Lock`/`Unlock` contract at RVAs `0xeab0` and `0xeba0`. p2boost validates the
+vtable targets and prologues and holds this recursive lock across focus
+resource reacquisition, preventing the worker from drawing through the device
+lifecycle transition.
+
+Exact-QPC sampling of the co-op restore interval then found repeated BSP light
+traces in `engine.dll`. Ghidra establishes that RVA `0x1ae7f0` iterates the
+static-lighting cache and calls the per-entry computation at `0x1ad1c0`; RVA
+`0x1aeae0` reinitializes its arrays before entering the same rebuild. The two
+resource callback callsites are `0xf8bb4` and `0xf3adc`. Focus changes neither
+map geometry, dynamic-light state, nor entity positions, so those CPU caches
+remain valid across this transition.
+
+p2boost intercepts only those two verified direct calls and returns early only
+while the validated focus reacquisition call is active. Every normal map,
+light, entity, and cache invalidation continues to the original target. A
+post-restore sampler found no lighting rebuild in the next two seconds, ruling
+out deferred work. The rest of the material resource registry remains intact;
+skipping or prewarming it would violate resource lifetime correctness or move
+the stall. D3D9Ex would require device creation before a Source plugin can
+load, so it is not smuggled in as an unverified proxy or renderer replacement.
 
 ## Portal and co-op findings
 
@@ -84,8 +105,8 @@ and was removed. No partial lifecycle bypass ships.
 
 ## Hook compatibility
 
-The permanent fix patches one exact engine callsite only after full module hash
-and byte-signature validation. Diagnostic callsites and renderer vtable slots
-store their previous targets. Removal restores a location only while p2boost
-still owns it, so a later hook owner is never overwritten. The pacing target is
-outside SAR's client timing hooks, and SAR 1.15.3 was present during A/B tests.
+Permanent fixes patch exact engine/shader callsites only after full module-hash
+and byte-signature validation. Renderer diagnostic vtable hooks store their
+previous targets. Removal restores a location only while p2boost still owns
+it, so a later hook owner is never overwritten. The targets are outside SAR's
+public client timing hooks, and SAR 1.15.3 was present during A/B tests.

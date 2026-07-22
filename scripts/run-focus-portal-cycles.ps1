@@ -9,26 +9,10 @@ param(
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 $presentMon = Join-Path $repo '.tools\downloads\PresentMon.exe'
+$rcon = Join-Path $PSScriptRoot 'invoke-rcon.ps1'
 $outputPath = [IO.Path]::GetFullPath((Join-Path $repo $Output))
 $eventPath = [IO.Path]::ChangeExtension($outputPath, '.events.csv')
 New-Item -ItemType Directory -Force (Split-Path $outputPath) | Out-Null
-Add-Type -TypeDefinition @'
-using System;
-using System.Runtime.InteropServices;
-public static class P2BoostFocusCycle {
-    [DllImport("user32.dll")] public static extern bool ShowWindowAsync(IntPtr window, int command);
-    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr window);
-}
-'@
-$focusSink = $null
-if ($FocusMode -eq 'AltTab') {
-    Add-Type -AssemblyName System.Windows.Forms
-    $focusSink = [Windows.Forms.Form]::new()
-    $focusSink.Text = 'p2boost focus-cycle target'
-    $focusSink.ShowInTaskbar = $false
-    $focusSink.Size = [Drawing.Size]::new(160, 80)
-    $focusSink.Show()
-}
 function Get-GameProcess {
     $process = Get-Process portal2 -ErrorAction Stop |
         Where-Object { $_.MainWindowHandle -ne [IntPtr]::Zero } | Select-Object -First 1
@@ -39,51 +23,39 @@ $gameProcess = Get-GameProcess
 $listener = Get-NetTCPConnection -OwningProcess $gameProcess.Id -State Listen -ErrorAction Stop |
     Where-Object { $_.LocalPort -eq 27015 } | Select-Object -First 1
 if (-not $listener) { throw 'Launch Portal 2 with -usercon and a non-empty rcon_password.' }
-if ($TraceP2Boost) {
-    & (Join-Path $PSScriptRoot 'invoke-rcon.ps1') -ProcessId $gameProcess.Id `
-        -Password $RconPassword -Command @('p2boost_trace 1') | Out-Null
-}
-
 $duration = [Math]::Max(30, [int]($Cycles * 1.5 + 8))
 $arguments = @(
     '--process_name', 'portal2.exe', '--output_file', $outputPath, '--v2_metrics',
     '--qpc_time', '--timed', $duration, '--terminate_after_timed',
     '--no_console_stats', '--set_circular_buffer_size', '32768'
 )
-$capture = Start-Process -FilePath $presentMon -ArgumentList $arguments `
-    -WorkingDirectory $repo -WindowStyle Hidden -PassThru
-$events = [Collections.Generic.List[object]]::new()
-Start-Sleep -Seconds 2
-for ($index = 0; $index -lt $Cycles; ++$index) {
-    $window = (Get-GameProcess).MainWindowHandle
-    if ($FocusMode -eq 'Minimize') {
-        [P2BoostFocusCycle]::ShowWindowAsync($window, 6) | Out-Null
-    } else {
-        [P2BoostFocusCycle]::SetForegroundWindow($focusSink.Handle) | Out-Null
-    }
-    Start-Sleep -Milliseconds 250
-    if ($FocusMode -eq 'Minimize') {
-        [P2BoostFocusCycle]::ShowWindowAsync($window, 9) | Out-Null
-    }
-    [P2BoostFocusCycle]::SetForegroundWindow($window) | Out-Null
-    $restoreQpc = [Diagnostics.Stopwatch]::GetTimestamp()
-    # Let focus/device reacquisition finish so the measured hitch is caused by
-    # the first portal work, not by the expected minimized/restored frame.
-    Start-Sleep -Milliseconds 750
-    $portal = $index % 2
-    $x = if ($portal -eq 0) { -1000 } else { -900 }
-    $portalQpc = [Diagnostics.Stopwatch]::GetTimestamp()
-    & (Join-Path $PSScriptRoot 'invoke-rcon.ps1') -ProcessId $gameProcess.Id `
-        -Password $RconPassword -Command @("portal_place 0 $portal $x 0 -271 -90 0 0") | Out-Null
-    $events.Add([pscustomobject]@{ cycle=$index; restore_qpc=$restoreQpc; portal_qpc=$portalQpc; portal=$portal })
-    Start-Sleep -Milliseconds 450
+$actionScript = Join-Path $PSScriptRoot 'invoke-focus-portal-actions.ps1'
+$actionArgs = "-NoProfile -ExecutionPolicy Bypass -File `"$actionScript`" -ProcessId $($gameProcess.Id) -Cycles $Cycles -EventPath `"$eventPath`" -FocusMode $FocusMode -RconPassword `"$RconPassword`""
+if ($TraceP2Boost) { $actionArgs += ' -TraceP2Boost' }
+$actions = Start-Process powershell.exe -ArgumentList $actionArgs -WindowStyle Hidden -PassThru `
+    -RedirectStandardOutput "$eventPath.out.txt" -RedirectStandardError "$eventPath.err.txt"
+& $presentMon @arguments
+$presentExit = $LASTEXITCODE
+$actions.WaitForExit()
+$actions.Refresh()
+if ($actions.ExitCode -ne 0) {
+    $errorText = Get-Content "$eventPath.err.txt" -Raw -ErrorAction SilentlyContinue
+    throw "focus action helper exited with $($actions.ExitCode): $errorText"
 }
-$events | Export-Csv -LiteralPath $eventPath -NoTypeInformation
-if ($TraceP2Boost) {
-    & (Join-Path $PSScriptRoot 'invoke-rcon.ps1') -ProcessId $gameProcess.Id `
-        -Password $RconPassword -Command @('p2boost_dump_metrics', 'p2boost_trace 0') | Out-Null
+if ($presentExit -ne 0) { throw "PresentMon exited with $presentExit" }
+$events = @(Import-Csv -LiteralPath $eventPath)
+$frames = @(Import-Csv -LiteralPath $outputPath)
+if ($events.Count -ne $Cycles) {
+    throw "Focus helper recorded $($events.Count) of $Cycles requested cycles."
 }
-$capture.WaitForExit()
-if ($focusSink) { $focusSink.Dispose() }
-if ($capture.ExitCode -ne 0) { throw "PresentMon exited with $($capture.ExitCode)" }
+if (-not $frames.Count -or -not ($frames[0].PSObject.Properties.Name -contains 'CPUStartQPC')) {
+    throw 'PresentMon produced no usable QPC-timestamped frames.'
+}
+$firstFrameQpc = [double]$frames[0].CPUStartQPC
+$lastFrameQpc = [double]$frames[-1].CPUStartQPC
+$firstPortalQpc = [double]$events[0].portal_qpc
+$lastPortalEndQpc = [double]$events[-1].portal_qpc + 0.1 * [Diagnostics.Stopwatch]::Frequency
+if ($firstFrameQpc -gt $firstPortalQpc -or $lastFrameQpc -lt $lastPortalEndQpc) {
+    throw "PresentMon did not overlap the action window (frames $firstFrameQpc..$lastFrameQpc; events $firstPortalQpc..$lastPortalEndQpc). Run this script from an elevated PowerShell session."
+}
 Write-Host "Completed $Cycles timestamped focus/portal cycles: $outputPath"

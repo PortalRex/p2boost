@@ -23,6 +23,9 @@ $results = foreach ($event in $events) {
     }
 }
 $valid = @($results | Where-Object { -not [double]::IsNaN($_.MaxMs) })
+if ($valid.Count -ne $events.Count) {
+    throw "Only $($valid.Count) of $($events.Count) event windows overlap captured PresentMon frames."
+}
 $sorted = @($valid.MaxMs | Sort-Object)
 function Percentile([double[]]$values, [double]$p) {
     if (-not $values.Count) { return [double]::NaN }

@@ -2,6 +2,8 @@
 
 #include "hook.hpp"
 
+#include <atomic>
+
 namespace p2boost {
 class Metrics;
 
@@ -11,6 +13,12 @@ public:
     bool Install(Metrics* metrics);
     void Remove();
     bool Installed() const noexcept { return needs_reset_.Installed() && other_app_.Installed(); }
+    void SetFixEnabled(bool enabled) noexcept { fix_enabled_.store(enabled); }
+    bool FocusSyncAvailable() const noexcept { return material_lock_ && material_unlock_; }
+    bool StaticLightingFixAvailable() const noexcept {
+        return lighting_restore_.Installed() && lighting_cache_restore_.Installed();
+    }
+    unsigned int StaticLightingSkips() const noexcept { return lighting_skips_.load(); }
 
 private:
     static void __fastcall ReacquireHook(void* self, void*, unsigned char release, unsigned char restore,
@@ -18,18 +26,32 @@ private:
     using ReacquireFn = void(__thiscall*)(void*, unsigned char, unsigned char, const char*);
     using NoArgsFn = void(__thiscall*)(void*);
     using ResourceCallbacksFn = void(__thiscall*)(void*, void*, int);
+    using MaterialLockFn = void* (__thiscall*)(void*);
+    using MaterialUnlockFn = void(__thiscall*)(void*, void*);
     static void __fastcall ShaderDeviceHook(void* self, void*);
     static void __fastcall FrameSyncHook(void* self, void*);
     static void __fastcall ResourceCallbacksHook(void* self, void*, void* callback, int context);
+    static void __cdecl StaticLightingRestoreHook();
+    static void __cdecl StaticLightingCacheRestoreHook();
     static double NowMilliseconds() noexcept;
     static RendererTrace* instance_;
     CallSitePatch needs_reset_;
     CallSitePatch other_app_;
+    CallSitePatch lighting_restore_;
+    CallSitePatch lighting_cache_restore_;
     VtableSlotHook shader_device_;
     VtableSlotHook frame_sync_;
     VtableSlotHook resource_callbacks_;
     ReacquireFn original_ = nullptr;
+    using StaticLightingRestoreFn = void(__cdecl*)();
+    StaticLightingRestoreFn lighting_original_ = nullptr;
+    StaticLightingRestoreFn lighting_cache_original_ = nullptr;
     Metrics* metrics_ = nullptr;
-    unsigned int reacquire_depth_ = 0;
+    std::atomic_uint reacquire_depth_{0};
+    void* material_system_ = nullptr;
+    MaterialLockFn material_lock_ = nullptr;
+    MaterialUnlockFn material_unlock_ = nullptr;
+    std::atomic_bool fix_enabled_{false};
+    std::atomic_uint lighting_skips_{0};
 };
 } // namespace p2boost

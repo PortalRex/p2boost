@@ -3,6 +3,7 @@ param(
     [int]$DurationSeconds = 60,
     [int]$FpsMax = 999,
     [int]$ProcessId = 0,
+    [switch]$SetupOnly,
     [string]$GameRoot = 'D:\SteamLibrary\steamapps\common\Portal 2'
 )
 $ErrorActionPreference = 'Stop'
@@ -40,6 +41,7 @@ try {
     } until ((Get-Date) -ge $deadline)
     if ($status -notmatch '(?m)^2 users\s*$') { throw 'Local split-screen did not reach two active players.' }
 
+    $jpegIssued = Get-Date
     Invoke-Game @(
         'sv_cheats 1',
         "fps_max $FpsMax",
@@ -66,8 +68,14 @@ try {
     ) | Out-Null
     Start-Sleep -Seconds 2
 
-    $shot = Get-ChildItem (Join-Path $GameRoot 'portal2\screenshots') -Filter 'mp_coop_lobby_2*.jpg' |
-        Sort-Object LastWriteTime | Select-Object -Last 1
+    $shotDeadline = (Get-Date).AddSeconds(5)
+    do {
+        $shot = Get-ChildItem (Join-Path $GameRoot 'portal2\screenshots') -Filter 'mp_coop_lobby_2*.jpg' |
+            Where-Object { $_.Length -gt 0 -and $_.LastWriteTime -ge $jpegIssued.AddSeconds(-1) } |
+            Sort-Object LastWriteTime | Select-Object -Last 1
+        if ($shot) { break }
+        Start-Sleep -Milliseconds 100
+    } until ((Get-Date) -ge $shotDeadline)
     if (-not $shot) { throw 'Lobby proof screenshot was not written.' }
     Copy-Item -LiteralPath $shot.FullName -Destination "$prefix-proof.jpg" -Force
 
@@ -75,6 +83,21 @@ try {
     if ($runtime -notmatch 'supported=1' -or $runtime -notmatch 'native_d3d9=1') {
         throw "p2boost runtime verification failed: $runtime"
     }
+    if ($SetupOnly) {
+        Write-Host "Lobby portal scene ready: pid=$($process.Id) proof=$prefix-proof.jpg"
+        return
+    }
+    Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+public static class P2BoostLobbyForeground {
+    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr window, int command);
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr window);
+}
+'@
+    [P2BoostLobbyForeground]::ShowWindow($process.MainWindowHandle, 9) | Out-Null
+    [P2BoostLobbyForeground]::SetForegroundWindow($process.MainWindowHandle) | Out-Null
+    Start-Sleep -Milliseconds 500
     Invoke-Game @('p2boost_enable 0') | Out-Null
     & $capture -Output "$prefix-unpatched.csv" -DurationSeconds $DurationSeconds
     Invoke-Game @('p2boost_enable 1') | Out-Null

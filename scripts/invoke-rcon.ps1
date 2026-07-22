@@ -1,7 +1,8 @@
 param(
     [Parameter(Mandatory)][string[]]$Command,
     [string]$Password = 'p2boostlab',
-    [int]$ProcessId = 0
+    [int]$ProcessId = 0,
+    [ValidateRange(1,30)][int]$ResponseTimeoutSeconds = 5
 )
 $ErrorActionPreference = 'Stop'
 $process = if ($ProcessId) { Get-Process -Id $ProcessId -ErrorAction Stop } else {
@@ -45,7 +46,8 @@ try {
         $text = [Text.StringBuilder]::new()
         $received = $false
         $quietSince = $null
-        $deadline = [Diagnostics.Stopwatch]::GetTimestamp() + [Diagnostics.Stopwatch]::Frequency
+        $deadline = [Diagnostics.Stopwatch]::GetTimestamp() +
+            [Diagnostics.Stopwatch]::Frequency * $ResponseTimeoutSeconds
         while ([Diagnostics.Stopwatch]::GetTimestamp() -lt $deadline) {
             if ($stream.DataAvailable) {
                 $reply = Read-Packet

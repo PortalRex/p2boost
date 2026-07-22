@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(p2boost VERSION 0.3.0 LANGUAGES CXX)
+project(p2boost VERSION 0.4.0 LANGUAGES CXX)
 
 if(NOT WIN32)
   message(FATAL_ERROR "p2boost currently targets Portal 2 for Windows")

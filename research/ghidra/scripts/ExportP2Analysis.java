@@ -78,7 +78,9 @@ public class ExportP2Analysis extends GhidraScript {
                 0x100c0840L, 0x100e70b0L, 0x101b41f0L, 0x100da870L,
                 0x100e6dd0L, 0x100e4120L, 0x1006f4c0L, 0x10122fa0L,
                 0x100ea960L, 0x10127b60L, 0x10127380L, 0x100dd330L,
-                0x100ea5b0L
+                0x100ea5b0L, 0x100dc590L, 0x100dbd20L, 0x1015bff0L,
+                0x100f8b30L, 0x101a9460L, 0x101a9ad0L, 0x101ad1c0L,
+                0x101ae7f0L, 0x100dc8a0L
             };
             for (long address : profileTargets) addFunctionAndCallers(targets, address, 1);
         }
@@ -88,12 +90,24 @@ public class ExportP2Analysis extends GhidraScript {
             addFunctionAndCallers(targets, 0x10024690L, 2);
             addFunctionAndCallers(targets, 0x10004b80L, 1);
             addFunctionAndCallers(targets, 0x10004320L, 1);
+            // Focus-restore crash 2026-07-22: renderer worker stack leading to
+            // d3d9.dll+0xefd7b while dereferencing a stale shader resource.
+            long[] focusCrashTargets = {
+                0x1000a720L, 0x1001edb0L, 0x1001eaa0L, 0x100082b0L,
+                0x10026ed0L, 0x1000b0e0L, 0x1000d420L
+            };
+            for (long address : focusCrashTargets) addFunctionAndCallers(targets, address, 1);
         }
         if (base.equalsIgnoreCase("materialsystem.dll")) {
             addFunctionAndCallers(targets, 0x10011230L, 2);
             addFunctionAndCallers(targets, 0x10027610L, 1);
             addFunctionAndCallers(targets, 0x1001bd70L, 1);
             addFunctionAndCallers(targets, 0x10013980L, 1);
+            long[] focusCrashTargets = {
+                0x1003ac30L, 0x1003b340L, 0x10003ea0L,
+                0x10025080L, 0x1000f3f0L, 0x10024ed0L
+            };
+            for (long address : focusCrashTargets) addFunctionAndCallers(targets, address, 1);
         }
         if (base.equalsIgnoreCase("client.dll")) {
             addFunctionAndCallers(targets, 0x101ee590L, 2);

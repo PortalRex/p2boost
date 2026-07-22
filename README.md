@@ -1,10 +1,10 @@
 # p2boost
 
 p2boost is an experimental, open-source, native-Direct3D-9 x86 Source plugin
-for Portal 2 Windows build `23973718`. It currently contains one measured,
-reversible frame-pacing correction and the research/test infrastructure needed
-to investigate the portal-reset and co-op paths without replacing game DLLs,
-forcing cvars, reducing quality, or using Vulkan/DXVK.
+for Portal 2 Windows build `23973718`. It contains measured, reversible
+frame-pacing and focus-restore corrections plus research/test infrastructure
+for the portal and co-op paths. It does not replace game DLLs, force cvars,
+reduce quality, or use Vulkan/DXVK.
 
 This repository is deliberately fail-closed. The DLL hashes the five relevant
 game binaries and validates the exact instruction/import signature before it
@@ -20,10 +20,14 @@ Only overshoot below 10% of one frame is carried; renderer-heavy frames and
 real hitches are reset normally, so the patch cannot create catch-up bursts.
 `fps_max`, VSync, fullscreen, and refresh policy remain engine-owned.
 
-The focus reset and co-op renderer paths are instrumented but not modified
-because the current evidence does not support a safe quality-neutral removal.
-See [research/report.md](research/report.md) and
-[benchmarks/report.md](benchmarks/report.md).
+On focus restore, p2boost serializes the material system across the resource
+reacquisition call to prevent the queued-render race observed in a native-D3D9
+crash. During that exact call only, it suppresses two CPU static-lighting cache
+rebuilds that focus cannot invalidate. Normal map, entity, and lighting cache
+invalidation paths still call the original routines. In the co-op lobby this
+cut measured synchronous reacquisition from about 564 ms to 251 ms. The
+remaining D3D9 resource recreation cost is real and is not hidden or moved.
+See [research/report.md](research/report.md) and [benchmarks/report.md](benchmarks/report.md).
 
 ## Build and install
 
@@ -69,10 +73,10 @@ saves a proof screenshot, runs patched/unpatched captures, and restores the
 user's original `fps_max` and `sv_cheats` values.
 
 `p2profile.exe` is a research-only x86 user-mode sampler for systems where
-kernel ETW collection is unavailable without elevation. It records the main
-thread's module-relative instruction pointers and call stacks for correlation
-with the Ghidra exports; it is not loaded into the game and is not part of the
-runtime patch.
+kernel ETW collection is unavailable without elevation. Its default mode
+records low-overhead main-thread instruction pointers. Explicit `--stack` mode
+walks call stacks and is intrusive enough to invalidate timing measurements;
+it is only for call-path research. The profiler is never loaded into the game.
 
 Every push and pull request is built, tested, packaged, and uploaded by GitHub
 Actions. Pushes to the default branch also update the rolling `nightly`
