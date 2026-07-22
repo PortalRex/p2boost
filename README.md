@@ -72,6 +72,11 @@ lobby, equips them, places a linked portal pair, restores fixed camera poses,
 saves a proof screenshot, runs patched/unpatched captures, and restores the
 user's original `fps_max` and `sv_cheats` values.
 
+Interactive benchmark defaults are intentionally short: 10-second A/B
+captures and 5 focus/portal cycles. Release-gate reproduction must pass
+`-DurationSeconds 60` or `-Cycles 30` explicitly; shortening the smoke defaults
+does not change the published acceptance methodology.
+
 `p2profile.exe` is a research-only x86 user-mode sampler for systems where
 kernel ETW collection is unavailable without elevation. Its default mode
 records low-overhead main-thread instruction pointers. Explicit `--stack` mode

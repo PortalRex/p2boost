@@ -2,7 +2,7 @@ param(
     [string]$GameRoot = 'D:\SteamLibrary\steamapps\common\Portal 2',
     [string]$Output = 'artifacts\benchmarks\focus-portal.csv',
     [string]$RconPassword = 'p2boostlab',
-    [int]$Cycles = 30,
+    [ValidateRange(1,1000)][int]$Cycles = 5,
     [ValidateSet('AltTab','Minimize')][string]$FocusMode = 'AltTab',
     [switch]$TraceP2Boost
 )
@@ -23,7 +23,7 @@ $gameProcess = Get-GameProcess
 $listener = Get-NetTCPConnection -OwningProcess $gameProcess.Id -State Listen -ErrorAction Stop |
     Where-Object { $_.LocalPort -eq 27015 } | Select-Object -First 1
 if (-not $listener) { throw 'Launch Portal 2 with -usercon and a non-empty rcon_password.' }
-$duration = [Math]::Max(30, [int]($Cycles * 1.5 + 8))
+$duration = [Math]::Max(10, [int]($Cycles * 1.5 + 5))
 $arguments = @(
     '--process_name', 'portal2.exe', '--output_file', $outputPath, '--v2_metrics',
     '--qpc_time', '--timed', $duration, '--terminate_after_timed',

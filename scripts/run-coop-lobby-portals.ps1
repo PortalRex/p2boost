@@ -1,8 +1,9 @@
 param(
     [string]$OutputPrefix = 'artifacts\benchmarks\coop-lobby-portals',
-    [int]$DurationSeconds = 60,
+    [ValidateRange(5,600)][int]$DurationSeconds = 10,
     [int]$FpsMax = 999,
     [int]$ProcessId = 0,
+    [string]$RconPassword = 'p2boostlab',
     [switch]$SetupOnly,
     [string]$GameRoot = 'D:\SteamLibrary\steamapps\common\Portal 2'
 )
@@ -17,7 +18,7 @@ $prefix = [IO.Path]::GetFullPath((Join-Path $repo $OutputPrefix))
 New-Item -ItemType Directory -Force (Split-Path $prefix) | Out-Null
 
 function Invoke-Game([string[]]$Commands) {
-    & $rcon -ProcessId $process.Id -Command $Commands
+    & $rcon -ProcessId $process.Id -Password $RconPassword -Command $Commands
 }
 function Read-Cvar([string]$Name) {
     $text = (Invoke-Game @($Name) | Out-String)
@@ -29,17 +30,20 @@ function Read-Cvar([string]$Name) {
 $originalFpsMax = Read-Cvar 'fps_max'
 $originalCheats = Read-Cvar 'sv_cheats'
 try {
-    Invoke-Game @('disconnect') | Out-Null
-    Start-Sleep -Seconds 2
-    Invoke-Game @('ss_map mp_coop_lobby_2') | Out-Null
-    Start-Sleep -Seconds 6
+    $session = Invoke-Game @('users', 'status') | Out-String
+    if ($session -notmatch '(?m)^2 users\s*$' -or $session -notmatch 'map\s+:\s+mp_coop_lobby_2') {
+        Invoke-Game @('ss_map mp_coop_lobby_2') | Out-Null
+        Start-Sleep -Seconds 6
+    }
     $deadline = (Get-Date).AddSeconds(30)
     do {
-        $status = Invoke-Game @('users') | Out-String
-        if ($status -match '(?m)^2 users\s*$') { break }
+        $status = Invoke-Game @('users', 'status') | Out-String
+        if ($status -match '(?m)^2 users\s*$' -and $status -match 'map\s+:\s+mp_coop_lobby_2') { break }
         Start-Sleep -Seconds 1
     } until ((Get-Date) -ge $deadline)
-    if ($status -notmatch '(?m)^2 users\s*$') { throw 'Local split-screen did not reach two active players.' }
+    if ($status -notmatch '(?m)^2 users\s*$' -or $status -notmatch 'map\s+:\s+mp_coop_lobby_2') {
+        throw 'Local split-screen lobby did not reach two active players.'
+    }
 
     $jpegIssued = Get-Date
     Invoke-Game @(
@@ -104,7 +108,7 @@ public static class P2BoostLobbyForeground {
     & $capture -Output "$prefix-patched.csv" -DurationSeconds $DurationSeconds
 
     Invoke-Game @('p2boost_trace 1') | Out-Null
-    Start-Sleep -Seconds 5
+    Start-Sleep -Seconds 2
     Invoke-Game @('p2boost_dump_metrics', 'p2boost_trace 0') | Out-Null
     Copy-Item -LiteralPath (Join-Path $GameRoot 'p2boost_metrics.csv') `
         -Destination "$prefix-metrics.csv" -Force

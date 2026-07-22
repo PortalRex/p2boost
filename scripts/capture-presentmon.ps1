@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory)][string]$Output,
-    [int]$DurationSeconds = 60,
+    [ValidateRange(5,600)][int]$DurationSeconds = 10,
     [string]$ProcessName = 'portal2.exe'
 )
 $ErrorActionPreference = 'Stop'

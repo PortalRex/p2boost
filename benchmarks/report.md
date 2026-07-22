@@ -88,6 +88,13 @@ frame time was 2.0321 versus 2.0335 ms and p99 was 3.1350 versus 3.1899 ms.
 This is within the 2% throughput-regression gate and expected because the new
 hooks are inactive outside focus reacquisition.
 
+The final v0.4.0 binary received another portal-visible 20-second smoke A/B
+after packaging changes. It measured 467.02 FPS unpatched and 466.18 FPS
+patched (-0.18%). Patched p99 improved from 3.3256 to 3.2363 ms, 1% low from
+300.70 to 308.99 FPS, and display repeats from 0.45% to 0.19%. A single
+8.4888 ms patched frame remains; this result confirms no throughput regression
+but does not claim that ordinary steady-state hitches are solved.
+
 ## Gate status
 
 - Post-focus portal frame <=8.3 ms: **met** in 30 valid timestamped cycles.

@@ -16,8 +16,10 @@ concurrency:
 
 jobs:
   build:
-    runs-on: windows-latest
-    timeout-minutes: 20
+    # Portal 2 is an x86 VS 2022 target. windows-latest moved to the VS 2026
+    # image in June 2026 and no longer provides CMake's VS 17 generator.
+    runs-on: windows-2022
+    timeout-minutes: 10
 
     steps:
       - name: Check out source
