@@ -72,13 +72,21 @@ public class ExportP2Analysis extends GhidraScript {
         DataIterator data = currentProgram.getListing().getDefinedData(true);
         while (data.hasNext()) {
             Data item = data.next();
-            Object itemValue = item.getValue();
-            if (!(itemValue instanceof String) || !value.equals(itemValue)) continue;
-            for (Reference reference : getReferencesTo(item.getAddress())) {
-                Function function = containingFunction(reference.getFromAddress());
-                if (function != null) {
-                    addFunctionAndCallers(targets, function.getEntryPoint().getOffset(), depth);
-                }
+            if (!item.hasStringValue() || !value.equals(String.valueOf(item.getValue()))) continue;
+            addFunctionsReferencingAddress(targets, item.getAddress(), depth, 2, new HashSet<Address>());
+        }
+    }
+
+    private void addFunctionsReferencingAddress(Set<Function> targets, Address address, int depth,
+                                                 int indirections, Set<Address> visited) {
+        if (!visited.add(address)) return;
+        for (Reference reference : getReferencesTo(address)) {
+            Function function = containingFunction(reference.getFromAddress());
+            if (function != null) {
+                addFunctionAndCallers(targets, function.getEntryPoint().getOffset(), depth);
+            } else if (indirections > 0) {
+                addFunctionsReferencingAddress(targets, reference.getFromAddress(), depth,
+                                                indirections - 1, visited);
             }
         }
     }
@@ -128,6 +136,24 @@ public class ExportP2Analysis extends GhidraScript {
                 0x10024ae8L, 0x1002637bL, 0x1002649bL, 0x1001a31dL
             };
             for (long address : steadyRenderTargets) addFunctionAndCallers(targets, address, 1);
+            long[] dynamicBufferTargets = {
+                // Functions which update the dynamic-vertex/index counters. These are
+                // explicit because the counter labels are reached through pointer
+                // indirection that Ghidra's string-reference pass does not always follow.
+                0x10008cf0L, 0x10008f60L, 0x100090b0L, 0x100093d0L,
+                // D3D9 allocation plus the vertex/index Lock entry paths.
+                0x10005a90L, 0x10005b40L, 0x10009160L, 0x1000ad90L
+            };
+            for (long address : dynamicBufferTargets) addFunctionAndCallers(targets, address, 2);
+            long[] hardwareSyncTargets = {
+                // Queued render-context slot 219 reaches +0x14a50; its two query
+                // helpers are the deterministic Trust Fling hitch path.
+                0x10014a50L, 0x1000ed60L, 0x1000eeb0L
+            };
+            for (long address : hardwareSyncTargets) addFunctionAndCallers(targets, address, 2);
+            addFunctionsReferencingString(targets, "CMeshMgr::DiscardVertexBuffers", 2);
+            addFunctionsReferencingString(targets, "TexGroup_global_Dynamic_Verts", 2);
+            addFunctionsReferencingString(targets, "TexGroup_global_Dynamic_Indices", 2);
         }
         if (base.equalsIgnoreCase("materialsystem.dll")) {
             addFunctionAndCallers(targets, 0x10011230L, 2);
@@ -144,6 +170,21 @@ public class ExportP2Analysis extends GhidraScript {
                 0x1002f92aL, 0x10044e8fL, 0x10088798L, 0x1004c091L
             };
             for (long address : steadyRenderTargets) addFunctionAndCallers(targets, address, 1);
+            long[] threadedEndFrameTargets = {
+                // CMaterialSystem::EndFrame, its queued render worker, command-buffer
+                // execution/copy/reset, and the thread-pool wait exposed by VProf.
+                // The final six addresses cover the queued ForceHardwareSync and
+                // Present dispatch thunks plus their concrete render-context targets.
+                0x10012a70L, 0x1000f3f0L, 0x10025080L, 0x10024030L,
+                0x100236a0L, 0x100235f0L, 0x10023ee0L, 0x10024a90L, 0x1000aeb0L,
+                0x1000cef0L, 0x1000ce10L, 0x10010a10L, 0x1000eeb0L,
+                0x10013c60L, 0x10013d00L, 0x1000cfc0L,
+                0x1002e980L, 0x10029fc0L, 0x100394e0L
+            };
+            for (long address : threadedEndFrameTargets) addFunctionAndCallers(targets, address, 2);
+            addFunctionsReferencingString(targets, "mat_bufferprimitives", 2);
+            addFunctionsReferencingString(targets,
+                "%d calls queued for %d bytes in parameters and overhead, %d bytes verts, %d bytes indices, %d bytes other\n", 2);
         }
         if (base.equalsIgnoreCase("filesystem_stdio.dll")) {
             long[] steadyReadTargets = {

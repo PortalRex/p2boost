@@ -79,4 +79,56 @@ bool CallSitePatch::Remove() {
     return true;
 }
 
+PointerImmediatePatch::~PointerImmediatePatch() { Remove(); }
+
+bool PointerImmediatePatch::Install(void* address, const std::vector<std::uint8_t>& expected,
+                                    size_t pointer_offset, void* replacement) {
+    if (installed_ || !address || !replacement ||
+        pointer_offset + sizeof(std::uint32_t) > expected.size()) return false;
+    const auto replacement_value = reinterpret_cast<std::uintptr_t>(replacement);
+    if (replacement_value > UINT32_MAX) return false;
+    address_ = static_cast<std::uint8_t*>(address);
+    if (std::memcmp(address_, expected.data(), expected.size()) != 0) {
+        address_ = nullptr;
+        return false;
+    }
+    original_ = expected;
+    patched_ = expected;
+    std::uint32_t previous_value = 0;
+    std::memcpy(&previous_value, original_.data() + pointer_offset, sizeof(previous_value));
+    previous_ = reinterpret_cast<void*>(static_cast<std::uintptr_t>(previous_value));
+    const auto replacement32 = static_cast<std::uint32_t>(replacement_value);
+    std::memcpy(patched_.data() + pointer_offset, &replacement32, sizeof(replacement32));
+    DWORD old_protect = 0;
+    if (!VirtualProtect(address_, patched_.size(), PAGE_EXECUTE_READWRITE, &old_protect)) {
+        address_ = nullptr;
+        previous_ = nullptr;
+        return false;
+    }
+    std::memcpy(address_, patched_.data(), patched_.size());
+    FlushInstructionCache(GetCurrentProcess(), address_, patched_.size());
+    DWORD ignored = 0;
+    VirtualProtect(address_, patched_.size(), old_protect, &ignored);
+    installed_ = true;
+    return true;
+}
+
+bool PointerImmediatePatch::Remove() {
+    if (!installed_) return true;
+    if (std::memcmp(address_, patched_.data(), patched_.size()) != 0) {
+        installed_ = false;
+        return false;
+    }
+    DWORD old_protect = 0;
+    if (!VirtualProtect(address_, original_.size(), PAGE_EXECUTE_READWRITE, &old_protect)) return false;
+    std::memcpy(address_, original_.data(), original_.size());
+    FlushInstructionCache(GetCurrentProcess(), address_, original_.size());
+    DWORD ignored = 0;
+    VirtualProtect(address_, original_.size(), old_protect, &ignored);
+    installed_ = false;
+    address_ = nullptr;
+    previous_ = nullptr;
+    return true;
+}
+
 } // namespace p2boost

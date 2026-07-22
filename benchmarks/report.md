@@ -83,8 +83,28 @@ The packaged v0.5.0 build received a final five-second smoke A/B after its
 cache storage was reduced to observed handles only. It measured 392.73 versus
 518.62 FPS (+32.1%), 1% low 283.94 versus 350.25 FPS (+23.4%), and p99 3.5219
 versus 2.8551 ms. The patched maximum was 3.8876 ms with no frame above 8.3 ms.
-Both SAR→p2boost and p2boost→SAR runtime load orders retained a validated
+Both SAR-to-p2boost and p2boost-to-SAR runtime load orders retained a validated
 shadow-cache hook and native-D3D9 status.
+
+## Short real-gameplay coverage
+
+Fresh-process playback of the 40.9-second `sp_a2_trust_fling` demo exercises
+movement, portal placement and traversal rather than a fixed camera. At
+`fps_max 999`, v0.5.0 measured 944.29 average FPS, 624.41 1% low FPS, and
+1.6015 ms p99, versus 900.39 FPS, 586.96 FPS, and 1.7037 ms unpatched. This is
+a 4.9% throughput gain and 6.0% p99 reduction. Both variants retained a
+roughly 12.4 ms deterministic maximum, which triggered the queued-render
+investigation documented in the research report; the residual fence hitch is
+not represented as fixed.
+
+After reducing that investigation to its low-overhead trace hooks, three
+10-second patched smoke captures covered Trust Fling, co-op repulsion-gel
+gameplay, and co-op tractor-beam gameplay. They respectively recorded 9,157,
+9,597, and 9,695 presented frames. Their maximum frame times were 4.5652,
+3.4945, and 3.8973 ms, with no frame above 8.3 ms. These short runs validate
+the packaged hook lifecycle across more varied gameplay; they are not used as
+an A/B performance claim because demo segments and transient state were not
+identical across those three scenarios.
 
 ## Focus and portal results
 

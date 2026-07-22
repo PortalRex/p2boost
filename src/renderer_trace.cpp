@@ -24,6 +24,7 @@ bool RendererTrace::Install(Metrics* metrics) {
     auto* module = reinterpret_cast<std::uint8_t*>(GetModuleHandleW(L"shaderapidx9.dll"));
     if (!module) return false;
     auto* material_module = reinterpret_cast<std::uint8_t*>(GetModuleHandleW(L"materialsystem.dll"));
+    if (!material_module) return false;
     if (material_module) {
         using CreateInterfaceFn = void* (__cdecl*)(const char*, int*);
         auto factory = reinterpret_cast<CreateInterfaceFn>(GetProcAddress(
@@ -79,6 +80,11 @@ bool RendererTrace::Install(Metrics* metrics) {
         (reinterpret_cast<std::intptr_t>(engine_module + 0xf3adc) + 5));
     std::memcpy(lighting_cache_call.data() + 1, &lighting_cache_displacement,
                 sizeof(lighting_cache_displacement));
+    std::vector<std::uint8_t> render_worker_pointer{0xb8, 0, 0, 0, 0};
+    const auto render_worker_original = static_cast<std::uint32_t>(
+        reinterpret_cast<std::uintptr_t>(material_module + 0xf3f0));
+    std::memcpy(render_worker_pointer.data() + 1, &render_worker_original,
+                sizeof(render_worker_original));
     if (!needs_reset_.Install(module + 0x247f7, expected_call(0x247f7), reinterpret_cast<void*>(&ReacquireHook)) ||
         !other_app_.Install(module + 0x2484b, expected_call(0x2484b), reinterpret_cast<void*>(&ReacquireHook)) ||
         !lighting_restore_.Install(engine_module + 0xf8bb4, lighting_call,
@@ -88,7 +94,10 @@ bool RendererTrace::Install(Metrics* metrics) {
         !install_slot(shader_device_, shader_device, 253, reinterpret_cast<void*>(&ShaderDeviceHook)) ||
         !install_slot(frame_sync_, frame_sync, 3, reinterpret_cast<void*>(&FrameSyncHook)) ||
         !install_slot(resource_callbacks_, resource_callbacks, 15,
-                      reinterpret_cast<void*>(&ResourceCallbacksHook))) {
+                      reinterpret_cast<void*>(&ResourceCallbacksHook)) ||
+        !render_worker_.Install(material_module + 0x12c84,
+                                render_worker_pointer, 1,
+                                reinterpret_cast<void*>(&RenderWorkerHook))) {
         Remove();
         return false;
     }
@@ -96,6 +105,7 @@ bool RendererTrace::Install(Metrics* metrics) {
 }
 
 void RendererTrace::Remove() {
+    render_worker_.Remove();
     resource_callbacks_.Remove();
     frame_sync_.Remove();
     shader_device_.Remove();
@@ -114,6 +124,44 @@ void RendererTrace::Remove() {
     fix_enabled_.store(false);
     lighting_skips_.store(0);
     if (instance_ == this) instance_ = nullptr;
+}
+
+void __fastcall RendererTrace::RenderWorkerHook(void* self, void*, void* queued_context) {
+    auto* instance = instance_;
+    if (!instance) return;
+    auto previous = reinterpret_cast<RenderWorkerFn>(instance->render_worker_.Previous());
+    if (!previous) return;
+    const bool tracing = instance->metrics_ && instance->metrics_->Tracing() && queued_context;
+    if (!tracing) {
+        previous(self, queued_context);
+        return;
+    }
+
+    auto* context = static_cast<std::uint8_t*>(queued_context);
+    unsigned int queued_calls = 0;
+    for (auto* node = *reinterpret_cast<std::uint8_t**>(context + 0x1f0);
+         node && queued_calls < 1000000; node = *reinterpret_cast<std::uint8_t**>(node)) {
+        ++queued_calls;
+    }
+    const auto byte_delta = [context](size_t current, size_t start) {
+        const int value = *reinterpret_cast<int*>(context + current) -
+                          *reinterpret_cast<int*>(context + start);
+        return value > 0 ? static_cast<unsigned int>(value) : 0u;
+    };
+    const unsigned int parameter_bytes = byte_delta(0x1f8, 0x204);
+    const unsigned int vertex_bytes = byte_delta(0x264, 0x270);
+    const unsigned int index_bytes = byte_delta(0x28c, 0x298);
+    LARGE_INTEGER begin{}, end{};
+    unsigned long long begin_cycles = 0;
+    unsigned long long end_cycles = 0;
+    QueryPerformanceCounter(&begin);
+    QueryThreadCycleTime(GetCurrentThread(), &begin_cycles);
+    previous(self, queued_context);
+    QueryThreadCycleTime(GetCurrentThread(), &end_cycles);
+    QueryPerformanceCounter(&end);
+    instance->metrics_->RecordRenderWorker(
+        begin.QuadPart, end.QuadPart, end_cycles - begin_cycles, queued_calls,
+        parameter_bytes, vertex_bytes, index_bytes);
 }
 
 void __fastcall RendererTrace::ReacquireHook(void* self, void*, unsigned char release,

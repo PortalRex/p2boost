@@ -66,7 +66,10 @@ files:
   render/projected-shadow tracing.
 - `p2boost_dump_metrics` writes `p2boost_metrics.csv` in the game root, including
   simulation, focus, local-co-op, resource-reacquisition, portal, and
-  projected-shadow timings/cache decisions.
+  projected-shadow timings/cache decisions. When renderer-worker tracing has
+  been active it also writes `p2boost_metrics_render_workers.csv`, with one row
+  per queued render batch (wall time, thread cycles, command count, and buffer
+  byte totals). The worker hook is a direct forwarder while tracing is off.
 
 No command writes or archives a game cvar.
 

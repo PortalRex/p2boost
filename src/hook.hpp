@@ -41,4 +41,24 @@ private:
     bool installed_ = false;
 };
 
+class PointerImmediatePatch {
+public:
+    PointerImmediatePatch() = default;
+    ~PointerImmediatePatch();
+    PointerImmediatePatch(const PointerImmediatePatch&) = delete;
+    PointerImmediatePatch& operator=(const PointerImmediatePatch&) = delete;
+    bool Install(void* address, const std::vector<std::uint8_t>& expected,
+                 size_t pointer_offset, void* replacement);
+    bool Remove();
+    void* Previous() const noexcept { return previous_; }
+    bool Installed() const noexcept { return installed_; }
+
+private:
+    std::uint8_t* address_ = nullptr;
+    std::vector<std::uint8_t> original_;
+    std::vector<std::uint8_t> patched_;
+    void* previous_ = nullptr;
+    bool installed_ = false;
+};
+
 } // namespace p2boost

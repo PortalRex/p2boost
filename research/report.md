@@ -72,6 +72,37 @@ load, so it is not smuggled in as an unverified proxy or renderer replacement.
 
 ## Portal and co-op findings
 
+### Queued-render hitch causality
+
+Real `sp_a2_trust_fling` gameplay retained deterministic frame-time spikes
+after the projected-shadow saving. VProf placed the wait in
+`CMaterialSystem::EndFrame`, while worker-thread QPC and cycle measurements
+showed long wall time with little executing CPU time. Trace-only command-list,
+dynamic-buffer, and draw instrumentation then isolated the blocking command:
+
+- the queued command at `materialsystem.dll+0x13e90` dispatches through the
+  thunk at `+0x13c60` to render-context vtable slot 219;
+- the concrete render-context implementation is `materialsystem.dll+0x2e980`;
+- that reaches shader-api vtable slot 136 and `shaderapidx9.dll+0x14a50`, the
+  public SDK analogue of `IShaderAPI::ForceHardwareSync`;
+- `shaderapidx9.dll+0xeeb0` polls two D3D9 event queries with
+  `IDirect3DQuery9::GetData(..., D3DGETDATA_FLUSH)` and a 0.2-second guard.
+
+The adjacent queued command at `materialsystem.dll+0x13d00` reaches
+`+0x29fc0`, the presentation path. Across roughly 65,000 dynamic-buffer locks,
+the largest lock was 0.092 ms; all draw calls in a representative 12 ms worker
+batch totaled about 0.14 ms. Dynamic buffer allocation, draw dispatch, and
+portal CPU rendering are therefore not the source of these particular stalls.
+
+Two semantics-preserving candidates were tested and rejected. Performing one
+flushing query poll followed by non-flushing polls still blocked on the first
+poll. Allowing one frame of query slack moved the same backlog to Present
+instead of removing it. Targets of 360 and 720 FPS also retained the explicit
+fence stalls. None of these experiments ships: moving a hitch, silently
+lowering a cap, or weakening the engine's resource-ordering contract is not a
+fix. The low-overhead trace-only worker timing remains so future candidates can
+be evaluated against the proven path without permanent per-draw hooks.
+
 ### Static projected-light rebuild
 
 The engine's hierarchical VProf report exposed a larger steady-state co-op

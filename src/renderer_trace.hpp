@@ -31,6 +31,8 @@ private:
     static void __fastcall ShaderDeviceHook(void* self, void*);
     static void __fastcall FrameSyncHook(void* self, void*);
     static void __fastcall ResourceCallbacksHook(void* self, void*, void* callback, int context);
+    using RenderWorkerFn = void(__thiscall*)(void*, void*);
+    static void __fastcall RenderWorkerHook(void* self, void*, void* queued_context);
     static void __cdecl StaticLightingRestoreHook();
     static void __cdecl StaticLightingCacheRestoreHook();
     static double NowMilliseconds() noexcept;
@@ -42,6 +44,7 @@ private:
     VtableSlotHook shader_device_;
     VtableSlotHook frame_sync_;
     VtableSlotHook resource_callbacks_;
+    PointerImmediatePatch render_worker_;
     ReacquireFn original_ = nullptr;
     using StaticLightingRestoreFn = void(__cdecl*)();
     StaticLightingRestoreFn lighting_original_ = nullptr;

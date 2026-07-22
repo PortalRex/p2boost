@@ -2,7 +2,9 @@
 
 #include <Windows.h>
 #include <array>
+#include <atomic>
 #include <cstddef>
+#include <mutex>
 #include <string>
 
 namespace p2boost {
@@ -11,8 +13,8 @@ class Metrics {
 public:
     static constexpr size_t Capacity = 1u << 16;
     Metrics();
-    void SetTracing(bool tracing) noexcept { tracing_ = tracing; }
-    bool Tracing() const noexcept { return tracing_; }
+    void SetTracing(bool tracing) noexcept { tracing_.store(tracing, std::memory_order_relaxed); }
+    bool Tracing() const noexcept { return tracing_.load(std::memory_order_relaxed); }
     void SetCoop(bool coop) noexcept { coop_ = coop; }
     void Frame(bool simulating) noexcept;
     void RecordReacquire(double milliseconds, const char* reason, long long begin_qpc,
@@ -21,6 +23,10 @@ public:
     void RecordPortalRender(double milliseconds) noexcept;
     void RecordShadowUpdate(double milliseconds, bool same_projection, bool same_full,
                             bool skipped) noexcept;
+    void RecordRenderWorker(long long begin_qpc, long long end_qpc,
+                            unsigned long long cycles, unsigned int queued_calls,
+                            unsigned int parameter_bytes, unsigned int vertex_bytes,
+                            unsigned int index_bytes) noexcept;
     bool Dump(const std::string& path) const;
     size_t Count() const noexcept { return count_; }
 
@@ -39,17 +45,36 @@ private:
         unsigned int shadow_same_projection_count;
         unsigned int shadow_same_full_count;
         unsigned int shadow_skipped_count;
+        long long render_worker_begin_qpc;
+        long long render_worker_end_qpc;
+        double render_worker_ms;
+        unsigned long long render_worker_cycles;
+        unsigned int render_worker_count;
+        unsigned long long render_worker_queued_calls;
+        unsigned long long render_worker_parameter_bytes;
+        unsigned long long render_worker_vertex_bytes;
+        unsigned long long render_worker_index_bytes;
         int reacquire_reason;
         bool simulating;
         bool focused;
         bool coop;
+    };
+    struct RenderWorkerSample {
+        long long begin_qpc;
+        long long end_qpc;
+        unsigned long long cycles;
+        unsigned int queued_calls;
+        unsigned int parameter_bytes;
+        unsigned int vertex_bytes;
+        unsigned int index_bytes;
+        unsigned int thread_id;
     };
     LARGE_INTEGER frequency_{};
     long long last_qpc_ = 0;
     std::array<Sample, Capacity> samples_{};
     size_t cursor_ = 0;
     size_t count_ = 0;
-    bool tracing_ = false;
+    std::atomic<bool> tracing_{false};
     bool coop_ = false;
     double pending_reacquire_ms_ = 0.0;
     long long pending_reacquire_begin_qpc_ = 0;
@@ -62,6 +87,19 @@ private:
     unsigned int pending_shadow_same_projection_count_ = 0;
     unsigned int pending_shadow_same_full_count_ = 0;
     unsigned int pending_shadow_skipped_count_ = 0;
+    mutable std::mutex render_worker_mutex_;
+    std::array<RenderWorkerSample, Capacity> render_worker_samples_{};
+    size_t render_worker_cursor_ = 0;
+    size_t render_worker_count_ = 0;
+    long long pending_render_worker_begin_qpc_ = 0;
+    long long pending_render_worker_end_qpc_ = 0;
+    long long pending_render_worker_qpc_ = 0;
+    unsigned long long pending_render_worker_cycles_ = 0;
+    unsigned int pending_render_worker_count_ = 0;
+    unsigned long long pending_render_worker_queued_calls_ = 0;
+    unsigned long long pending_render_worker_parameter_bytes_ = 0;
+    unsigned long long pending_render_worker_vertex_bytes_ = 0;
+    unsigned long long pending_render_worker_index_bytes_ = 0;
     int pending_reacquire_reason_ = 0;
 };
 

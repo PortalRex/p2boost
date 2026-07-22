@@ -69,21 +69,41 @@ const Module* FindModule(const std::vector<Module>& modules, std::uintptr_t addr
 }
 
 void PrintUsage() {
-    std::fputs("usage: p2profile <pid> <duration-seconds> <output.csv> [--stack]\n"
+    std::fputs("usage: p2profile <pid> <duration-seconds> <output.csv> [--stack] [--thread <tid>]\n"
+               "       p2profile <pid> --modules\n"
                "       default EIP sampling is low overhead; --stack is intrusive research mode\n", stderr);
 }
 
 } // namespace
 
 int main(int argc, char** argv) {
-    if (argc != 4 && argc != 5) {
+    if (argc == 3 && std::strcmp(argv[2], "--modules") == 0) {
+        const DWORD process_id = std::strtoul(argv[1], nullptr, 10);
+        const auto modules = ReadModules(process_id);
+        if (!process_id || modules.empty()) return 1;
+        std::fputs("module,begin,end\n", stdout);
+        for (const auto& module : modules) {
+            std::fprintf(stdout, "%s,0x%08llx,0x%08llx\n", module.name.c_str(),
+                         static_cast<unsigned long long>(module.begin),
+                         static_cast<unsigned long long>(module.end));
+        }
+        return 0;
+    }
+    if (argc < 4) {
         PrintUsage();
         return 2;
     }
-    const bool stack_mode = argc == 5 && std::strcmp(argv[4], "--stack") == 0;
-    if (argc == 5 && !stack_mode) {
-        PrintUsage();
-        return 2;
+    bool stack_mode = false;
+    DWORD requested_thread_id = 0;
+    for (int index = 4; index < argc; ++index) {
+        if (std::strcmp(argv[index], "--stack") == 0) {
+            stack_mode = true;
+        } else if (std::strcmp(argv[index], "--thread") == 0 && index + 1 < argc) {
+            requested_thread_id = std::strtoul(argv[++index], nullptr, 10);
+        } else {
+            PrintUsage();
+            return 2;
+        }
     }
     const DWORD process_id = std::strtoul(argv[1], nullptr, 10);
     const double duration_seconds = std::strtod(argv[2], nullptr);
@@ -91,7 +111,7 @@ int main(int argc, char** argv) {
         PrintUsage();
         return 2;
     }
-    const DWORD thread_id = FindMainThread(process_id);
+    const DWORD thread_id = requested_thread_id ? requested_thread_id : FindMainThread(process_id);
     Handle process{OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, process_id)};
     Handle thread{OpenThread(THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT |
                              THREAD_QUERY_LIMITED_INFORMATION, FALSE, thread_id)};
