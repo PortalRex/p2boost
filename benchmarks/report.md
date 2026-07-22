@@ -251,6 +251,25 @@ burst, but not a redundant call: each local player and each portal has distinct
 view state. A permanent cache or skip would therefore be speculative and is
 not included in the current binary.
 
+## Elevated live ETW validation
+
+Fresh administrator GeneralProfile captures synchronized CPU sampling with
+PresentMon in both live linked-portal scenes:
+
+| Scene | Frames | Average FPS | p99 ms | Maximum ms | GPU-busy p99 ms | Frames >8.3 ms |
+|---|---:|---:|---:|---:|---:|---:|
+| SP Trust Fling | 14,371 | 958.46 | 1.7480 | 2.6934 | 0.5579 | 0 |
+| Two-player lobby | 8,442 | 562.96 | 2.7079 | 3.6233 | 0.9055 | 0 |
+
+Both are CPU-limited at the high target and neither contains a measured hitch
+or coincident gameplay-asset read. A separate current-build five-second SP A/B
+with real movement and portal-gun input measured 922.27 to 961.05 average FPS
+and 1.8892 to 1.8109 ms p99, with no frame above 8.3 ms in either variant.
+
+`capture-etw.ps1` now cancels any interrupted WPR session before starting a
+fresh file-mode trace. `analyze-etw.ps1` rejects an ETL that contains no Portal
+2 CPU samples, preventing an apparently successful but empty hotspot report.
+
 ## Gate status
 
 - Post-focus portal frame <=8.3 ms: **met** in 30 valid timestamped cycles.

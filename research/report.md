@@ -270,6 +270,26 @@ They are recorded as a possible external hitch contributor, not patched:
 controller discovery and SAR/overlay hooks are outside a proven
 gameplay-neutral engine correction.
 
+Administrator GeneralProfile captures were then repeated without the earlier
+empty-kernel-session failure. A 15-second linked-portal SP run recorded 14,371
+frames at 958.46 FPS, with 1.7480 ms p99, 2.6934 ms maximum, and no frame above
+8.3 ms. The equivalent two-player lobby run recorded 8,442 frames at 562.96
+FPS, with 2.7079 ms p99, 3.6233 ms maximum, and again no frame above 8.3 ms.
+GPU-busy p99 was only 0.5579 ms in SP and 0.9055 ms in co-op. Neither trace
+contained a gameplay-asset read aligned with a hitch.
+
+A low-overhead five-second main-thread sample produced 1,532 active
+engine/client/material samples in the linked-portal SP scene and 2,963 in the
+equivalent split-screen scene. The approximately 1.93x increase follows the
+second player's separately constructed view. A research-only stack walk maps
+the hot engine leaves at RVAs `0xe4240`, `0xe70b0`, `0x120bd0`, and `0x1b41f0`
+through different BSP/world-list callers, while client RVAs `0xe1fa0`,
+`0xe2180`, and `0xe6280` compact and occlusion-filter each view's renderable
+list. Ghidra shows distinct camera-dependent visibility state in these chains;
+there is no proven cross-view-equivalent result to cache or skip. The stack
+walker suspended the main thread for long intervals, so its timing is excluded
+from benchmarks and only the caller relationships are retained.
+
 `OtherAppInit` is entered after a focus transition even when the underlying
 D3D9 cooperative-level query reports `D3D_OK`; however, the engine has already
 executed the corresponding release-side state transition. A prototype that

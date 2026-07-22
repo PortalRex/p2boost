@@ -32,6 +32,12 @@ Invoke-Xperf @('-i', $etl, '-tle', '-o', $disk, '-a', 'diskio', '-summary')
 Invoke-Xperf @('-i', $etl, '-tle', '-o', $profile, '-a', 'stack', '-butterfly', '5',
     '-process', 'portal2.exe', '-event', 'Profile')
 
+# xperf may return success when the ETL contains no sampled Portal 2 stacks.
+# Reject that incomplete trace rather than publishing an empty hotspot report.
+if (-not (Select-String -LiteralPath $profile -Pattern 'portal2\.exe' -Quiet)) {
+    throw 'The ETL contains no Portal 2 CPU profile samples; repeat the elevated capture.'
+}
+
 $moduleRows = foreach ($line in Get-Content -LiteralPath $images) {
     if ($line -notmatch 'I-DCEnd,.*portal2\.exe.*?0x([0-9a-fA-F]+),\s*0x([0-9a-fA-F]+).*?"([^"]+\.dll)"') { continue }
     [pscustomobject]@{

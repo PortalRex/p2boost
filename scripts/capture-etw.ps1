@@ -32,6 +32,13 @@ function Invoke-Wpr([string]$Arguments) {
 $started = $false
 $presentMonProcess = $null
 try {
+    # WPR can leave a recorder session registered after an interrupted merge.
+    # Starting over that stale session may return success yet omit CPU samples.
+    # Cancel is idempotent for our private capture process; a nonzero result only
+    # means there was no usable session to cancel, so the fresh start remains the
+    # authoritative operation below.
+    Invoke-Wpr '-cancel' | Out-Null
+
     Write-Host "Starting WPR $Profile capture for $ProcessName (pid=$($game.Id))..."
     $startExit = Invoke-Wpr "-start $Profile -filemode"
     if ($startExit -ne 0) { throw "WPR start failed with $startExit" }
