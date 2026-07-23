@@ -1,3 +1,4 @@
+#include "activation_trace.h"
 #include "build_fingerprint.h"
 #include "console.h"
 #include "console_commands.h"
@@ -7,7 +8,9 @@
 #include "profiler_overlay.h"
 #include "renderer_trace.h"
 #include "sdk.h"
+#include "server_trace.h"
 #include "shadow_trace.h"
+#include "world_trace.h"
 
 #include <Windows.h>
 #include <cstring>
@@ -49,6 +52,14 @@ namespace p2boost {
 			if( m_verification.m_supported && m_verification.m_native_d3d9 && !m_frame_pacer.install( &m_metrics ) ) {
 				m_verification.m_errors.emplace_back( "frame-pacer callsite signature mismatch" );
 			}
+#ifdef P2BOOST_RESEARCH_WORLD_TRACE
+			if( m_verification.m_supported && m_verification.m_native_d3d9 && !m_activation_trace.install( &m_metrics ) )
+				m_verification.m_errors.emplace_back( "activation research signature mismatch" );
+			if( m_verification.m_supported && m_verification.m_native_d3d9 && !m_world_trace.install( &m_metrics ) )
+				m_verification.m_errors.emplace_back( "world-surface research callsite signature mismatch" );
+			if( m_verification.m_supported && m_verification.m_native_d3d9 && !m_server_trace.install( &m_metrics ) )
+				m_verification.m_errors.emplace_back( "server spatial-query research signature mismatch" );
+#endif
 			// one state transition updates every reversible optimization.
 			m_enabled = can_enable( );
 			apply_enabled_state( );
@@ -65,6 +76,9 @@ namespace p2boost {
 			m_profiler_overlay.set_enabled( false, m_metrics );
 			m_profiler_overlay.disconnect( );
 			m_shadow_trace.remove( );
+			m_activation_trace.remove( );
+			m_server_trace.remove( );
+			m_world_trace.remove( );
 			m_portal_trace.remove( );
 			m_renderer_trace.remove( );
 			m_frame_pacer.remove( );
@@ -214,11 +228,14 @@ namespace p2boost {
 		}
 		static Plugin*		   m_instance;
 		VerificationResult	   m_verification;
+		ActivationTrace		   m_activation_trace;
 		Metrics				   m_metrics;
 		FramePacer			   m_frame_pacer;
 		PortalTrace			   m_portal_trace;
 		RendererTrace		   m_renderer_trace;
+		ServerTrace			   m_server_trace;
 		ShadowTrace			   m_shadow_trace;
+		WorldTrace			   m_world_trace;
 		ProfilerOverlay		   m_profiler_overlay;
 		ConsoleCommandRegistry m_commands;
 		bool				   m_enabled	  = false;

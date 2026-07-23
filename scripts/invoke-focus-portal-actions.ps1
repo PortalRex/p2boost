@@ -76,9 +76,9 @@ try {
         Invoke-Game @(
             'ent_fire prop_portal fizzle',
             'setang 0 -90 0',
-            'hwait 75 +attack; hwait 81 -attack; ' +
-            'hwait 99 setang 0 0 0; hwait 105 +attack2; hwait 111 -attack2; ' +
-            'hwait 129 setang 0 -90 0'
+			'wait_for 75 +attack; wait_for 81 -attack; ' +
+			'wait_for 99 setang 0 0 0; wait_for 105 +attack2; wait_for 111 -attack2; ' +
+			'wait_for 129 setang 0 -90 0'
         ) | Out-Null
         $scheduleQpc = [Diagnostics.Stopwatch]::GetTimestamp()
 
@@ -93,7 +93,7 @@ try {
         [P2BoostFocusActions]::SetForegroundWindow($window) | Out-Null
         $restoreQpc = [Diagnostics.Stopwatch]::GetTimestamp()
 
-        # hwait is expressed in 60 Hz simulation ticks. The second shot is the
+		# wait_for is expressed in 60 Hz session ticks. The second shot is the
         # instant at which the first connected pair becomes renderable.
         $primaryQpc = $scheduleQpc + 75.0 / 60.0 * [Diagnostics.Stopwatch]::Frequency
         $connectedQpc = $scheduleQpc + 105.0 / 60.0 * [Diagnostics.Stopwatch]::Frequency

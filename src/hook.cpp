@@ -162,7 +162,7 @@ namespace p2boost {
 	}
 
 	bool InlineDetour::install( void* address, const std::vector< std::uint8_t >& expected, void* replacement ) {
-		if( m_installed || !address || !replacement || expected.size( ) != 5 )
+		if( m_installed || !address || !replacement || expected.size( ) < 5 )
 			return false;
 
 		m_address = static_cast< std::uint8_t* >( address );
@@ -184,7 +184,7 @@ namespace p2boost {
 
 		std::vector< std::uint8_t > return_jump{
 			x86::relative_jump( Address{ m_trampoline + m_original.size( ) }, Address{ m_address + m_original.size( ) } ) };
-		m_patched = x86::relative_jump( Address{ m_address }, Address{ replacement } );
+		m_patched = x86::relative_jump( Address{ m_address }, Address{ replacement }, expected.size( ) );
 		if( return_jump.empty( ) || m_patched.empty( ) ) {
 			VirtualFree( m_trampoline, 0, MEM_RELEASE );
 			m_trampoline = nullptr;

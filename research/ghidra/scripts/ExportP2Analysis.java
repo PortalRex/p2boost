@@ -127,7 +127,14 @@ public class ExportP2Analysis extends GhidraScript {
                 // QPC with PresentMon on 2026-07-22. These samples account for
                 // three of the four engine instructions inside the 8.01 ms
                 // CPU-busy interval; the fourth sample is in server.dll.
-                0x10285aecL, 0x10304d9aL, 0x100e80fdL
+                0x10285aecL, 0x10304d9aL, 0x100e80fdL,
+                // Foreground Sphere Peek sample inside the synchronized
+                // chamber-entry frame, adjacent to sound-system work.
+                0x10173f70L,
+                // Repeat Sphere Peek chamber entry after fixing the
+                // frame-start/frame-end correlation. This instruction is in
+                // a short CRT-style leaf reached during the 9.63 ms frame.
+                0x10307f39L
             };
             for (long address : profileTargets) addFunctionAndCallers(targets, address, 1);
             long[] queuedSubmissionTargets = {
@@ -214,7 +221,11 @@ public class ExportP2Analysis extends GhidraScript {
             };
             for (long address : threadedEndFrameTargets) addFunctionAndCallers(targets, address, 2);
             long[] queuedCommandTypes = {
-                0x10024d40L, 0x10024d80L, 0x10023e20L
+				// Generic command thunks plus the exact Sphere Peek blocking leaf,
+				// its queued-context method, and the no-argument queue builder.
+				0x10024d40L, 0x10024d80L, 0x10023e20L,
+				0x10013d00L, 0x10016830L, 0x10014df0L,
+				0x10039680L
             };
             for (long address : queuedCommandTypes) addFunctionAndCallers(targets, address, 3);
             addFunctionAndCallers(targets, 0x1003ac67L, 3);
@@ -288,12 +299,23 @@ public class ExportP2Analysis extends GhidraScript {
                 "CClientShadowMgr::UpdateProjectedTextureInternal", 2);
             addFunctionsReferencingString(targets,
                 "CClientShadowMgr::UpdateProjectedTexture can only be used with flashlights!\n", 2);
+            // Client-side sample in the synchronized Sphere Peek sound/entity
+            // activation frame.
+            addFunctionAndCallers(targets, 0x1006a2acL, 2);
+            // Repeat chamber-entry sample after the correlation correction.
+            // Export callers before assigning semantics to the leaf.
+            addFunctionAndCallers(targets, 0x100e4ea4L, 2);
         }
         if (base.equalsIgnoreCase("server.dll")) {
             // The server-side instruction sampled inside the same Sphere Peek
             // chamber-entry frame. Export its callers alongside the engine
             // samples before assigning any gameplay or visibility semantics.
             addFunctionAndCallers(targets, 0x1033d840L, 2);
+        }
+        if (base.equalsIgnoreCase("soundemittersystem.dll")) {
+            // Sound-emitter instruction sampled in the same 8.10 ms chamber
+            // frame. Export two caller levels before assigning semantics.
+            addFunctionAndCallers(targets, 0x1000b668L, 2);
         }
 
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(new File(output, base + "-functions.tsv")))) {
@@ -339,6 +361,21 @@ public class ExportP2Analysis extends GhidraScript {
                 if (!emitted) writer.write(data.getAddress() + "\t" + clean(value) + "\t\n");
             }
         }
+
+		// Preserve exact static xrefs for every selected target. Function-pointer
+		// references are especially useful when a queued functor has no direct call.
+		try (BufferedWriter writer = new BufferedWriter(new FileWriter(new File(output, base + "-target-xrefs.tsv")))) {
+			writer.write("target_address\ttarget_name\tfrom_address\treference_type\treferencing_function\n");
+			for (Function target : targets) {
+				monitor.checkCancelled();
+				for (Reference reference : getReferencesTo(target.getEntryPoint())) {
+					Function caller = containingFunction(reference.getFromAddress());
+					writer.write(target.getEntryPoint() + "\t" + clean(target.getName(true)) + "\t" +
+						reference.getFromAddress() + "\t" + reference.getReferenceType() + "\t" +
+						(caller == null ? "" : clean(caller.getName(true))) + "\n");
+				}
+			}
+		}
 
         DecompInterface decompiler = new DecompInterface();
         decompiler.openProgram(currentProgram);

@@ -68,6 +68,46 @@ namespace p2boost {
 			++m_render_worker_count;
 	}
 
+	void Metrics::record_world_surface( double milliseconds, unsigned int flags ) noexcept {
+		if( !collecting( ) )
+			return;
+
+		// The world builder executes on the main thread, so its frame-local
+		// counters need no lock. Preserve the union of view flags for correlation.
+		m_pending_world_surface_ms += milliseconds;
+		++m_pending_world_surface_count;
+		m_pending_world_surface_flags |= flags;
+	}
+
+	void Metrics::record_portal_movement_spatial( double milliseconds ) noexcept {
+		if( !collecting( ) )
+			return;
+
+		m_pending_portal_movement_spatial_ms += milliseconds;
+		++m_pending_portal_movement_spatial_count;
+	}
+
+	void Metrics::record_animation_events( double milliseconds ) noexcept {
+		if( collecting( ) ) {
+			m_pending_animation_events_ms += milliseconds;
+			++m_pending_animation_events_count;
+		}
+	}
+
+	void Metrics::record_sound_lookup( double milliseconds ) noexcept {
+		if( collecting( ) ) {
+			m_pending_sound_lookup_ms += milliseconds;
+			++m_pending_sound_lookup_count;
+		}
+	}
+
+	void Metrics::record_read_ubit_var( double milliseconds ) noexcept {
+		if( collecting( ) ) {
+			m_pending_read_ubit_var_ms += milliseconds;
+			++m_pending_read_ubit_var_count;
+		}
+	}
+
 	void Metrics::frame( ) noexcept {
 		if( !collecting( ) )
 			return;
@@ -130,6 +170,17 @@ namespace p2boost {
 			render_worker_parameter_bytes,
 			render_worker_vertex_bytes,
 			render_worker_index_bytes,
+			m_pending_world_surface_ms,
+			m_pending_world_surface_count,
+			m_pending_world_surface_flags,
+			m_pending_portal_movement_spatial_ms,
+			m_pending_portal_movement_spatial_count,
+			m_pending_animation_events_ms,
+			m_pending_animation_events_count,
+			m_pending_sound_lookup_ms,
+			m_pending_sound_lookup_count,
+			m_pending_read_ubit_var_ms,
+			m_pending_read_ubit_var_count,
 			m_pending_reacquire_reason,
 			m_simulating.load( std::memory_order_relaxed ),
 			focused,
@@ -139,15 +190,26 @@ namespace p2boost {
 		m_pending_reacquire_begin_qpc = 0;
 		m_pending_reacquire_end_qpc	  = 0;
 		m_pending_reacquire_stages_ms.fill( 0.0 );
-		m_pending_portal_render_ms			   = 0.0;
-		m_pending_portal_render_count		   = 0;
-		m_pending_shadow_update_ms			   = 0.0;
-		m_pending_shadow_update_count		   = 0;
-		m_pending_shadow_same_projection_count = 0;
-		m_pending_shadow_same_full_count	   = 0;
-		m_pending_shadow_skipped_count		   = 0;
-		m_pending_reacquire_reason			   = 0;
-		m_cursor							   = ( m_cursor + 1 ) % capacity;
+		m_pending_portal_render_ms				= 0.0;
+		m_pending_portal_render_count			= 0;
+		m_pending_shadow_update_ms				= 0.0;
+		m_pending_shadow_update_count			= 0;
+		m_pending_shadow_same_projection_count	= 0;
+		m_pending_shadow_same_full_count		= 0;
+		m_pending_shadow_skipped_count			= 0;
+		m_pending_world_surface_ms				= 0.0;
+		m_pending_world_surface_count			= 0;
+		m_pending_world_surface_flags			= 0;
+		m_pending_portal_movement_spatial_ms	= 0.0;
+		m_pending_portal_movement_spatial_count = 0;
+		m_pending_animation_events_ms			= 0.0;
+		m_pending_animation_events_count		= 0;
+		m_pending_sound_lookup_ms				= 0.0;
+		m_pending_sound_lookup_count			= 0;
+		m_pending_read_ubit_var_ms				= 0.0;
+		m_pending_read_ubit_var_count			= 0;
+		m_pending_reacquire_reason				= 0;
+		m_cursor								= ( m_cursor + 1 ) % capacity;
 		if( m_count < capacity )
 			++m_count;
 		m_last_qpc = now;
@@ -207,7 +269,11 @@ namespace p2boost {
 				  "same_projection_count,shadow_same_full_count,shadow_skipped_count,render_worker_"
 				  "begin_qpc,render_worker_end_qpc,render_worker_ms,render_worker_cycles,render_worker_"
 				  "count,render_worker_queued_calls,render_worker_parameter_bytes,render_worker_vertex_"
-				  "bytes,render_worker_index_bytes,reacquire_reason,simulating,focused,coop\n"
+				  "bytes,render_worker_index_bytes,world_surface_ms,world_surface_count,world_surface_flags,portal_"
+				  "movement_spatial_ms,portal_movement_spatial_count,"
+				  "animation_events_ms,animation_events_count,sound_lookup_ms,sound_lookup_count,read_ubit_var_ms,"
+				  "read_ubit_var_count,"
+				  "reacquire_reason,simulating,focused,coop\n"
 			   << std::fixed << std::setprecision( 6 );
 		const size_t start = m_count == capacity ? m_cursor : 0;
 		for( size_t index = 0; index < m_count; ++index ) {
@@ -220,9 +286,13 @@ namespace p2boost {
 				   << sample.m_shadow_skipped_count << ',' << sample.m_render_worker_begin_qpc << ',' << sample.m_render_worker_end_qpc
 				   << ',' << sample.m_render_worker_ms << ',' << sample.m_render_worker_cycles << ',' << sample.m_render_worker_count << ','
 				   << sample.m_render_worker_queued_calls << ',' << sample.m_render_worker_parameter_bytes << ','
-				   << sample.m_render_worker_vertex_bytes << ',' << sample.m_render_worker_index_bytes << ',' << sample.m_reacquire_reason
-				   << ',' << ( sample.m_simulating ? 1 : 0 ) << ',' << ( sample.m_focused ? 1 : 0 ) << ',' << ( sample.m_coop ? 1 : 0 )
-				   << '\n';
+				   << sample.m_render_worker_vertex_bytes << ',' << sample.m_render_worker_index_bytes << ',' << sample.m_world_surface_ms
+				   << ',' << sample.m_world_surface_count << ",0x" << std::hex << sample.m_world_surface_flags << std::dec << ','
+				   << sample.m_portal_movement_spatial_ms << ',' << sample.m_portal_movement_spatial_count << ','
+				   << sample.m_animation_events_ms << ',' << sample.m_animation_events_count << ',' << sample.m_sound_lookup_ms << ','
+				   << sample.m_sound_lookup_count << ',' << sample.m_read_ubit_var_ms << ',' << sample.m_read_ubit_var_count << ','
+				   << sample.m_reacquire_reason << ',' << ( sample.m_simulating ? 1 : 0 ) << ',' << ( sample.m_focused ? 1 : 0 ) << ','
+				   << ( sample.m_coop ? 1 : 0 ) << '\n';
 		}
 		const bool frame_output_good = output.good( );
 		output.close( );
@@ -240,7 +310,13 @@ namespace p2boost {
 						 "index_before,sync_pending_before,sync_pending_after,present_count,present_ms,max_"
 						 "present_ms"
 #ifdef P2BOOST_RESEARCH_DRAW_TRACE
-					  << ",draw_count,draw_ms,max_draw_ms,max_draw_method,max_draw_primitive_type,max_draw_"
+					  << ",draw_count,draw_ms,first_resource_draw_count,first_resource_draw_ms,first_pipeline_draw_"
+						 "count,first_pipeline_draw_ms,first_texture_count,index_buffer_lock_count,index_buffer_lock_ms,max_index_"
+						 "buffer_lock_ms,vertex_buffer_lock_count,vertex_buffer_lock_ms,max_vertex_buffer_lock_ms,occlusion_query_"
+						 "create_count,occlusion_query_create_ms,max_occlusion_query_create_ms,texture_create_count,texture_create_ms,"
+						 "max_texture_create_ms,vertex_shader_create_count,vertex_shader_create_ms,max_vertex_shader_create_ms,"
+						 "pixel_shader_create_count,pixel_shader_create_ms,max_pixel_shader_create_ms,max_draw_ms,max_"
+						 "draw_method,max_draw_primitive_type,max_draw_"
 						 "primitive_count,max_draw_vertex_count,max_draw_vertex_shader,max_draw_pixel_shader,max_"
 						 "draw_texture_0,max_draw_texture_1,max_draw_texture_2,max_draw_texture_3,max_draw_first_"
 						 "vertex_shader,max_draw_first_pixel_shader,max_draw_first_pipeline,max_draw_first_"
@@ -249,12 +325,15 @@ namespace p2boost {
 						 "texture0_levels,max_draw_texture0_hash,draw_stack_0,draw_stack_1,draw_stack_2,draw_"
 						 "stack_3,draw_stack_4,draw_stack_5,draw_stack_6,draw_stack_7,draw_stack_8,draw_stack_9,"
 						 "draw_stack_10,draw_stack_11,draw_stack_12,draw_stack_13,draw_stack_14,draw_stack_15"
-					  << ",command_key_0,command_count_0,command_key_1,command_count_1,command_key_2,command_"
-						 "count_2,command_key_3,command_count_3,command_key_4,command_count_4,command_key_5,"
-						 "command_count_5,command_key_6,command_count_6,command_key_7,command_count_7,command_"
-						 "key_8,command_count_8,command_key_9,command_count_9,command_key_10,command_count_10,"
-						 "command_key_11,command_count_11,command_key_12,command_count_12,command_key_13,command_"
-						 "count_13,command_key_14,command_count_14,command_key_15,command_count_15"
+					  << ",command_execute_count,command_execute_ms,slow_command_key,slow_command_ms,command_key_0,"
+						 "command_count_0,command_ms_0,command_key_1,command_count_1,command_ms_1,command_key_2,"
+						 "command_count_2,command_ms_2,command_key_3,command_count_3,command_ms_3,command_key_4,"
+						 "command_count_4,command_ms_4,command_key_5,command_count_5,command_ms_5,command_key_6,"
+						 "command_count_6,command_ms_6,command_key_7,command_count_7,command_ms_7,command_key_8,"
+						 "command_count_8,command_ms_8,command_key_9,command_count_9,command_ms_9,command_key_10,"
+						 "command_count_10,command_ms_10,command_key_11,command_count_11,command_ms_11,command_key_12,"
+						 "command_count_12,command_ms_12,command_key_13,command_count_13,command_ms_13,command_key_14,"
+						 "command_count_14,command_ms_14,command_key_15,command_count_15,command_ms_15"
 					  << ",dynamic_light_count,dynamic_light_ms,dynamic_light_unique_lights,dynamic_light_unique_"
 						 "surfaces,dynamic_light_ptr,dynamic_light_surface_ptr,dynamic_light_update_flags,"
 						 "dynamic_light_bool_a,dynamic_light_bool_b,dynamic_light_flags,dynamic_light_origin_x,"
@@ -281,6 +360,21 @@ namespace p2boost {
 							  << Qpc::milliseconds( sample.m_max_present_qpc );
 #ifdef P2BOOST_RESEARCH_DRAW_TRACE
 				worker_output << ',' << sample.m_draw_count << ',' << Qpc::milliseconds( sample.m_draw_qpc ) << ','
+							  << sample.m_first_resource_draw_count << ',' << Qpc::milliseconds( sample.m_first_resource_draw_qpc ) << ','
+							  << sample.m_first_pipeline_draw_count << ',' << Qpc::milliseconds( sample.m_first_pipeline_draw_qpc ) << ','
+							  << sample.m_first_texture_count << ',' << sample.m_index_buffer_lock_count << ','
+							  << Qpc::milliseconds( sample.m_index_buffer_lock_qpc ) << ','
+							  << Qpc::milliseconds( sample.m_max_index_buffer_lock_qpc ) << ',' << sample.m_vertex_buffer_lock_count << ','
+							  << Qpc::milliseconds( sample.m_vertex_buffer_lock_qpc ) << ','
+							  << Qpc::milliseconds( sample.m_max_vertex_buffer_lock_qpc ) << ',' << sample.m_occlusion_query_create_count
+							  << ',' << Qpc::milliseconds( sample.m_occlusion_query_create_qpc ) << ','
+							  << Qpc::milliseconds( sample.m_max_occlusion_query_create_qpc ) << ',' << sample.m_texture_create_count << ','
+							  << Qpc::milliseconds( sample.m_texture_create_qpc ) << ','
+							  << Qpc::milliseconds( sample.m_max_texture_create_qpc ) << ',' << sample.m_vertex_shader_create_count << ','
+							  << Qpc::milliseconds( sample.m_vertex_shader_create_qpc ) << ','
+							  << Qpc::milliseconds( sample.m_max_vertex_shader_create_qpc ) << ',' << sample.m_pixel_shader_create_count
+							  << ',' << Qpc::milliseconds( sample.m_pixel_shader_create_qpc ) << ','
+							  << Qpc::milliseconds( sample.m_max_pixel_shader_create_qpc ) << ','
 							  << Qpc::milliseconds( sample.m_max_draw_qpc ) << ',' << sample.m_max_draw_method << ','
 							  << sample.m_max_draw_primitive_type << ',' << sample.m_max_draw_primitive_count << ','
 							  << sample.m_max_draw_vertex_count;
@@ -297,9 +391,11 @@ namespace p2boost {
 							  << sample.m_max_draw_texture0_levels << ",0x" << std::hex << sample.m_max_draw_texture0_hash << std::dec;
 				for( const auto address : sample.m_max_draw_stack )
 					worker_output << ",0x" << std::hex << address << std::dec;
+				worker_output << ',' << sample.m_command_execute_count << ',' << Qpc::milliseconds( sample.m_command_execute_qpc ) << ",0x"
+							  << std::hex << sample.m_slow_command_key << std::dec << ',' << Qpc::milliseconds( sample.m_slow_command_qpc );
 				for( size_t command = 0; command < sample.m_command_keys.size( ); ++command )
 					worker_output << ",0x" << std::hex << sample.m_command_keys[ command ] << std::dec << ','
-								  << sample.m_command_counts[ command ];
+								  << sample.m_command_counts[ command ] << ',' << Qpc::milliseconds( sample.m_command_qpc[ command ] );
 				worker_output << ',' << sample.m_dynamic_light_count << ',' << Qpc::milliseconds( sample.m_dynamic_light_qpc ) << ','
 							  << sample.m_dynamic_light_unique_lights << ',' << sample.m_dynamic_light_unique_surfaces;
 				worker_output << ",0x" << std::hex << sample.m_dynamic_light_first_light << ",0x" << sample.m_dynamic_light_first_surface

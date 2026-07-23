@@ -127,6 +127,14 @@ tractor beam), validating the map embedded in Source's accepted `playdemo`
 response before every five-second default capture. It restores `fps_max` and leaves
 all visual and gameplay cvars alone.
 
+`run-portalgun-demo.ps1` is the dedicated intro3 first-portal regression. It
+plays the complete 22.433-second demo from `portal2/a`, verifies the embedded
+`sp_a1_intro3` header, and captures enough load margin to include the successful
+portal placement around 14 seconds of demo time. The first nonzero portal-render
+metric identifies the placement; an earlier attack input is not mistaken for a
+successful portal. The runner saves playback, frame, engine, and render-worker
+artifacts, restores settings, and closes Portal 2 by default after every run.
+
 `run-live-gameplay.ps1` is the primary short performance check. It records
 matched single-player Laser Relays and two-player lobby runs while genuine
 player commands move and fire both portal guns. The SP route starts at the

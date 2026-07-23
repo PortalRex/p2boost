@@ -159,13 +159,13 @@ function Invoke-SinglePlayerActions {
         # Walk the complete normal route into the lift and keep moving until it
         # deposits Chell at the far side of the expensive relay chamber. This
         # captures the real area transition instead of stopping in the lift.
-        'hwait 90 cmd1 +forward; hwait 1200 cmd1 -forward; ' +
+		'wait_for 90 cmd1 +forward; wait_for 1200 cmd1 -forward; ' +
         # Face the nearby portalable wall, fire the blue portal, then face the
         # full relay room and fire orange. The final view leaves the connected
         # blue portal on screen so recursive rendering remains in the sample.
-        'hwait 1212 setang 0 -90 0; hwait 1218 cmd1 +attack; hwait 1224 cmd1 -attack; ' +
-        'hwait 1254 setang 0 0 0; hwait 1260 cmd1 +attack2; hwait 1266 cmd1 -attack2; ' +
-        'hwait 1296 setang 0 -90 0'
+		'wait_for 1212 setang 0 -90 0; wait_for 1218 cmd1 +attack; wait_for 1224 cmd1 -attack; ' +
+		'wait_for 1254 setang 0 0 0; wait_for 1260 cmd1 +attack2; wait_for 1266 cmd1 -attack2; ' +
+		'wait_for 1296 setang 0 -90 0'
     ) | Out-Null
 }
 
@@ -173,10 +173,10 @@ function Invoke-CoopActions {
     # Both local players move and shoot while normal prediction, simulation,
     # visibility, particles, and split-screen rendering remain active.
     Invoke-Game @(
-        'hwait 90 cmd1 +forward; hwait 90 cmd1 +moveleft; hwait 90 cmd2 +forward; hwait 90 cmd2 +moveright; ' +
-        'hwait 129 cmd1 -moveleft; hwait 129 cmd2 -moveright; hwait 129 cmd1 +jump; hwait 129 cmd2 +jump; ' +
-        'hwait 138 cmd1 -jump; hwait 138 cmd2 -jump; hwait 138 cmd1 +attack; hwait 138 cmd2 +attack2; ' +
-        'hwait 144 cmd1 -attack; hwait 144 cmd2 -attack2; hwait 183 cmd1 -forward; hwait 183 cmd2 -forward'
+		'wait_for 90 cmd1 +forward; wait_for 90 cmd1 +moveleft; wait_for 90 cmd2 +forward; wait_for 90 cmd2 +moveright; ' +
+		'wait_for 129 cmd1 -moveleft; wait_for 129 cmd2 -moveright; wait_for 129 cmd1 +jump; wait_for 129 cmd2 +jump; ' +
+		'wait_for 138 cmd1 -jump; wait_for 138 cmd2 -jump; wait_for 138 cmd1 +attack; wait_for 138 cmd2 +attack2; ' +
+		'wait_for 144 cmd1 -attack; wait_for 144 cmd2 -attack2; wait_for 183 cmd1 -forward; wait_for 183 cmd2 -forward'
     ) | Out-Null
 }
 

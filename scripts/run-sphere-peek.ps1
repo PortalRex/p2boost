@@ -3,8 +3,10 @@ param(
     [ValidateRange(23, 40)][int]$DurationSeconds = 23,
     [ValidateSet(360, 500, 999)][int]$FpsMax = 999,
     [ValidateSet('Both', 'Patched', 'Unpatched')][string]$Variant = 'Both',
-    [ValidateRange(1, 10)][int]$Repeats = 1,
-    [switch]$SampleMainThread,
+	[ValidateRange(1, 10)][int]$Repeats = 1,
+	[switch]$SampleMainThread,
+	[ValidateRange(0, 65535)][int]$SampleThreadId = 0,
+	[switch]$SampleStacks,
     [string]$RconPassword = 'p2boostlab',
     [string]$GameRoot = 'D:\SteamLibrary\steamapps\common\Portal 2'
 )
@@ -76,8 +78,9 @@ function Measure-Route([bool]$Patched, [int]$Run) {
     $variant = if ($Repeats -gt 1) { "$state-run$Run" } else { $state }
     $presentCsv = Join-Path $output "sphere-peek-$variant.csv"
     $metricsCsv = Join-Path $output "sphere-peek-$variant-metrics.csv"
+    $workersCsv = Join-Path $output "sphere-peek-$variant-render-workers.csv"
     $profileCsv = Join-Path $output "sphere-peek-$variant-main-thread.csv"
-    Remove-Item $presentCsv, $metricsCsv, $profileCsv -Force -ErrorAction SilentlyContinue
+    Remove-Item $presentCsv, $metricsCsv, $workersCsv, $profileCsv -Force -ErrorAction SilentlyContinue
 
     # Frame pacing is only representative while the game owns the foreground
     # window. Abort rather than accidentally measuring background throttling.
@@ -94,18 +97,25 @@ function Measure-Route([bool]$Patched, [int]$Run) {
         '--no_console_stats',
         '--set_circular_buffer_size', '32768'
     )
-    $mainThreadCapture = if ($SampleMainThread) {
+	$threadCapture = if ($SampleMainThread -or $SampleThreadId) {
         if (-not (Test-Path -LiteralPath $profiler)) {
             throw 'p2profile.exe is missing; build the Release configuration first.'
         }
 
-        # EIP sampling is research-only because it briefly suspends the main
-        # thread. Its QPC values align exactly with PresentMon's hitch window.
-        Start-Process -FilePath $profiler -NoNewWindow -PassThru -ArgumentList @(
-            $game.Id,
-            $DurationSeconds,
-            $profileCsv
-        )
+		# EIP sampling is research-only because it briefly suspends the selected
+		# thread. Its QPC values align exactly with PresentMon's hitch window.
+		$profileArguments = @(
+			$game.Id,
+			$DurationSeconds,
+			$profileCsv
+		)
+		if ($SampleThreadId) {
+			$profileArguments += @('--thread', $SampleThreadId)
+		}
+		if ($SampleStacks) {
+			$profileArguments += '--stack'
+		}
+		Start-Process -FilePath $profiler -NoNewWindow -PassThru -ArgumentList $profileArguments
     } else {
         $null
     }
@@ -114,31 +124,35 @@ function Measure-Route([bool]$Patched, [int]$Run) {
         # The route is ordinary collision-bound input: walk from spawn,
         # sidestep left around the panel, and enter the main chamber.
         Invoke-Game @(
-            'hwait 60 +forward; hwait 240 -forward; hwait 240 +moveleft; ' +
-            'hwait 300 -moveleft; hwait 300 +forward; hwait 780 -forward; ' +
+			'wait_for 60 +forward; wait_for 240 -forward; wait_for 240 +moveleft; ' +
+			'wait_for 300 -moveleft; wait_for 300 +forward; wait_for 780 -forward; ' +
             # Twelve ticks is the narrow line that clears the obstruction
             # without walking past the faith plate, then forward hits it.
-            'hwait 780 +moveleft; hwait 792 -moveleft; hwait 792 +forward; ' +
-            'hwait 1260 -forward'
+			'wait_for 780 +moveleft; wait_for 792 -moveleft; wait_for 792 +forward; ' +
+			'wait_for 1260 -forward'
         ) | Out-Null
 
         $capture.WaitForExit()
-        if ($mainThreadCapture) { $mainThreadCapture.WaitForExit() }
+		if ($threadCapture) { $threadCapture.WaitForExit() }
         if (-not (Test-Path -LiteralPath $presentCsv) -or (Get-Item $presentCsv).Length -eq 0) {
             throw "PresentMon produced no frames for $variant."
         }
-        if ($SampleMainThread -and
+		if (($SampleMainThread -or $SampleThreadId) -and
             (-not (Test-Path -LiteralPath $profileCsv) -or (Get-Item $profileCsv).Length -eq 0)) {
             throw "p2profile produced no samples for $variant."
         }
     } finally {
         try { Stop-Inputs } catch {}
         if (-not $capture.HasExited) { $capture.Kill() }
-        if ($mainThreadCapture -and -not $mainThreadCapture.HasExited) { $mainThreadCapture.Kill() }
+		if ($threadCapture -and -not $threadCapture.HasExited) { $threadCapture.Kill() }
     }
 
     Invoke-Game @('p2boost_dump_metrics', 'p2boost_trace 0') | Out-Null
     Copy-Item (Join-Path $GameRoot 'p2boost_metrics.csv') $metricsCsv -Force
+    $gameWorkers = Join-Path $GameRoot 'p2boost_metrics_render_workers.csv'
+    if (Test-Path -LiteralPath $gameWorkers) {
+        Copy-Item $gameWorkers $workersCsv -Force
+    }
     Invoke-Game @('jpeg') | Out-Null
     Start-Sleep -Milliseconds 500
     $proof = Get-ChildItem (Join-Path $GameRoot 'portal2\screenshots') -Filter 'sp_a2_sphere_peek*.jpg' |

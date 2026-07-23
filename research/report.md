@@ -296,6 +296,37 @@ executed the corresponding release-side state transition. A prototype that
 intercepted only the poll/reacquire side was rejected after a runtime failure
 and was removed. No partial lifecycle bypass ships.
 
+## Intro3 first-portal demo reproduction
+
+The 22.433-second `PortalGun_2243_76561198795823814_348449.dem` in
+`portal2/a` is replayed with ordinary `playdemo`, not `timedemo`. The first
+recorded attack input is not used as the marker because it does not place a
+portal. Instead, the capture identifies the first frame with a nonzero portal
+render count, which occurs near 15.7--15.9 seconds after PresentMon starts and
+corresponds to the successful placement around 14 seconds of demo simulation.
+
+Three independent cold-process captures reproduce the same sequence. Portal
+CPU rendering begins at only 0.18--0.23 ms. The following material worker then
+spends 38--55 ms, including 16--39 ms in native D3D9 draw submission. A later
+queued `materialsystem.dll+0x13c60` command blocks for 55--56 ms in the already
+identified hardware-synchronization path, with another 21--23 ms occurrence in
+some runs. Present itself can independently cost about 9 ms during this burst.
+
+Resource-creation hooks separate late Source allocation from driver first use.
+During map load, one observed batch creates 901 textures, 656 vertex shaders,
+and 1,066 pixel shaders roughly thirteen seconds before the portal. The
+portal-opening workers create zero resources of those types. The stall is therefore not a
+portal-resource allocation bug: it is first-use D3D9 draw/pipeline work followed
+by Source's explicit fence. D3D9 exposes no pipeline-precompile object, and the
+only known way to force this work earlier is a dummy draw. That workaround is
+explicitly excluded, as is deleting the fence when doing so merely transfers
+the backlog to Present. These rejected approaches do not ship.
+
+Playback completes with the expected `sp_a1_intro3` header and 1,346 demo ticks.
+The standalone runner disables tracing, restores `fps_max` and patch state, and
+fully closes the game even when analysis fails so research hooks cannot remain
+active after a benchmark.
+
 ## Sphere Peek chamber-entry reproduction
 
 The Sphere Peek route now starts from the ordinary `sp_a2_sphere_peek` spawn,

@@ -57,10 +57,10 @@ try {
     # Move around the entrance panel, enter the chamber, then shift left for
     # exactly twelve ticks. This is the narrow route that hits the catapult.
     Invoke-Game @(
-        'hwait 60 +forward; hwait 240 -forward; hwait 240 +moveleft; ' +
-        'hwait 300 -moveleft; hwait 300 +forward; hwait 780 -forward; ' +
-        'hwait 780 +moveleft; hwait 792 -moveleft; hwait 792 +forward; ' +
-        'hwait 1260 -forward'
+		'wait_for 60 +forward; wait_for 240 -forward; wait_for 240 +moveleft; ' +
+		'wait_for 300 -moveleft; wait_for 300 +forward; wait_for 780 -forward; ' +
+		'wait_for 780 +moveleft; wait_for 792 -moveleft; wait_for 792 +forward; ' +
+		'wait_for 1260 -forward'
     ) | Out-Null
 
     $capture.WaitForExit()

@@ -82,15 +82,15 @@ try {
     $actions = if ($Scenario -eq 'SpherePeek') {
         # Enter the chamber around the panel, take the narrow twelve-tick line
         # onto the faith plate, and retain the catapult launch and landing.
-        'hwait 30 +forward; hwait 210 -forward; hwait 210 +moveleft; ' +
-        'hwait 270 -moveleft; hwait 270 +forward; hwait 750 -forward; ' +
-        'hwait 750 +moveleft; hwait 762 -moveleft; hwait 762 +forward; ' +
-        'hwait 1230 -forward'
+		'wait_for 30 +forward; wait_for 210 -forward; wait_for 210 +moveleft; ' +
+		'wait_for 270 -moveleft; wait_for 270 +forward; wait_for 750 -forward; ' +
+		'wait_for 750 +moveleft; wait_for 762 -moveleft; wait_for 762 +forward; ' +
+		'wait_for 1230 -forward'
     } else {
-        'hwait 30 +forward; hwait 1200 -forward; ' +
-        'hwait 1212 setang 0 -90 0; hwait 1218 +attack; hwait 1224 -attack; ' +
-        'hwait 1254 setang 0 0 0; hwait 1260 +attack2; hwait 1266 -attack2; ' +
-        'hwait 1296 setang 0 -90 0'
+		'wait_for 30 +forward; wait_for 1200 -forward; ' +
+		'wait_for 1212 setang 0 -90 0; wait_for 1218 +attack; wait_for 1224 -attack; ' +
+		'wait_for 1254 setang 0 0 0; wait_for 1260 +attack2; wait_for 1266 -attack2; ' +
+		'wait_for 1296 setang 0 -90 0'
     }
     Invoke-Game @($actions) | Out-Null
 

@@ -68,6 +68,32 @@ namespace p2boost::renderer_research {
 			return false;
 		}
 
+		std::uint8_t* resolve_command_key(
+			void* command, void* queued_functor_execute, void* queued_functor_leaf, void* queued_functor_one_argument ) noexcept {
+			auto*  object  = static_cast< std::uint8_t* >( command );
+			auto** vtable  = object ? *reinterpret_cast< void*** >( object ) : nullptr;
+			auto*  execute = vtable ? reinterpret_cast< std::uint8_t* >( vtable[ 3 ] ) : nullptr;
+			auto*  key	   = execute;
+
+			// A one-argument functor stores its concrete callback directly at +0x10.
+			if( execute == queued_functor_one_argument ) {
+				key = *reinterpret_cast< std::uint8_t** >( object + 0x10 );
+			}
+			// The generic functor adds another object layer around the same layout.
+			else if( execute == queued_functor_execute ) {
+				key = *reinterpret_cast< std::uint8_t** >( object + 0x10 );
+				if( key == queued_functor_leaf || key == queued_functor_one_argument ) {
+					auto* target = *reinterpret_cast< std::uint8_t** >( object + 0x14 );
+					if( target ) {
+						auto* leaf = *reinterpret_cast< std::uint8_t** >( target + 0x10 );
+						if( leaf )
+							key = leaf;
+					}
+				}
+			}
+			return key;
+		}
+
 		void describe_texture_0( RenderWorkerMetrics& metrics, const PipelineObservation& pipeline ) noexcept {
 			// inspect only the texture attached to the slowest draw in this worker.
 			auto* texture = reinterpret_cast< IDirect3DBaseTexture9* >( static_cast< std::uintptr_t >( pipeline.m_state.m_textures[ 0 ] ) );
@@ -94,27 +120,6 @@ namespace p2boost::renderer_research {
 				metrics.m_max_draw_texture0_usage  = description.Usage;
 				metrics.m_max_draw_texture0_pool   = static_cast< std::uint32_t >( description.Pool );
 
-				// Hashing is intentionally research-only. LockRect can itself block on
-				// a managed texture, so its cost must never enter a shipping build.
-				if( ( pipeline.m_first_texture_mask & 1 ) != 0 && type == D3DRTYPE_TEXTURE && description.Format == D3DFMT_DXT5 ) {
-					D3DLOCKED_RECT locked{ };
-					auto*		   texture2d = static_cast< IDirect3DTexture9* >( texture );
-					if( SUCCEEDED( texture2d->LockRect( 0, &locked, nullptr, D3DLOCK_READONLY ) ) ) {
-						std::uint64_t hash		= 1469598103934665603ull;
-						const auto	  rows		= ( description.Height + 3u ) / 4u;
-						const auto	  row_bytes = ( ( description.Width + 3u ) / 4u ) * 16u;
-						const auto*	  row		= static_cast< const std::uint8_t* >( locked.pBits );
-						for( UINT y = 0; y < rows; ++y ) {
-							for( UINT x = 0; x < row_bytes; ++x ) {
-								hash ^= row[ x ];
-								hash *= 1099511628211ull;
-							}
-							row += locked.Pitch;
-						}
-						metrics.m_max_draw_texture0_hash = hash;
-						texture2d->UnlockRect( 0 );
-					}
-				}
 				return;
 			}
 
@@ -138,32 +143,17 @@ namespace p2boost::renderer_research {
 		std::memset( g_dynamic_surface_table, 0, sizeof( g_dynamic_surface_table ) );
 	}
 
-	void count_queued_command(
-		RenderWorkerMetrics& metrics, std::uint8_t* node, void* queued_functor_execute, void* queued_functor_leaf ) noexcept {
-		// queued nodes store the command object immediately after their link.
-		auto* object = node + sizeof( void* );
-		// the command vtable exposes its execute function in slot three.
-		auto** vtable  = *reinterpret_cast< void*** >( object );
-		auto*  execute = vtable ? reinterpret_cast< std::uint8_t* >( vtable[ 3 ] ) : nullptr;
-		auto*  key	   = execute;
-
-		// Unwrap queued functors so the histogram identifies their real target.
-		if( execute == queued_functor_execute ) {
-			key = *reinterpret_cast< std::uint8_t** >( object + 0x10 );
-			if( key == queued_functor_leaf ) {
-				auto* target = *reinterpret_cast< std::uint8_t** >( object + 0x14 );
-				if( target ) {
-					auto* leaf = *reinterpret_cast< std::uint8_t** >( target + 0x10 );
-					if( leaf ) {
-						key = leaf;
-					}
-				}
-			}
-		}
+	void count_queued_command( RenderWorkerMetrics& metrics,
+		std::uint8_t*								node,
+		void*										queued_functor_execute,
+		void*										queued_functor_leaf,
+		void*										queued_functor_one_argument ) noexcept {
+		// Queued nodes store the command object immediately after their link.
+		auto*	   object = node + sizeof( void* );
+		const auto key32  = queued_command_key( object, queued_functor_execute, queued_functor_leaf, queued_functor_one_argument );
 
 		// retain a compact per-worker histogram without heap allocation.
-		const auto	key32 = static_cast< unsigned int >( reinterpret_cast< std::uintptr_t >( key ) );
-		std::size_t slot  = 0;
+		std::size_t slot = 0;
 		while(
 			slot < metrics.m_command_counts.size( ) && metrics.m_command_counts[ slot ] != 0 && metrics.m_command_keys[ slot ] != key32 ) {
 			++slot;
@@ -171,6 +161,29 @@ namespace p2boost::renderer_research {
 		if( slot < metrics.m_command_counts.size( ) ) {
 			metrics.m_command_keys[ slot ] = key32;
 			++metrics.m_command_counts[ slot ];
+		}
+	}
+
+	unsigned int queued_command_key(
+		void* object, void* queued_functor_execute, void* queued_functor_leaf, void* queued_functor_one_argument ) noexcept {
+		// Resolve before Execute: a command remains alive, but Execute may mutate
+		// the wrapper fields used to locate a queued functor's concrete callback.
+		auto* key = resolve_command_key( object, queued_functor_execute, queued_functor_leaf, queued_functor_one_argument );
+		return static_cast< unsigned int >( reinterpret_cast< std::uintptr_t >( key ) );
+	}
+
+	void record_queued_command( RenderWorkerMetrics& metrics, unsigned int key, Qpc::tick_t elapsed ) noexcept {
+		++metrics.m_command_execute_count;
+		metrics.m_command_execute_qpc += elapsed;
+		for( std::size_t slot = 0; slot < metrics.m_command_keys.size( ); ++slot ) {
+			if( metrics.m_command_counts[ slot ] != 0 && metrics.m_command_keys[ slot ] == key ) {
+				metrics.m_command_qpc[ slot ] += elapsed;
+				break;
+			}
+		}
+		if( elapsed > metrics.m_slow_command_qpc ) {
+			metrics.m_slow_command_qpc = elapsed;
+			metrics.m_slow_command_key = key;
 		}
 	}
 
@@ -249,6 +262,21 @@ namespace p2boost::renderer_research {
 		const Qpc::tick_t elapsed = Qpc::now( ) - begin_qpc;
 		++metrics.m_draw_count;
 		metrics.m_draw_qpc += elapsed;
+
+		// Separate lazy first-use work from ordinary steady-state draws. A
+		// resource can be new even when its shader pair was already observed.
+		const bool first_pipeline = pipeline.m_first_vertex_shader || pipeline.m_first_pixel_shader || pipeline.m_first_pipeline;
+		const bool first_texture  = pipeline.m_first_texture_mask != 0;
+		if( first_pipeline ) {
+			++metrics.m_first_pipeline_draw_count;
+			metrics.m_first_pipeline_draw_qpc += elapsed;
+		}
+		if( first_pipeline || first_texture ) {
+			++metrics.m_first_resource_draw_count;
+			metrics.m_first_resource_draw_qpc += elapsed;
+		}
+		for( auto mask = pipeline.m_first_texture_mask; mask != 0; mask >>= 1 )
+			metrics.m_first_texture_count += mask & 1u;
 		if( elapsed <= metrics.m_max_draw_qpc ) {
 			return;
 		}

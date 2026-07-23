@@ -73,12 +73,16 @@ $rows = foreach ($frame in $frames) {
     if ($frameMs -le 0) { continue }
 
     $qpc = [double]$frame.CPUStartQPC
+    # p2boost commits pending work at CEngine::Frame completion, whereas
+    # PresentMon timestamps the start of the same frame. Match against the
+    # computed end QPC so short high-FPS frames cannot select the prior row.
+    $frameEndQpc = $qpc + $frameMs * $frequency / 1000.0
     $cpuBusy = if ($frame.CPUBusy -ne 'NA') { [double]$frame.CPUBusy } else { 0.0 }
     $cpuWait = if ($frame.CPUWait -ne 'NA') { [double]$frame.CPUWait } else { 0.0 }
     $gpuBusy = if ($frame.GPUBusy -ne 'NA') { [double]$frame.GPUBusy } else { 0.0 }
-    $metric = Find-NearestMetric $qpc
+    $metric = Find-NearestMetric $frameEndQpc
     $metricDistanceMs = if ($metric) {
-        [Math]::Abs([double]$metric.qpc - $qpc) * 1000.0 / $frequency
+        [Math]::Abs([double]$metric.qpc - $frameEndQpc) * 1000.0 / $frequency
     } else {
         [double]::NaN
     }
@@ -108,6 +112,30 @@ $rows = foreach ($frame in $frames) {
         ShadowMs = if ($metric) { [double]$metric.shadow_update_ms } else { 0.0 }
         ShadowSkips = if ($metric) { [int]$metric.shadow_skipped_count } else { 0 }
         WorkerMs = if ($metric) { [double]$metric.render_worker_ms } else { 0.0 }
+        WorldMs = if ($metric -and $metric.PSObject.Properties.Name -contains 'world_surface_ms') {
+            [double]$metric.world_surface_ms
+        } else { 0.0 }
+        WorldCalls = if ($metric -and $metric.PSObject.Properties.Name -contains 'world_surface_count') {
+            [int]$metric.world_surface_count
+        } else { 0 }
+        WorldFlags = if ($metric -and $metric.PSObject.Properties.Name -contains 'world_surface_flags') {
+            $metric.world_surface_flags
+        } else { '0x0' }
+        SpatialMs = if ($metric -and $metric.PSObject.Properties.Name -contains 'portal_movement_spatial_ms') {
+            [double]$metric.portal_movement_spatial_ms
+        } else { 0.0 }
+        SpatialCalls = if ($metric -and $metric.PSObject.Properties.Name -contains 'portal_movement_spatial_count') {
+            [int]$metric.portal_movement_spatial_count
+        } else { 0 }
+        AnimationMs = if ($metric -and $metric.PSObject.Properties.Name -contains 'animation_events_ms') {
+            [double]$metric.animation_events_ms
+        } else { 0.0 }
+        SoundMs = if ($metric -and $metric.PSObject.Properties.Name -contains 'sound_lookup_ms') {
+            [double]$metric.sound_lookup_ms
+        } else { 0.0 }
+        BitReadMs = if ($metric -and $metric.PSObject.Properties.Name -contains 'read_ubit_var_ms') {
+            [double]$metric.read_ubit_var_ms
+        } else { 0.0 }
         ReacquireMs = if ($metric) { [double]$metric.reacquire_ms } else { 0.0 }
         Focused = if ($metric) { [int]$metric.focused } else { -1 }
         PresentMode = $frame.PresentMode

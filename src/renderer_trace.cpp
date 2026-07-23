@@ -18,6 +18,21 @@
 namespace p2boost {
 	RendererTrace* RendererTrace::m_instance{ };
 
+#ifdef P2BOOST_RESEARCH_DRAW_TRACE
+	// Replace the five-byte indirect call without changing the executor's stack
+	// frame. The dispatcher invokes the original EDX target and returns here.
+	void __declspec( naked ) __cdecl command_execute_hook( ) {
+		__asm {
+			push edx
+			lea eax, [ edi + 4 ]
+			push eax
+			call RendererTrace::CommandExecuteDispatch
+			add esp, 8
+			ret
+		}
+	}
+#endif
+
 	namespace {
 		bool has_bytes( const Address address, const std::initializer_list< std::uint8_t >& bytes ) {
 			return address && std::memcmp( address.as< const void* >( ), bytes.begin( ), bytes.size( ) ) == 0;
@@ -27,6 +42,18 @@ namespace p2boost {
 			bool m_active{ };
 		};
 		thread_local WorkerTrace g_worker_trace;
+
+#ifdef P2BOOST_RESEARCH_DRAW_TRACE
+		void record_creation(
+			std::atomic_uint& count, std::atomic_llong& total, std::atomic_llong& maximum, Qpc::tick_t elapsed ) noexcept {
+			count.fetch_add( 1, std::memory_order_relaxed );
+			total.fetch_add( elapsed, std::memory_order_relaxed );
+			auto current = maximum.load( std::memory_order_relaxed );
+			while( elapsed > current &&
+				   !maximum.compare_exchange_weak( current, elapsed, std::memory_order_relaxed, std::memory_order_relaxed ) ) {
+			}
+		}
+#endif
 
 	}
 
@@ -151,19 +178,55 @@ namespace p2boost {
 										  .add( portal2::xref::dynamic_light_signed_vtable )
 										  .at< Address >( );
 		// unwrap these two functors only while collecting research metrics.
-		m_queued_functor_execute = pattern::find_unique( materials, portal2::signature::queued_functor_execute ).as< void* >( );
-		m_queued_functor_leaf	 = pattern::find_unique( materials, portal2::signature::queued_functor_leaf ).as< void* >( );
-		if( !d3d_device || !unsigned_vtable || !signed_vtable || !m_queued_functor_execute || !m_queued_functor_leaf ) {
+		m_queued_functor_execute	  = pattern::find_unique( materials, portal2::signature::queued_functor_execute ).as< void* >( );
+		m_queued_functor_leaf		  = pattern::find_unique( materials, portal2::signature::queued_functor_leaf ).as< void* >( );
+		m_queued_functor_one_argument = pattern::find_unique( materials, portal2::signature::queued_functor_one_argument ).as< void* >( );
+		if( !d3d_device || !unsigned_vtable || !signed_vtable || !m_queued_functor_execute || !m_queued_functor_leaf ||
+			!m_queued_functor_one_argument ) {
 			remove( );
 			return false;
 		}
+
+		// Time the complete Source dynamic-buffer lock paths. Their prologues
+		// contain only position-independent instructions, so six-byte detours
+		// preserve whole instructions without relocation.
+		const Address index_buffer_lock	 = pattern::find_unique( shader_module, portal2::signature::index_buffer_lock );
+		const Address vertex_buffer_lock = pattern::find_unique( shader_module, portal2::signature::vertex_buffer_lock );
+		const std::vector< std::uint8_t > index_buffer_lock_bytes{ 0x55, 0x8b, 0xec, 0x51, 0x53, 0x56 };
+		const std::vector< std::uint8_t > vertex_buffer_lock_bytes{ 0x55, 0x8b, 0xec, 0x83, 0xec, 0x08 };
+		const bool						  buffer_lock_hooks = m_index_buffer_lock.install( index_buffer_lock.as< void* >( ),
+											  index_buffer_lock_bytes,
+											  reinterpret_cast< void* >( &IndexBufferLock ) ) &&
+									   m_vertex_buffer_lock.install( vertex_buffer_lock.as< void* >( ),
+										   vertex_buffer_lock_bytes,
+										   reinterpret_cast< void* >( &VertexBufferLock ) );
+		const bool						  occlusion_query_hook	= install_slot( m_create_occlusion_query,
+			shader_api,
+			portal2::slot::create_occlusion_query,
+			reinterpret_cast< void* >( &CreateOcclusionQuery ) );
+		const Address					  command_execute_match = pattern::find_unique( materials, portal2::signature::command_execute );
+		const Address					  command_execute_site	= command_execute_match.add( portal2::xref::command_execute_call );
+		const std::vector< std::uint8_t > command_execute_bytes{ 0x8d, 0x4f, 0x04, 0xff, 0xd2 };
+		const bool						  command_execute_installed = m_command_execute.install( command_execute_site.as< void* >( ),
+			   command_execute_bytes,
+			   reinterpret_cast< void* >( &command_execute_hook ) );
 
 		// slot three is the shared Execute method embedded by both constructors.
 		auto** unsigned_execute_slot	 = unsigned_vtable.as< void** >( ) + 3;
 		auto** signed_execute_slot		 = signed_vtable.as< void** >( ) + 3;
 		m_dynamic_light_execute_original = reinterpret_cast< DynamicLightExecute_t >( *unsigned_execute_slot );
 		const bool draw_hooks =
-			d3d_device && install_slot( m_set_texture, d3d_device, portal2::d3d9::set_texture, reinterpret_cast< void* >( &SetTexture ) ) &&
+			d3d_device &&
+			install_slot( m_create_texture, d3d_device, portal2::d3d9::create_texture, reinterpret_cast< void* >( &CreateTexture ) ) &&
+			install_slot( m_create_vertex_shader,
+				d3d_device,
+				portal2::d3d9::create_vertex_shader,
+				reinterpret_cast< void* >( &CreateVertexShader ) ) &&
+			install_slot( m_create_pixel_shader,
+				d3d_device,
+				portal2::d3d9::create_pixel_shader,
+				reinterpret_cast< void* >( &CreatePixelShader ) ) &&
+			install_slot( m_set_texture, d3d_device, portal2::d3d9::set_texture, reinterpret_cast< void* >( &SetTexture ) ) &&
 			install_slot( m_set_vertex_shader,
 				d3d_device,
 				portal2::d3d9::set_vertex_shader,
@@ -187,8 +250,11 @@ namespace p2boost {
 			m_dynamic_light_execute_unsigned.install( unsigned_execute_slot, reinterpret_cast< void* >( &DynamicLightExecute ) ) &&
 			m_dynamic_light_execute_signed.install( signed_execute_slot, reinterpret_cast< void* >( &DynamicLightExecute ) );
 #else
-		const bool draw_hooks		   = true;
-		const bool dynamic_light_hooks = true;
+		const bool draw_hooks				 = true;
+		const bool dynamic_light_hooks		 = true;
+		const bool buffer_lock_hooks		 = true;
+		const bool occlusion_query_hook		 = true;
+		const bool command_execute_installed = true;
 #endif
 		const auto lighting_call	   = x86::relative_call( lighting_site, Address( m_lighting_original ) );
 		const auto lighting_cache_call = x86::relative_call( lighting_cache_site, Address( m_lighting_cache_original ) );
@@ -227,7 +293,7 @@ namespace p2boost {
 				reinterpret_cast< void* >( &ResourceCallbacks ) ) ||
 			!m_hardware_sync.install( hardware_sync.as< void* >( ), hardware_sync_bytes, reinterpret_cast< void* >( &HardwareSync ) ) ||
 			!m_present.install( present_vtable + portal2::slot::present, reinterpret_cast< void* >( &Present ) ) || !draw_hooks ||
-			!dynamic_light_hooks ||
+			!dynamic_light_hooks || !buffer_lock_hooks || !occlusion_query_hook || !command_execute_installed ||
 			!m_render_worker.install( render_worker_site.as< void* >( ),
 				render_worker_bytes,
 				1,
@@ -256,6 +322,10 @@ namespace p2boost {
 			Sleep( 1 );
 		}
 #ifdef P2BOOST_RESEARCH_DRAW_TRACE
+		m_command_execute.remove( );
+		m_create_occlusion_query.remove( );
+		m_vertex_buffer_lock.remove( );
+		m_index_buffer_lock.remove( );
 		m_dynamic_light_execute_signed.remove( );
 		m_dynamic_light_execute_unsigned.remove( );
 		m_draw_indexed_primitive_up.remove( );
@@ -265,8 +335,12 @@ namespace p2boost {
 		m_set_pixel_shader.remove( );
 		m_set_vertex_shader.remove( );
 		m_set_texture.remove( );
+		m_create_pixel_shader.remove( );
+		m_create_vertex_shader.remove( );
+		m_create_texture.remove( );
 		m_queued_functor_execute		 = nullptr;
 		m_queued_functor_leaf			 = nullptr;
+		m_queued_functor_one_argument	 = nullptr;
 		m_dynamic_light_execute_original = nullptr;
 #endif
 		m_present.remove( );
@@ -350,7 +424,8 @@ namespace p2boost {
 			renderer_research::count_queued_command( g_worker_trace,
 				node,
 				instance->m_queued_functor_execute,
-				instance->m_queued_functor_leaf );
+				instance->m_queued_functor_leaf,
+				instance->m_queued_functor_one_argument );
 #endif
 		}
 		const auto byte_delta = [ context ]( size_t current, size_t start ) {
@@ -377,6 +452,19 @@ namespace p2boost {
 		g_worker_trace.m_parameter_bytes = parameter_bytes;
 		g_worker_trace.m_vertex_bytes	 = vertex_bytes;
 		g_worker_trace.m_index_bytes	 = index_bytes;
+#ifdef P2BOOST_RESEARCH_DRAW_TRACE
+		// Resource creation can occur on the main thread before its queued draw.
+		// Consume process-wide observations into the next completed worker batch.
+		g_worker_trace.m_texture_create_count		  = instance->m_pending_texture_create_count.exchange( 0 );
+		g_worker_trace.m_texture_create_qpc			  = instance->m_pending_texture_create_qpc.exchange( 0 );
+		g_worker_trace.m_max_texture_create_qpc		  = instance->m_pending_max_texture_create_qpc.exchange( 0 );
+		g_worker_trace.m_vertex_shader_create_count	  = instance->m_pending_vertex_shader_create_count.exchange( 0 );
+		g_worker_trace.m_vertex_shader_create_qpc	  = instance->m_pending_vertex_shader_create_qpc.exchange( 0 );
+		g_worker_trace.m_max_vertex_shader_create_qpc = instance->m_pending_max_vertex_shader_create_qpc.exchange( 0 );
+		g_worker_trace.m_pixel_shader_create_count	  = instance->m_pending_pixel_shader_create_count.exchange( 0 );
+		g_worker_trace.m_pixel_shader_create_qpc	  = instance->m_pending_pixel_shader_create_qpc.exchange( 0 );
+		g_worker_trace.m_max_pixel_shader_create_qpc  = instance->m_pending_max_pixel_shader_create_qpc.exchange( 0 );
+#endif
 		instance->m_metrics->record_render_worker( g_worker_trace );
 	}
 
@@ -438,6 +526,79 @@ namespace p2boost {
 	}
 
 #ifdef P2BOOST_RESEARCH_DRAW_TRACE
+	void __cdecl RendererTrace::CommandExecuteDispatch( void* object, void* execute ) {
+		auto* instance = m_instance;
+		auto  previous = reinterpret_cast< void( __thiscall* )( void* ) >( execute );
+		if( !previous )
+			return;
+		if( !instance || !g_worker_trace.m_active || !instance->m_metrics || !instance->m_metrics->tracing( ) ) {
+			previous( object );
+			return;
+		}
+
+		// Resolve the semantic target while the queued command is intact. Execute
+		// is permitted to consume or rewrite fields in its wrapper object.
+		const auto		  key	= renderer_research::queued_command_key( object,
+			 instance->m_queued_functor_execute,
+			 instance->m_queued_functor_leaf,
+			 instance->m_queued_functor_one_argument );
+		const Qpc::tick_t begin = Qpc::now( );
+		previous( object );
+		const Qpc::tick_t elapsed = Qpc::now( ) - begin;
+		renderer_research::record_queued_command( g_worker_trace, key, elapsed );
+	}
+
+	unsigned int __fastcall RendererTrace::IndexBufferLock( void* self, void*, int count, char append, void* description ) {
+		auto* instance = m_instance;
+		auto  previous = instance ? reinterpret_cast< IndexBufferLock_t >( instance->m_index_buffer_lock.previous( ) ) : nullptr;
+		if( !previous )
+			return 0;
+		if( !g_worker_trace.m_active || !instance->m_metrics || !instance->m_metrics->tracing( ) )
+			return previous( self, count, append, description );
+
+		const Qpc::tick_t begin	  = Qpc::now( );
+		const auto		  result  = previous( self, count, append, description );
+		const Qpc::tick_t elapsed = Qpc::now( ) - begin;
+		++g_worker_trace.m_index_buffer_lock_count;
+		g_worker_trace.m_index_buffer_lock_qpc += elapsed;
+		g_worker_trace.m_max_index_buffer_lock_qpc = ( std::max )( g_worker_trace.m_max_index_buffer_lock_qpc, elapsed );
+		return result;
+	}
+
+	unsigned int __fastcall RendererTrace::VertexBufferLock( void* self, void*, int count, unsigned int flags, void* description ) {
+		auto* instance = m_instance;
+		auto  previous = instance ? reinterpret_cast< VertexBufferLock_t >( instance->m_vertex_buffer_lock.previous( ) ) : nullptr;
+		if( !previous )
+			return 0;
+		if( !g_worker_trace.m_active || !instance->m_metrics || !instance->m_metrics->tracing( ) )
+			return previous( self, count, flags, description );
+
+		const Qpc::tick_t begin	  = Qpc::now( );
+		const auto		  result  = previous( self, count, flags, description );
+		const Qpc::tick_t elapsed = Qpc::now( ) - begin;
+		++g_worker_trace.m_vertex_buffer_lock_count;
+		g_worker_trace.m_vertex_buffer_lock_qpc += elapsed;
+		g_worker_trace.m_max_vertex_buffer_lock_qpc = ( std::max )( g_worker_trace.m_max_vertex_buffer_lock_qpc, elapsed );
+		return result;
+	}
+
+	unsigned int __fastcall RendererTrace::CreateOcclusionQuery( void* self, void* ) {
+		auto* instance = m_instance;
+		auto  previous = instance ? reinterpret_cast< CreateOcclusionQuery_t >( instance->m_create_occlusion_query.previous( ) ) : nullptr;
+		if( !previous )
+			return 0;
+		if( !g_worker_trace.m_active || !instance->m_metrics || !instance->m_metrics->tracing( ) )
+			return previous( self );
+
+		const Qpc::tick_t begin	  = Qpc::now( );
+		const auto		  result  = previous( self );
+		const Qpc::tick_t elapsed = Qpc::now( ) - begin;
+		++g_worker_trace.m_occlusion_query_create_count;
+		g_worker_trace.m_occlusion_query_create_qpc += elapsed;
+		g_worker_trace.m_max_occlusion_query_create_qpc = ( std::max )( g_worker_trace.m_max_occlusion_query_create_qpc, elapsed );
+		return result;
+	}
+
 	void __fastcall RendererTrace::DynamicLightExecute( void* self, void* ) {
 		// capture identity and cost before chaining to the original command.
 		auto* instance = m_instance;
@@ -456,7 +617,72 @@ namespace p2boost {
 		g_worker_trace.m_dynamic_light_qpc += end - begin;
 	}
 
-	// mirror texture bindings without retaining COM references.
+	// Time resource creation to separate Source allocation from first-use draws.
+	HRESULT __stdcall RendererTrace::CreateTexture( IDirect3DDevice9* self,
+		UINT														  width,
+		UINT														  height,
+		UINT														  levels,
+		DWORD														  usage,
+		D3DFORMAT													  format,
+		D3DPOOL														  pool,
+		IDirect3DTexture9**											  texture,
+		HANDLE*														  shared_handle ) {
+		auto* instance = m_instance;
+		auto  previous = instance ? reinterpret_cast< decltype( &CreateTexture ) >( instance->m_create_texture.previous( ) ) : nullptr;
+		if( !previous )
+			return D3DERR_INVALIDCALL;
+		if( !instance->m_metrics || !instance->m_metrics->tracing( ) )
+			return previous( self, width, height, levels, usage, format, pool, texture, shared_handle );
+
+		const Qpc::tick_t begin	  = Qpc::now( );
+		const HRESULT	  result  = previous( self, width, height, levels, usage, format, pool, texture, shared_handle );
+		const Qpc::tick_t elapsed = Qpc::now( ) - begin;
+		record_creation( instance->m_pending_texture_create_count,
+			instance->m_pending_texture_create_qpc,
+			instance->m_pending_max_texture_create_qpc,
+			elapsed );
+		return result;
+	}
+
+	HRESULT __stdcall RendererTrace::CreateVertexShader( IDirect3DDevice9* self, const DWORD* function, IDirect3DVertexShader9** shader ) {
+		auto* instance = m_instance;
+		auto  previous =
+			 instance ? reinterpret_cast< decltype( &CreateVertexShader ) >( instance->m_create_vertex_shader.previous( ) ) : nullptr;
+		if( !previous )
+			return D3DERR_INVALIDCALL;
+		if( !instance->m_metrics || !instance->m_metrics->tracing( ) )
+			return previous( self, function, shader );
+
+		const Qpc::tick_t begin	  = Qpc::now( );
+		const HRESULT	  result  = previous( self, function, shader );
+		const Qpc::tick_t elapsed = Qpc::now( ) - begin;
+		record_creation( instance->m_pending_vertex_shader_create_count,
+			instance->m_pending_vertex_shader_create_qpc,
+			instance->m_pending_max_vertex_shader_create_qpc,
+			elapsed );
+		return result;
+	}
+
+	HRESULT __stdcall RendererTrace::CreatePixelShader( IDirect3DDevice9* self, const DWORD* function, IDirect3DPixelShader9** shader ) {
+		auto* instance = m_instance;
+		auto  previous =
+			 instance ? reinterpret_cast< decltype( &CreatePixelShader ) >( instance->m_create_pixel_shader.previous( ) ) : nullptr;
+		if( !previous )
+			return D3DERR_INVALIDCALL;
+		if( !instance->m_metrics || !instance->m_metrics->tracing( ) )
+			return previous( self, function, shader );
+
+		const Qpc::tick_t begin	  = Qpc::now( );
+		const HRESULT	  result  = previous( self, function, shader );
+		const Qpc::tick_t elapsed = Qpc::now( ) - begin;
+		record_creation( instance->m_pending_pixel_shader_create_count,
+			instance->m_pending_pixel_shader_create_qpc,
+			instance->m_pending_max_pixel_shader_create_qpc,
+			elapsed );
+		return result;
+	}
+
+	// Mirror texture bindings without retaining COM references.
 	HRESULT __stdcall RendererTrace::SetTexture( IDirect3DDevice9* self, DWORD stage, IDirect3DBaseTexture9* texture ) {
 		auto* instance = m_instance;
 		auto  previous = instance ? reinterpret_cast< decltype( &SetTexture ) >( instance->m_set_texture.previous( ) ) : nullptr;

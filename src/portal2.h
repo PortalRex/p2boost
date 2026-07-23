@@ -37,8 +37,15 @@ namespace p2boost::portal2 {
 		constexpr auto render_worker = "33 C9 51 8D 55 F4 52 51 B8 ? ? ? ? 50 56 E8 ? ? ? ? 83 C4 10";
 
 		// research-only queued-functor wrappers.
-		constexpr auto queued_functor_execute = "8B C1 8B 48 14 8B 40 10 FF E0 CC CC CC CC CC CC";
-		constexpr auto queued_functor_leaf	  = "8B 01 FF 60 0C CC CC CC CC CC CC CC CC CC CC CC 55 8B EC";
+		constexpr auto queued_functor_execute	   = "8B C1 8B 48 14 8B 40 10 FF E0 CC CC CC CC CC CC";
+		constexpr auto queued_functor_leaf		   = "8B 01 FF 60 0C CC CC CC CC CC CC CC CC CC CC CC 55 8B EC";
+		constexpr auto queued_functor_one_argument = "8B C1 8B 48 18 8B 50 10 51 8B 48 14 FF D2 C3 CC";
+
+		// Shader API dynamic index/vertex buffer lock entry points. These are
+		// research-only probes for driver serialization outside draw calls.
+		constexpr auto index_buffer_lock  = "55 8B EC 51 53 56 8B F1 8B 0D ? ? ? ? 8B 01 8B 50 6C";
+		constexpr auto vertex_buffer_lock = "55 8B EC 83 EC 08 53 56 8B F1 8B 0D ? ? ? ? 8B 01 8B 90 94 00 00 00";
+		constexpr auto command_execute	  = "8B 47 04 8B 50 0C 8D 4F 04 FF D2 8B 47 04 8B 50 08";
 
 		// primary and split-screen CViewRender xrefs to the portal renderer.
 		constexpr auto primary_portal_render   = "8D 95 18 FB FF FF 52 8D 85 C0 FD FF FF 50 8B CE E8 ? ? ? ? 8B 0D";
@@ -47,6 +54,18 @@ namespace p2boost::portal2 {
 		// client-shadow xrefs for the manager object and flashlight-model list.
 		constexpr auto shadow_manager	 = "50 57 53 B9 ? ? ? ? E8 ? ? ? ? 5F 5B 5E 5D C3";
 		constexpr auto flashlight_models = "6A 00 68 ? ? ? ? FF 15 ? ? ? ? 8B 0D ? ? ? ? 83 79 30 00 8D 86 A0 00 00 00";
+
+		// Single caller of the BSP world-surface mesh construction routine.
+		constexpr auto world_surface = "F6 C3 40 74 14 8B 45 08 53 50 56 E8 ? ? ? ? 83 C4 0C";
+
+		// CPortalGameMovement virtual spatial query sampled in Sphere Peek.
+		constexpr auto portal_movement_spatial =
+			"53 8B DC 83 EC 08 83 E4 F0 83 C4 04 55 8B 6B 04 89 6C 24 04 8B EC 83 EC 58 56 8B F1 8B 8E 80 07 00 00";
+
+		// Functions sampled together during first visibility of the Sphere Peek chamber.
+		constexpr auto animation_events = "55 8B EC 83 EC 20 53 56 57 8B 3D ? ? ? ? 8B 07 8B 50 78";
+		constexpr auto sound_lookup		= "55 8B EC 56 57 8B F9 8B 47 38 8D 77 38 A9 00 00 01 00";
+		constexpr auto read_ubit_var	= "55 8B EC 83 EC 08 53 8B C1 56 83 CB FF 80 78 0C 00";
 	}
 
 	// byte offsets locate operands inside the unique matches above.
@@ -68,11 +87,14 @@ namespace p2boost::portal2 {
 		constexpr std::ptrdiff_t secondary_portal_call{ 10 };
 		constexpr std::ptrdiff_t shadow_manager_object{ 4 };
 		constexpr std::ptrdiff_t flashlight_models_global{ 15 };
+		constexpr std::ptrdiff_t world_surface_call{ 11 };
+		constexpr std::ptrdiff_t command_execute_call{ 6 };
 	}
 
 	// verified interface slots are abi layout, not absolute addresses.
 	namespace slot {
 		constexpr size_t hardware_sync{ 136 };
+		constexpr size_t create_occlusion_query{ 152 };
 		constexpr size_t present{ 10 };
 		constexpr size_t shader_device{ 253 };
 		constexpr size_t frame_sync{ 3 };
@@ -116,12 +138,15 @@ namespace p2boost::portal2 {
 
 	// native D3D9 vtable slots used only by research instrumentation.
 	namespace d3d9 {
+		constexpr size_t create_texture{ 23 };
 		constexpr size_t set_texture{ 65 };
 		constexpr size_t draw_primitive{ 81 };
 		constexpr size_t draw_indexed_primitive{ 82 };
 		constexpr size_t draw_primitive_up{ 83 };
 		constexpr size_t draw_indexed_primitive_up{ 84 };
+		constexpr size_t create_vertex_shader{ 91 };
 		constexpr size_t set_vertex_shader{ 92 };
+		constexpr size_t create_pixel_shader{ 106 };
 		constexpr size_t set_pixel_shader{ 107 };
 	}
 

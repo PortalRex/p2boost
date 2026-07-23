@@ -11,6 +11,9 @@
 namespace p2boost {
 
 	class Metrics;
+#ifdef P2BOOST_RESEARCH_DRAW_TRACE
+	void __cdecl command_execute_hook( );
+#endif
 
 	// instruments renderer stalls and owns the reversible focus fixes.
 	class RendererTrace {
@@ -48,9 +51,21 @@ namespace p2boost {
 		static void __cdecl StaticLightingCacheRestore( );
 
 #ifdef P2BOOST_RESEARCH_DRAW_TRACE
-		using DynamicLightExecute_t = void( __thiscall* )( void* );
+		using DynamicLightExecute_t	 = void( __thiscall* )( void* );
+		using CreateOcclusionQuery_t = unsigned int( __thiscall* )( void* );
+		using IndexBufferLock_t		 = unsigned int( __thiscall* )( void*, int, char, void* );
+		using VertexBufferLock_t	 = unsigned int( __thiscall* )( void*, int, unsigned int, void* );
 
 		static void __fastcall DynamicLightExecute( void*, void* );
+		static unsigned int __fastcall CreateOcclusionQuery( void*, void* );
+		static unsigned int __fastcall IndexBufferLock( void*, void*, int, char, void* );
+		static unsigned int __fastcall VertexBufferLock( void*, void*, int, unsigned int, void* );
+		static void __cdecl CommandExecuteDispatch( void*, void* );
+		friend void __cdecl command_execute_hook( );
+		static HRESULT __stdcall CreateTexture(
+			IDirect3DDevice9*, UINT, UINT, UINT, DWORD, D3DFORMAT, D3DPOOL, IDirect3DTexture9**, HANDLE* );
+		static HRESULT __stdcall CreateVertexShader( IDirect3DDevice9*, const DWORD*, IDirect3DVertexShader9** );
+		static HRESULT __stdcall CreatePixelShader( IDirect3DDevice9*, const DWORD*, IDirect3DPixelShader9** );
 		static HRESULT __stdcall SetTexture( IDirect3DDevice9*, DWORD, IDirect3DBaseTexture9* );
 		static HRESULT __stdcall SetVertexShader( IDirect3DDevice9*, IDirect3DVertexShader9* );
 		static HRESULT __stdcall SetPixelShader( IDirect3DDevice9*, IDirect3DPixelShader9* );
@@ -75,6 +90,9 @@ namespace p2boost {
 		PointerImmediatePatch m_render_worker;
 
 #ifdef P2BOOST_RESEARCH_DRAW_TRACE
+		VtableSlotHook		  m_create_texture;
+		VtableSlotHook		  m_create_vertex_shader;
+		VtableSlotHook		  m_create_pixel_shader;
 		VtableSlotHook		  m_draw_primitive;
 		VtableSlotHook		  m_draw_indexed_primitive;
 		VtableSlotHook		  m_draw_primitive_up;
@@ -84,8 +102,22 @@ namespace p2boost {
 		VtableSlotHook		  m_set_pixel_shader;
 		VtableSlotHook		  m_dynamic_light_execute_unsigned;
 		VtableSlotHook		  m_dynamic_light_execute_signed;
+		VtableSlotHook		  m_create_occlusion_query;
+		std::atomic_uint	  m_pending_texture_create_count{ };
+		std::atomic_llong	  m_pending_texture_create_qpc{ };
+		std::atomic_llong	  m_pending_max_texture_create_qpc{ };
+		std::atomic_uint	  m_pending_vertex_shader_create_count{ };
+		std::atomic_llong	  m_pending_vertex_shader_create_qpc{ };
+		std::atomic_llong	  m_pending_max_vertex_shader_create_qpc{ };
+		std::atomic_uint	  m_pending_pixel_shader_create_count{ };
+		std::atomic_llong	  m_pending_pixel_shader_create_qpc{ };
+		std::atomic_llong	  m_pending_max_pixel_shader_create_qpc{ };
+		InlineDetour		  m_index_buffer_lock;
+		InlineDetour		  m_vertex_buffer_lock;
+		CallSitePatch		  m_command_execute;
 		void*				  m_queued_functor_execute{ };
 		void*				  m_queued_functor_leaf{ };
+		void*				  m_queued_functor_one_argument{ };
 		DynamicLightExecute_t m_dynamic_light_execute_original{ };
 #endif
 

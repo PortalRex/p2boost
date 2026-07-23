@@ -47,8 +47,31 @@ namespace p2boost {
 		Qpc::tick_t		   m_max_present_qpc{ };
 
 #ifdef P2BOOST_RESEARCH_DRAW_TRACE
+		unsigned int					 m_occlusion_query_create_count{ };
+		Qpc::tick_t						 m_occlusion_query_create_qpc{ };
+		Qpc::tick_t						 m_max_occlusion_query_create_qpc{ };
+		unsigned int					 m_texture_create_count{ };
+		Qpc::tick_t						 m_texture_create_qpc{ };
+		Qpc::tick_t						 m_max_texture_create_qpc{ };
+		unsigned int					 m_vertex_shader_create_count{ };
+		Qpc::tick_t						 m_vertex_shader_create_qpc{ };
+		Qpc::tick_t						 m_max_vertex_shader_create_qpc{ };
+		unsigned int					 m_pixel_shader_create_count{ };
+		Qpc::tick_t						 m_pixel_shader_create_qpc{ };
+		Qpc::tick_t						 m_max_pixel_shader_create_qpc{ };
 		unsigned int					 m_draw_count{ };
 		Qpc::tick_t						 m_draw_qpc{ };
+		unsigned int					 m_first_resource_draw_count{ };
+		Qpc::tick_t						 m_first_resource_draw_qpc{ };
+		unsigned int					 m_first_pipeline_draw_count{ };
+		Qpc::tick_t						 m_first_pipeline_draw_qpc{ };
+		unsigned int					 m_first_texture_count{ };
+		unsigned int					 m_index_buffer_lock_count{ };
+		Qpc::tick_t						 m_index_buffer_lock_qpc{ };
+		Qpc::tick_t						 m_max_index_buffer_lock_qpc{ };
+		unsigned int					 m_vertex_buffer_lock_count{ };
+		Qpc::tick_t						 m_vertex_buffer_lock_qpc{ };
+		Qpc::tick_t						 m_max_vertex_buffer_lock_qpc{ };
 		Qpc::tick_t						 m_max_draw_qpc{ };
 		unsigned int					 m_max_draw_method{ };
 		unsigned int					 m_max_draw_primitive_type{ };
@@ -73,6 +96,11 @@ namespace p2boost {
 		unsigned short					 m_max_draw_stack_depth{ };
 		std::array< unsigned int, 16 >	 m_command_keys{ };
 		std::array< unsigned int, 16 >	 m_command_counts{ };
+		std::array< Qpc::tick_t, 16 >	 m_command_qpc{ };
+		unsigned int					 m_command_execute_count{ };
+		Qpc::tick_t						 m_command_execute_qpc{ };
+		unsigned int					 m_slow_command_key{ };
+		Qpc::tick_t						 m_slow_command_qpc{ };
 		unsigned int					 m_dynamic_light_count{ };
 		Qpc::tick_t						 m_dynamic_light_qpc{ };
 		unsigned int					 m_dynamic_light_unique_lights{ };
@@ -129,6 +157,11 @@ namespace p2boost {
 		void record_portal_render( double milliseconds ) noexcept;
 		void record_shadow_update( double milliseconds, bool same_projection, bool same_full, bool skipped ) noexcept;
 		void record_render_worker( RenderWorkerMetrics sample ) noexcept;
+		void record_world_surface( double milliseconds, unsigned int flags ) noexcept;
+		void record_portal_movement_spatial( double milliseconds ) noexcept;
+		void record_animation_events( double milliseconds ) noexcept;
+		void record_sound_lookup( double milliseconds ) noexcept;
+		void record_read_ubit_var( double milliseconds ) noexcept;
 
 		// write both fixed histories to csv.
 		bool dump( const std::string& path ) const;
@@ -162,6 +195,17 @@ namespace p2boost {
 			unsigned long long		m_render_worker_parameter_bytes{ };
 			unsigned long long		m_render_worker_vertex_bytes{ };
 			unsigned long long		m_render_worker_index_bytes{ };
+			double					m_world_surface_ms{ };
+			unsigned int			m_world_surface_count{ };
+			unsigned int			m_world_surface_flags{ };
+			double					m_portal_movement_spatial_ms{ };
+			unsigned int			m_portal_movement_spatial_count{ };
+			double					m_animation_events_ms{ };
+			unsigned int			m_animation_events_count{ };
+			double					m_sound_lookup_ms{ };
+			unsigned int			m_sound_lookup_count{ };
+			double					m_read_ubit_var_ms{ };
+			unsigned int			m_read_ubit_var_count{ };
 			int						m_reacquire_reason{ };
 			bool					m_simulating{ };
 			bool					m_focused{ };
@@ -193,6 +237,17 @@ namespace p2boost {
 		unsigned int			m_pending_shadow_same_projection_count{ };
 		unsigned int			m_pending_shadow_same_full_count{ };
 		unsigned int			m_pending_shadow_skipped_count{ };
+		double					m_pending_world_surface_ms{ };
+		unsigned int			m_pending_world_surface_count{ };
+		unsigned int			m_pending_world_surface_flags{ };
+		double					m_pending_portal_movement_spatial_ms{ };
+		unsigned int			m_pending_portal_movement_spatial_count{ };
+		double					m_pending_animation_events_ms{ };
+		unsigned int			m_pending_animation_events_count{ };
+		double					m_pending_sound_lookup_ms{ };
+		unsigned int			m_pending_sound_lookup_count{ };
+		double					m_pending_read_ubit_var_ms{ };
+		unsigned int			m_pending_read_ubit_var_count{ };
 		int						m_pending_reacquire_reason{ };
 
 		// worker samples arrive from the material render thread.

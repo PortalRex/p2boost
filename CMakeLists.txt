@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.24)
 project(p2boost VERSION 0.5.0 LANGUAGES CXX)
 
 option(P2BOOST_RESEARCH_DRAW_TRACE "Instrument native D3D9 draw calls for research captures" OFF)
+option(P2BOOST_RESEARCH_WORLD_TRACE "Instrument BSP world-surface construction for research captures" OFF)
 
 if(NOT WIN32)
   message(FATAL_ERROR "p2boost currently targets Portal 2 for Windows")
@@ -16,6 +17,7 @@ set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
 add_library(p2boost SHARED
   src/build_fingerprint.cpp
+  src/activation_trace.cpp
   src/console.cpp
   src/console_commands.cpp
   src/frame_pacer.cpp
@@ -27,11 +29,16 @@ add_library(p2boost SHARED
   src/renderer_research.cpp
   src/renderer_trace.cpp
   src/shadow_trace.cpp
+  src/server_trace.cpp
+  src/world_trace.cpp
 )
 target_include_directories(p2boost PRIVATE src)
 target_compile_definitions(p2boost PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX P2BOOST_VERSION="${PROJECT_VERSION}")
 if(P2BOOST_RESEARCH_DRAW_TRACE)
   target_compile_definitions(p2boost PRIVATE P2BOOST_RESEARCH_DRAW_TRACE=1)
+endif()
+if(P2BOOST_RESEARCH_WORLD_TRACE)
+  target_compile_definitions(p2boost PRIVATE P2BOOST_RESEARCH_WORLD_TRACE=1)
 endif()
 target_compile_options(p2boost PRIVATE /W4 /WX /permissive- /Zc:__cplusplus /guard:cf)
 target_link_options(p2boost PRIVATE /DEF:${CMAKE_CURRENT_SOURCE_DIR}/src/p2boost.def /guard:cf /DEBUG:FULL)
@@ -46,6 +53,7 @@ set_target_properties(p2boost PROPERTIES
 enable_testing()
 add_executable(p2boost_tests
   tests/test_main.cpp
+  src/activation_trace.cpp
   src/build_fingerprint.cpp
   src/frame_pacer.cpp
   src/hook.cpp
@@ -55,6 +63,8 @@ add_executable(p2boost_tests
   src/renderer_research.cpp
   src/renderer_trace.cpp
   src/shadow_trace.cpp
+  src/server_trace.cpp
+  src/world_trace.cpp
 )
 target_include_directories(p2boost_tests PRIVATE src)
 target_compile_definitions(p2boost_tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
