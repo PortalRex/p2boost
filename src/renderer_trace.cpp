@@ -561,7 +561,7 @@ namespace p2boost {
 		const Qpc::tick_t elapsed = Qpc::now( ) - begin;
 		++g_worker_trace.m_index_buffer_lock_count;
 		g_worker_trace.m_index_buffer_lock_qpc += elapsed;
-		g_worker_trace.m_max_index_buffer_lock_qpc = ( std::max )( g_worker_trace.m_max_index_buffer_lock_qpc, elapsed );
+		g_worker_trace.m_max_index_buffer_lock_qpc = std::max( g_worker_trace.m_max_index_buffer_lock_qpc, elapsed );
 		return result;
 	}
 
@@ -578,7 +578,7 @@ namespace p2boost {
 		const Qpc::tick_t elapsed = Qpc::now( ) - begin;
 		++g_worker_trace.m_vertex_buffer_lock_count;
 		g_worker_trace.m_vertex_buffer_lock_qpc += elapsed;
-		g_worker_trace.m_max_vertex_buffer_lock_qpc = ( std::max )( g_worker_trace.m_max_vertex_buffer_lock_qpc, elapsed );
+		g_worker_trace.m_max_vertex_buffer_lock_qpc = std::max( g_worker_trace.m_max_vertex_buffer_lock_qpc, elapsed );
 		return result;
 	}
 
@@ -595,7 +595,7 @@ namespace p2boost {
 		const Qpc::tick_t elapsed = Qpc::now( ) - begin;
 		++g_worker_trace.m_occlusion_query_create_count;
 		g_worker_trace.m_occlusion_query_create_qpc += elapsed;
-		g_worker_trace.m_max_occlusion_query_create_qpc = ( std::max )( g_worker_trace.m_max_occlusion_query_create_qpc, elapsed );
+		g_worker_trace.m_max_occlusion_query_create_qpc = std::max( g_worker_trace.m_max_occlusion_query_create_qpc, elapsed );
 		return result;
 	}
 
