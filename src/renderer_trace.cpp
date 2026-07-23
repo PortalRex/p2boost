@@ -44,8 +44,7 @@ namespace p2boost {
 		thread_local WorkerTrace g_worker_trace;
 
 #ifdef P2BOOST_RESEARCH_DRAW_TRACE
-		void record_creation(
-			std::atomic_uint& count, std::atomic_llong& total, std::atomic_llong& maximum, Qpc::tick_t elapsed ) noexcept {
+		void record_timing( std::atomic_uint& count, std::atomic_llong& total, std::atomic_llong& maximum, Qpc::tick_t elapsed ) noexcept {
 			count.fetch_add( 1, std::memory_order_relaxed );
 			total.fetch_add( elapsed, std::memory_order_relaxed );
 			auto current = maximum.load( std::memory_order_relaxed );
@@ -200,10 +199,14 @@ namespace p2boost {
 									   m_vertex_buffer_lock.install( vertex_buffer_lock.as< void* >( ),
 										   vertex_buffer_lock_bytes,
 										   reinterpret_cast< void* >( &VertexBufferLock ) );
-		const bool						  occlusion_query_hook	= install_slot( m_create_occlusion_query,
+		const bool						  occlusion_query_create_hook  = install_slot( m_create_occlusion_query,
 			shader_api,
 			portal2::slot::create_occlusion_query,
 			reinterpret_cast< void* >( &CreateOcclusionQuery ) );
+		const bool						  occlusion_query_destroy_hook = install_slot( m_destroy_occlusion_query,
+			   shader_api,
+			   portal2::slot::destroy_occlusion_query,
+			   reinterpret_cast< void* >( &DestroyOcclusionQuery ) );
 		const Address					  command_execute_match = pattern::find_unique( materials, portal2::signature::command_execute );
 		const Address					  command_execute_site	= command_execute_match.add( portal2::xref::command_execute_call );
 		const std::vector< std::uint8_t > command_execute_bytes{ 0x8d, 0x4f, 0x04, 0xff, 0xd2 };
@@ -250,11 +253,12 @@ namespace p2boost {
 			m_dynamic_light_execute_unsigned.install( unsigned_execute_slot, reinterpret_cast< void* >( &DynamicLightExecute ) ) &&
 			m_dynamic_light_execute_signed.install( signed_execute_slot, reinterpret_cast< void* >( &DynamicLightExecute ) );
 #else
-		const bool draw_hooks				 = true;
-		const bool dynamic_light_hooks		 = true;
-		const bool buffer_lock_hooks		 = true;
-		const bool occlusion_query_hook		 = true;
-		const bool command_execute_installed = true;
+		const bool draw_hooks					= true;
+		const bool dynamic_light_hooks			= true;
+		const bool buffer_lock_hooks			= true;
+		const bool occlusion_query_create_hook	= true;
+		const bool occlusion_query_destroy_hook = true;
+		const bool command_execute_installed	= true;
 #endif
 		const auto lighting_call	   = x86::relative_call( lighting_site, Address( m_lighting_original ) );
 		const auto lighting_cache_call = x86::relative_call( lighting_cache_site, Address( m_lighting_cache_original ) );
@@ -293,7 +297,8 @@ namespace p2boost {
 				reinterpret_cast< void* >( &ResourceCallbacks ) ) ||
 			!m_hardware_sync.install( hardware_sync.as< void* >( ), hardware_sync_bytes, reinterpret_cast< void* >( &HardwareSync ) ) ||
 			!m_present.install( present_vtable + portal2::slot::present, reinterpret_cast< void* >( &Present ) ) || !draw_hooks ||
-			!dynamic_light_hooks || !buffer_lock_hooks || !occlusion_query_hook || !command_execute_installed ||
+			!dynamic_light_hooks || !buffer_lock_hooks || !occlusion_query_create_hook || !occlusion_query_destroy_hook ||
+			!command_execute_installed ||
 			!m_render_worker.install( render_worker_site.as< void* >( ),
 				render_worker_bytes,
 				1,
@@ -323,6 +328,7 @@ namespace p2boost {
 		}
 #ifdef P2BOOST_RESEARCH_DRAW_TRACE
 		m_command_execute.remove( );
+		m_destroy_occlusion_query.remove( );
 		m_create_occlusion_query.remove( );
 		m_vertex_buffer_lock.remove( );
 		m_index_buffer_lock.remove( );
@@ -453,17 +459,23 @@ namespace p2boost {
 		g_worker_trace.m_vertex_bytes	 = vertex_bytes;
 		g_worker_trace.m_index_bytes	 = index_bytes;
 #ifdef P2BOOST_RESEARCH_DRAW_TRACE
-		// Resource creation can occur on the main thread before its queued draw.
+		// Query and resource work can occur before its associated queued draw.
 		// Consume process-wide observations into the next completed worker batch.
-		g_worker_trace.m_texture_create_count		  = instance->m_pending_texture_create_count.exchange( 0 );
-		g_worker_trace.m_texture_create_qpc			  = instance->m_pending_texture_create_qpc.exchange( 0 );
-		g_worker_trace.m_max_texture_create_qpc		  = instance->m_pending_max_texture_create_qpc.exchange( 0 );
-		g_worker_trace.m_vertex_shader_create_count	  = instance->m_pending_vertex_shader_create_count.exchange( 0 );
-		g_worker_trace.m_vertex_shader_create_qpc	  = instance->m_pending_vertex_shader_create_qpc.exchange( 0 );
-		g_worker_trace.m_max_vertex_shader_create_qpc = instance->m_pending_max_vertex_shader_create_qpc.exchange( 0 );
-		g_worker_trace.m_pixel_shader_create_count	  = instance->m_pending_pixel_shader_create_count.exchange( 0 );
-		g_worker_trace.m_pixel_shader_create_qpc	  = instance->m_pending_pixel_shader_create_qpc.exchange( 0 );
-		g_worker_trace.m_max_pixel_shader_create_qpc  = instance->m_pending_max_pixel_shader_create_qpc.exchange( 0 );
+		g_worker_trace.m_occlusion_query_create_count	 = instance->m_pending_occlusion_query_create_count.exchange( 0 );
+		g_worker_trace.m_occlusion_query_create_qpc		 = instance->m_pending_occlusion_query_create_qpc.exchange( 0 );
+		g_worker_trace.m_max_occlusion_query_create_qpc	 = instance->m_pending_max_occlusion_query_create_qpc.exchange( 0 );
+		g_worker_trace.m_occlusion_query_destroy_count	 = instance->m_pending_occlusion_query_destroy_count.exchange( 0 );
+		g_worker_trace.m_occlusion_query_destroy_qpc	 = instance->m_pending_occlusion_query_destroy_qpc.exchange( 0 );
+		g_worker_trace.m_max_occlusion_query_destroy_qpc = instance->m_pending_max_occlusion_query_destroy_qpc.exchange( 0 );
+		g_worker_trace.m_texture_create_count			 = instance->m_pending_texture_create_count.exchange( 0 );
+		g_worker_trace.m_texture_create_qpc				 = instance->m_pending_texture_create_qpc.exchange( 0 );
+		g_worker_trace.m_max_texture_create_qpc			 = instance->m_pending_max_texture_create_qpc.exchange( 0 );
+		g_worker_trace.m_vertex_shader_create_count		 = instance->m_pending_vertex_shader_create_count.exchange( 0 );
+		g_worker_trace.m_vertex_shader_create_qpc		 = instance->m_pending_vertex_shader_create_qpc.exchange( 0 );
+		g_worker_trace.m_max_vertex_shader_create_qpc	 = instance->m_pending_max_vertex_shader_create_qpc.exchange( 0 );
+		g_worker_trace.m_pixel_shader_create_count		 = instance->m_pending_pixel_shader_create_count.exchange( 0 );
+		g_worker_trace.m_pixel_shader_create_qpc		 = instance->m_pending_pixel_shader_create_qpc.exchange( 0 );
+		g_worker_trace.m_max_pixel_shader_create_qpc	 = instance->m_pending_max_pixel_shader_create_qpc.exchange( 0 );
 #endif
 		instance->m_metrics->record_render_worker( g_worker_trace );
 	}
@@ -587,16 +599,36 @@ namespace p2boost {
 		auto  previous = instance ? reinterpret_cast< CreateOcclusionQuery_t >( instance->m_create_occlusion_query.previous( ) ) : nullptr;
 		if( !previous )
 			return 0;
-		if( !g_worker_trace.m_active || !instance->m_metrics || !instance->m_metrics->tracing( ) )
+		if( !instance->m_metrics || !instance->m_metrics->tracing( ) )
 			return previous( self );
 
 		const Qpc::tick_t begin	  = Qpc::now( );
 		const auto		  result  = previous( self );
 		const Qpc::tick_t elapsed = Qpc::now( ) - begin;
-		++g_worker_trace.m_occlusion_query_create_count;
-		g_worker_trace.m_occlusion_query_create_qpc += elapsed;
-		g_worker_trace.m_max_occlusion_query_create_qpc = std::max( g_worker_trace.m_max_occlusion_query_create_qpc, elapsed );
+		record_timing( instance->m_pending_occlusion_query_create_count,
+			instance->m_pending_occlusion_query_create_qpc,
+			instance->m_pending_max_occlusion_query_create_qpc,
+			elapsed );
 		return result;
+	}
+
+	void __fastcall RendererTrace::DestroyOcclusionQuery( void* self, void*, unsigned int query ) {
+		auto* instance = m_instance;
+		auto previous = instance ? reinterpret_cast< DestroyOcclusionQuery_t >( instance->m_destroy_occlusion_query.previous( ) ) : nullptr;
+		if( !previous )
+			return;
+		if( !instance->m_metrics || !instance->m_metrics->tracing( ) ) {
+			previous( self, query );
+			return;
+		}
+
+		const Qpc::tick_t begin = Qpc::now( );
+		previous( self, query );
+		const Qpc::tick_t elapsed = Qpc::now( ) - begin;
+		record_timing( instance->m_pending_occlusion_query_destroy_count,
+			instance->m_pending_occlusion_query_destroy_qpc,
+			instance->m_pending_max_occlusion_query_destroy_qpc,
+			elapsed );
 	}
 
 	void __fastcall RendererTrace::DynamicLightExecute( void* self, void* ) {
@@ -637,7 +669,7 @@ namespace p2boost {
 		const Qpc::tick_t begin	  = Qpc::now( );
 		const HRESULT	  result  = previous( self, width, height, levels, usage, format, pool, texture, shared_handle );
 		const Qpc::tick_t elapsed = Qpc::now( ) - begin;
-		record_creation( instance->m_pending_texture_create_count,
+		record_timing( instance->m_pending_texture_create_count,
 			instance->m_pending_texture_create_qpc,
 			instance->m_pending_max_texture_create_qpc,
 			elapsed );
@@ -656,7 +688,7 @@ namespace p2boost {
 		const Qpc::tick_t begin	  = Qpc::now( );
 		const HRESULT	  result  = previous( self, function, shader );
 		const Qpc::tick_t elapsed = Qpc::now( ) - begin;
-		record_creation( instance->m_pending_vertex_shader_create_count,
+		record_timing( instance->m_pending_vertex_shader_create_count,
 			instance->m_pending_vertex_shader_create_qpc,
 			instance->m_pending_max_vertex_shader_create_qpc,
 			elapsed );
@@ -675,7 +707,7 @@ namespace p2boost {
 		const Qpc::tick_t begin	  = Qpc::now( );
 		const HRESULT	  result  = previous( self, function, shader );
 		const Qpc::tick_t elapsed = Qpc::now( ) - begin;
-		record_creation( instance->m_pending_pixel_shader_create_count,
+		record_timing( instance->m_pending_pixel_shader_create_count,
 			instance->m_pending_pixel_shader_create_qpc,
 			instance->m_pending_max_pixel_shader_create_qpc,
 			elapsed );

@@ -2,7 +2,8 @@ param(
     [string]$Output = 'artifacts\profiles\sphere-peek-main-thread.csv',
     [ValidateRange(5, 30)][int]$DurationSeconds = 13,
     [switch]$Stack,
-    [string]$RconPassword = 'p2boostlab'
+    [string]$RconPassword = 'p2boostlab',
+    [switch]$KeepGameOpen
 )
 
 $ErrorActionPreference = 'Stop'
@@ -11,6 +12,7 @@ $repo = Split-Path -Parent $PSScriptRoot
 $rcon = Join-Path $PSScriptRoot 'invoke-rcon.ps1'
 $focusGame = Join-Path $PSScriptRoot 'set-game-foreground.ps1'
 $profiler = Join-Path $repo 'build\vs2022-x86\Release\p2profile.exe'
+$stopGame = Join-Path $PSScriptRoot 'stop-portal2.ps1'
 $target = [IO.Path]::GetFullPath((Join-Path $repo $Output))
 $game = Get-Process portal2 -ErrorAction Stop | Select-Object -First 1
 
@@ -77,6 +79,7 @@ try {
 } finally {
     try { Invoke-Game @('-forward', '-moveleft') | Out-Null } catch {}
     if (-not $capture.HasExited) { $capture.Kill() }
+    if (-not $KeepGameOpen) { & $stopGame -ProcessId $game.Id }
 }
 
 Get-Item -LiteralPath $target

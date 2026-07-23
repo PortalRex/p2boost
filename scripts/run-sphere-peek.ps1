@@ -8,7 +8,8 @@ param(
 	[ValidateRange(0, 65535)][int]$SampleThreadId = 0,
 	[switch]$SampleStacks,
     [string]$RconPassword = 'p2boostlab',
-    [string]$GameRoot = 'D:\SteamLibrary\steamapps\common\Portal 2'
+    [string]$GameRoot = 'D:\SteamLibrary\steamapps\common\Portal 2',
+    [switch]$KeepGameOpen
 )
 
 $ErrorActionPreference = 'Stop'
@@ -19,6 +20,7 @@ $analyze = Join-Path $PSScriptRoot 'analyze-presentmon.ps1'
 $analyzeHitches = Join-Path $PSScriptRoot 'analyze-hitches.ps1'
 $focusGame = Join-Path $PSScriptRoot 'set-game-foreground.ps1'
 $presentMon = Join-Path $repo '.tools\downloads\PresentMon.exe'
+$stopGame = Join-Path $PSScriptRoot 'stop-portal2.ps1'
 $profiler = Join-Path $repo 'build\vs2022-x86\Release\p2profile.exe'
 $output = [IO.Path]::GetFullPath((Join-Path $repo $OutputDirectory))
 $game = Get-Process portal2 -ErrorAction Stop | Select-Object -First 1
@@ -181,4 +183,5 @@ try {
             "sv_cheats $originalCheats"
         ) | Out-Null
     } catch {}
+    if (-not $KeepGameOpen) { & $stopGame -ProcessId $game.Id }
 }

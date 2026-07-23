@@ -50,6 +50,9 @@ namespace p2boost {
 		unsigned int					 m_occlusion_query_create_count{ };
 		Qpc::tick_t						 m_occlusion_query_create_qpc{ };
 		Qpc::tick_t						 m_max_occlusion_query_create_qpc{ };
+		unsigned int					 m_occlusion_query_destroy_count{ };
+		Qpc::tick_t						 m_occlusion_query_destroy_qpc{ };
+		Qpc::tick_t						 m_max_occlusion_query_destroy_qpc{ };
 		unsigned int					 m_texture_create_count{ };
 		Qpc::tick_t						 m_texture_create_qpc{ };
 		Qpc::tick_t						 m_max_texture_create_qpc{ };

@@ -134,6 +134,9 @@ portal placement around 14 seconds of demo time. The first nonzero portal-render
 metric identifies the placement; an earlier attack input is not mistaken for a
 successful portal. The runner saves playback, frame, engine, and render-worker
 artifacts, restores settings, and closes Portal 2 by default after every run.
+Pass `-KeepGameOpen` only for an explicitly interactive follow-up. The shared
+shutdown helper waits after forced termination, preventing a mapped research
+DLL from leaking into the next run.
 
 `run-live-gameplay.ps1` is the primary short performance check. It records
 matched single-player Laser Relays and two-player lobby runs while genuine

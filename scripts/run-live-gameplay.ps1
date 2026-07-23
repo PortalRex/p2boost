@@ -5,7 +5,8 @@ param(
     [ValidateSet(360, 500, 999)][int]$FpsMax = 999,
     [int]$ProcessId = 0,
     [string]$RconPassword = 'p2boostlab',
-    [string]$GameRoot = 'D:\SteamLibrary\steamapps\common\Portal 2'
+    [string]$GameRoot = 'D:\SteamLibrary\steamapps\common\Portal 2',
+    [switch]$KeepGameOpen
 )
 
 $ErrorActionPreference = 'Stop'
@@ -14,6 +15,7 @@ $repo = Split-Path -Parent $PSScriptRoot
 $rcon = Join-Path $PSScriptRoot 'invoke-rcon.ps1'
 $analyze = Join-Path $PSScriptRoot 'analyze-presentmon.ps1'
 $presentMon = Join-Path $repo '.tools\downloads\PresentMon.exe'
+$stopGame = Join-Path $PSScriptRoot 'stop-portal2.ps1'
 $output = [IO.Path]::GetFullPath((Join-Path $repo $OutputDirectory))
 $process = if ($ProcessId) {
     Get-Process -Id $ProcessId -ErrorAction Stop
@@ -286,4 +288,5 @@ try {
             "sv_cheats $originalCheats"
         ) | Out-Null
     } catch {}
+    if (-not $KeepGameOpen) { & $stopGame -ProcessId $process.Id }
 }

@@ -221,11 +221,16 @@ public class ExportP2Analysis extends GhidraScript {
             };
             for (long address : threadedEndFrameTargets) addFunctionAndCallers(targets, address, 2);
             long[] queuedCommandTypes = {
-				// Generic command thunks plus the exact Sphere Peek blocking leaf,
-				// its queued-context method, and the no-argument queue builder.
-				0x10024d40L, 0x10024d80L, 0x10023e20L,
-				0x10013d00L, 0x10016830L, 0x10014df0L,
-				0x10039680L
+                // Generic command thunks plus the exact Sphere Peek blocking leaf,
+                // its queued-context method, and the no-argument queue builder.
+                0x10024d40L, 0x10024d80L, 0x10023e20L,
+                0x10013d00L, 0x10016830L, 0x10014df0L,
+                // Shader-API query creation and its adjacent lifetime methods.
+                0x10027ae0L, 0x10016bc0L, 0x10016bf0L, 0x10016c20L,
+                0x10039680L, 0x100396b0L, 0x100396f0L,
+                0x10039760L, 0x100397d0L, 0x10039890L,
+                0x100398f0L, 0x10039970L, 0x100399a0L,
+                0x10039c00L, 0x10039c90L, 0x10039cf0L
             };
             for (long address : queuedCommandTypes) addFunctionAndCallers(targets, address, 3);
             addFunctionAndCallers(targets, 0x1003ac67L, 3);

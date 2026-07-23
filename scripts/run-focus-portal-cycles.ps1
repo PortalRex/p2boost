@@ -4,12 +4,14 @@ param(
     [string]$RconPassword = 'p2boostlab',
     [ValidateRange(1,1000)][int]$Cycles = 5,
     [ValidateSet('AltTab','Minimize')][string]$FocusMode = 'AltTab',
-    [switch]$TraceP2Boost
+    [switch]$TraceP2Boost,
+    [switch]$KeepGameOpen
 )
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 $presentMon = Join-Path $repo '.tools\downloads\PresentMon.exe'
 $rcon = Join-Path $PSScriptRoot 'invoke-rcon.ps1'
+$stopGame = Join-Path $PSScriptRoot 'stop-portal2.ps1'
 $outputPath = [IO.Path]::GetFullPath((Join-Path $repo $Output))
 $eventPath = [IO.Path]::ChangeExtension($outputPath, '.events.csv')
 New-Item -ItemType Directory -Force (Split-Path $outputPath) | Out-Null
@@ -23,6 +25,7 @@ function Get-GameProcess {
     return $process
 }
 $gameProcess = Get-GameProcess
+try {
 Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
@@ -110,3 +113,6 @@ if ($firstFrameQpc -gt $firstPortalQpc -or $lastFrameQpc -lt $lastPortalEndQpc) 
     throw "PresentMon did not overlap the complete action window (frames $firstFrameQpc..$lastFrameQpc; events $firstPortalQpc..$lastPortalEndQpc)."
 }
 Write-Host "Completed $Cycles timestamped focus/portal cycles: $outputPath"
+} finally {
+    if (-not $KeepGameOpen) { & $stopGame -ProcessId $gameProcess.Id }
+}

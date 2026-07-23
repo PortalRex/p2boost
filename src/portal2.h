@@ -95,6 +95,7 @@ namespace p2boost::portal2 {
 	namespace slot {
 		constexpr size_t hardware_sync{ 136 };
 		constexpr size_t create_occlusion_query{ 152 };
+		constexpr size_t destroy_occlusion_query{ 153 };
 		constexpr size_t present{ 10 };
 		constexpr size_t shader_device{ 253 };
 		constexpr size_t frame_sync{ 3 };

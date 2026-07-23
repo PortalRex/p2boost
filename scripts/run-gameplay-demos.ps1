@@ -7,13 +7,15 @@ param(
     [int]$ProcessId = 0,
     [string]$RconPassword = 'p2boostlab',
     [string]$OutputDirectory = 'artifacts\benchmarks\gameplay',
-    [switch]$PatchedOnly
+    [switch]$PatchedOnly,
+    [switch]$KeepGameOpen
 )
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 $rcon = Join-Path $PSScriptRoot 'invoke-rcon.ps1'
 $capture = Join-Path $PSScriptRoot 'capture-presentmon.ps1'
 $analyze = Join-Path $PSScriptRoot 'analyze-presentmon.ps1'
+$stopGame = Join-Path $PSScriptRoot 'stop-portal2.ps1'
 $process = if ($ProcessId) { Get-Process -Id $ProcessId -ErrorAction Stop } else {
     Get-Process portal2 -ErrorAction Stop | Select-Object -First 1
 }
@@ -84,5 +86,6 @@ try {
         Invoke-Game @('stopdemo', 'p2boost_trace 0', 'p2boost_enable 1',
                       "fps_max $originalFpsMax") 2 | Out-Null
     } catch {}
+    if (-not $KeepGameOpen) { & $stopGame -ProcessId $process.Id }
 }
 Write-Host "Gameplay demo matrix complete: $output"

@@ -313,7 +313,8 @@ namespace p2boost {
 					  << ",draw_count,draw_ms,first_resource_draw_count,first_resource_draw_ms,first_pipeline_draw_"
 						 "count,first_pipeline_draw_ms,first_texture_count,index_buffer_lock_count,index_buffer_lock_ms,max_index_"
 						 "buffer_lock_ms,vertex_buffer_lock_count,vertex_buffer_lock_ms,max_vertex_buffer_lock_ms,occlusion_query_"
-						 "create_count,occlusion_query_create_ms,max_occlusion_query_create_ms,texture_create_count,texture_create_ms,"
+						 "create_count,occlusion_query_create_ms,max_occlusion_query_create_ms,occlusion_query_destroy_count,"
+						 "occlusion_query_destroy_ms,max_occlusion_query_destroy_ms,texture_create_count,texture_create_ms,"
 						 "max_texture_create_ms,vertex_shader_create_count,vertex_shader_create_ms,max_vertex_shader_create_ms,"
 						 "pixel_shader_create_count,pixel_shader_create_ms,max_pixel_shader_create_ms,max_draw_ms,max_"
 						 "draw_method,max_draw_primitive_type,max_draw_"
@@ -368,8 +369,10 @@ namespace p2boost {
 							  << Qpc::milliseconds( sample.m_vertex_buffer_lock_qpc ) << ','
 							  << Qpc::milliseconds( sample.m_max_vertex_buffer_lock_qpc ) << ',' << sample.m_occlusion_query_create_count
 							  << ',' << Qpc::milliseconds( sample.m_occlusion_query_create_qpc ) << ','
-							  << Qpc::milliseconds( sample.m_max_occlusion_query_create_qpc ) << ',' << sample.m_texture_create_count << ','
-							  << Qpc::milliseconds( sample.m_texture_create_qpc ) << ','
+							  << Qpc::milliseconds( sample.m_max_occlusion_query_create_qpc ) << ','
+							  << sample.m_occlusion_query_destroy_count << ',' << Qpc::milliseconds( sample.m_occlusion_query_destroy_qpc )
+							  << ',' << Qpc::milliseconds( sample.m_max_occlusion_query_destroy_qpc ) << ','
+							  << sample.m_texture_create_count << ',' << Qpc::milliseconds( sample.m_texture_create_qpc ) << ','
 							  << Qpc::milliseconds( sample.m_max_texture_create_qpc ) << ',' << sample.m_vertex_shader_create_count << ','
 							  << Qpc::milliseconds( sample.m_vertex_shader_create_qpc ) << ','
 							  << Qpc::milliseconds( sample.m_max_vertex_shader_create_qpc ) << ',' << sample.m_pixel_shader_create_count

@@ -51,13 +51,15 @@ namespace p2boost {
 		static void __cdecl StaticLightingCacheRestore( );
 
 #ifdef P2BOOST_RESEARCH_DRAW_TRACE
-		using DynamicLightExecute_t	 = void( __thiscall* )( void* );
-		using CreateOcclusionQuery_t = unsigned int( __thiscall* )( void* );
-		using IndexBufferLock_t		 = unsigned int( __thiscall* )( void*, int, char, void* );
-		using VertexBufferLock_t	 = unsigned int( __thiscall* )( void*, int, unsigned int, void* );
+		using DynamicLightExecute_t	  = void( __thiscall* )( void* );
+		using CreateOcclusionQuery_t  = unsigned int( __thiscall* )( void* );
+		using DestroyOcclusionQuery_t = void( __thiscall* )( void*, unsigned int );
+		using IndexBufferLock_t		  = unsigned int( __thiscall* )( void*, int, char, void* );
+		using VertexBufferLock_t	  = unsigned int( __thiscall* )( void*, int, unsigned int, void* );
 
 		static void __fastcall DynamicLightExecute( void*, void* );
 		static unsigned int __fastcall CreateOcclusionQuery( void*, void* );
+		static void __fastcall DestroyOcclusionQuery( void*, void*, unsigned int );
 		static unsigned int __fastcall IndexBufferLock( void*, void*, int, char, void* );
 		static unsigned int __fastcall VertexBufferLock( void*, void*, int, unsigned int, void* );
 		static void __cdecl CommandExecuteDispatch( void*, void* );
@@ -103,6 +105,13 @@ namespace p2boost {
 		VtableSlotHook		  m_dynamic_light_execute_unsigned;
 		VtableSlotHook		  m_dynamic_light_execute_signed;
 		VtableSlotHook		  m_create_occlusion_query;
+		VtableSlotHook		  m_destroy_occlusion_query;
+		std::atomic_uint	  m_pending_occlusion_query_create_count{ };
+		std::atomic_llong	  m_pending_occlusion_query_create_qpc{ };
+		std::atomic_llong	  m_pending_max_occlusion_query_create_qpc{ };
+		std::atomic_uint	  m_pending_occlusion_query_destroy_count{ };
+		std::atomic_llong	  m_pending_occlusion_query_destroy_qpc{ };
+		std::atomic_llong	  m_pending_max_occlusion_query_destroy_qpc{ };
 		std::atomic_uint	  m_pending_texture_create_count{ };
 		std::atomic_llong	  m_pending_texture_create_qpc{ };
 		std::atomic_llong	  m_pending_max_texture_create_qpc{ };

@@ -327,6 +327,26 @@ The standalone runner disables tracing, restores `fps_max` and patch state, and
 fully closes the game even when analysis fails so research hooks cannot remain
 active after a benchmark.
 
+### Occlusion-query lifecycle exclusion
+
+Headless Ghidra analysis recovered the material-system query owner rather than
+assuming portal rendering was responsible. `materialsystem.dll` keeps four
+native ShaderAPI queries in every logical query node. `0x10039680` creates the
+four handles, `0x10039cf0` destroys them when the logical node is released, and
+`0x100396f0` destroys active handles during shader-object/device release. The
+CPU node itself is retained on a free list. Calls from focus/device restore run
+through `0x100396b0`, which recreates handles for the active list. These
+addresses are analysis labels for the fingerprinted binary; the runtime trace
+uses validated interface slots and contains no absolute address.
+
+Research-only chain-aware hooks measured both ShaderAPI lifecycle calls over a
+complete intro3 playback. The run created 96 queries in 16 batches: 13.6967 ms
+total, with a 3.5111 ms worst individual creation. It destroyed 28 queries in
+two batches: 0.0072 ms total and 0.0019 ms worst. No query was created at the
+15.8-second successful first portal. Pooling native handles would complicate
+device reset and cannot remove the measured portal stall, so no query-lifetime
+change ships.
+
 ## Sphere Peek chamber-entry reproduction
 
 The Sphere Peek route now starts from the ordinary `sp_a2_sphere_peek` spawn,

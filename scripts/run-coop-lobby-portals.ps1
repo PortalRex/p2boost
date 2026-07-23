@@ -5,12 +5,14 @@ param(
     [int]$ProcessId = 0,
     [string]$RconPassword = 'p2boostlab',
     [switch]$SetupOnly,
-    [string]$GameRoot = 'D:\SteamLibrary\steamapps\common\Portal 2'
+    [string]$GameRoot = 'D:\SteamLibrary\steamapps\common\Portal 2',
+    [switch]$KeepGameOpen
 )
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 $rcon = Join-Path $PSScriptRoot 'invoke-rcon.ps1'
 $capture = Join-Path $PSScriptRoot 'capture-presentmon.ps1'
+$stopGame = Join-Path $PSScriptRoot 'stop-portal2.ps1'
 $process = if ($ProcessId) { Get-Process -Id $ProcessId -ErrorAction Stop } else {
     Get-Process portal2 -ErrorAction Stop | Select-Object -First 1
 }
@@ -131,4 +133,5 @@ try {
     Write-Host "Lobby portal A/B complete: $prefix-{unpatched,patched,metrics,proof}"
 } finally {
     try { Invoke-Game @('p2boost_trace 0', 'p2boost_enable 1', "fps_max $originalFpsMax", "sv_cheats $originalCheats") | Out-Null } catch {}
+    if (-not $KeepGameOpen -and -not $SetupOnly) { & $stopGame -ProcessId $process.Id }
 }

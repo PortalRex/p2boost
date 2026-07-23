@@ -16,6 +16,7 @@ $rcon = Join-Path $PSScriptRoot 'invoke-rcon.ps1'
 $analyze = Join-Path $PSScriptRoot 'analyze-presentmon.ps1'
 $analyzeHitches = Join-Path $PSScriptRoot 'analyze-hitches.ps1'
 $focusGame = Join-Path $PSScriptRoot 'set-game-foreground.ps1'
+$stopGame = Join-Path $PSScriptRoot 'stop-portal2.ps1'
 $presentMon = Join-Path $repo '.tools\downloads\PresentMon.exe'
 $output = [IO.Path]::GetFullPath((Join-Path $repo $OutputDirectory))
 $game = Get-Process portal2 -ErrorAction Stop | Select-Object -First 1
@@ -132,15 +133,8 @@ finally {
 	catch {}
 
 	if(-not $KeepGameOpen) {
-		# Every standalone benchmark owns its game process. Close it even after a
-		# failed capture so research hooks never remain active in the background.
-		$running = Get-Process -Id $game.Id -ErrorAction SilentlyContinue
-		if($running) {
-			$running.CloseMainWindow() | Out-Null
-			if(-not $running.WaitForExit(5000)) {
-				Stop-Process -Id $running.Id -Force
-			}
-		}
+		# Standalone benchmarks never leave research hooks loaded in the game.
+		& $stopGame -ProcessId $game.Id
 	}
 }
 

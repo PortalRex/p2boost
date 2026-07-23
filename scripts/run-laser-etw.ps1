@@ -2,7 +2,8 @@ param(
     [ValidateSet('LaserRelays', 'SpherePeek')][string]$Scenario = 'LaserRelays',
     [string]$Output = '',
     [string]$RconPassword = 'p2boostlab',
-    [ValidateRange(23, 60)][int]$DurationSeconds = 25
+    [ValidateRange(23, 60)][int]$DurationSeconds = 25,
+    [switch]$KeepGameOpen
 )
 
 $ErrorActionPreference = 'Stop'
@@ -11,6 +12,7 @@ $repo = Split-Path -Parent $PSScriptRoot
 $capture = Join-Path $PSScriptRoot 'capture-etw.ps1'
 $rcon = Join-Path $PSScriptRoot 'invoke-rcon.ps1'
 $focusGame = Join-Path $PSScriptRoot 'set-game-foreground.ps1'
+$stopGame = Join-Path $PSScriptRoot 'stop-portal2.ps1'
 $outputName = if ($Output) {
     $Output
 } elseif ($Scenario -eq 'SpherePeek') {
@@ -114,6 +116,7 @@ try {
     if (-not $captureProcess.HasExited) {
         $captureProcess.Kill()
     }
+    if (-not $KeepGameOpen) { & $stopGame -ProcessId $game.Id }
 }
 
 Get-Content $log
