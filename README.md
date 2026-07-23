@@ -158,6 +158,12 @@ enabled patch state even after a failed capture. PresentMon's undefined first
 interval on each swap chain is excluded by `analyze-presentmon.ps1`; otherwise
 that trace-boundary sample can be misreported as a multi-second game hitch.
 
+`run-laser-trace.ps1` is the research-metrics version of the same grounded SP
+route. It records the complete portal-mesh and server laser-think timers
+alongside the queued-render worker, native draw, fence, and presentation
+metrics. It also restores every held input and setting and closes Portal 2 by
+default, including after a failed capture.
+
 `run-sphere-peek.ps1` reproduces the Sphere Peek chamber transition and faith
 plate from the normal spawn. It clears the entrance panel with a one-second
 left input, walks into the main room, then moves left for only twelve ticks

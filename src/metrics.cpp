@@ -79,12 +79,29 @@ namespace p2boost {
 		m_pending_world_surface_flags |= flags;
 	}
 
+	void Metrics::record_portal_mesh( double milliseconds, unsigned int portals ) noexcept {
+		if( !collecting( ) )
+			return;
+
+		m_pending_portal_mesh_ms += milliseconds;
+		++m_pending_portal_mesh_count;
+		m_pending_portal_mesh_portals += portals;
+	}
+
 	void Metrics::record_portal_movement_spatial( double milliseconds ) noexcept {
 		if( !collecting( ) )
 			return;
 
 		m_pending_portal_movement_spatial_ms += milliseconds;
 		++m_pending_portal_movement_spatial_count;
+	}
+
+	void Metrics::record_portal_laser( double milliseconds ) noexcept {
+		if( !collecting( ) )
+			return;
+
+		m_pending_portal_laser_ms += milliseconds;
+		++m_pending_portal_laser_count;
 	}
 
 	void Metrics::record_animation_events( double milliseconds ) noexcept {
@@ -173,8 +190,13 @@ namespace p2boost {
 			m_pending_world_surface_ms,
 			m_pending_world_surface_count,
 			m_pending_world_surface_flags,
+			m_pending_portal_mesh_ms,
+			m_pending_portal_mesh_count,
+			m_pending_portal_mesh_portals,
 			m_pending_portal_movement_spatial_ms,
 			m_pending_portal_movement_spatial_count,
+			m_pending_portal_laser_ms,
+			m_pending_portal_laser_count,
 			m_pending_animation_events_ms,
 			m_pending_animation_events_count,
 			m_pending_sound_lookup_ms,
@@ -200,8 +222,13 @@ namespace p2boost {
 		m_pending_world_surface_ms				= 0.0;
 		m_pending_world_surface_count			= 0;
 		m_pending_world_surface_flags			= 0;
+		m_pending_portal_mesh_ms				= 0.0;
+		m_pending_portal_mesh_count				= 0;
+		m_pending_portal_mesh_portals			= 0;
 		m_pending_portal_movement_spatial_ms	= 0.0;
 		m_pending_portal_movement_spatial_count = 0;
+		m_pending_portal_laser_ms				= 0.0;
+		m_pending_portal_laser_count			= 0;
 		m_pending_animation_events_ms			= 0.0;
 		m_pending_animation_events_count		= 0;
 		m_pending_sound_lookup_ms				= 0.0;
@@ -269,8 +296,9 @@ namespace p2boost {
 				  "same_projection_count,shadow_same_full_count,shadow_skipped_count,render_worker_"
 				  "begin_qpc,render_worker_end_qpc,render_worker_ms,render_worker_cycles,render_worker_"
 				  "count,render_worker_queued_calls,render_worker_parameter_bytes,render_worker_vertex_"
-				  "bytes,render_worker_index_bytes,world_surface_ms,world_surface_count,world_surface_flags,portal_"
-				  "movement_spatial_ms,portal_movement_spatial_count,"
+				  "bytes,render_worker_index_bytes,world_surface_ms,world_surface_count,world_surface_flags,portal_mesh_ms,"
+				  "portal_mesh_count,portal_mesh_portals,portal_movement_spatial_ms,portal_movement_spatial_count,"
+				  "portal_laser_ms,portal_laser_count,"
 				  "animation_events_ms,animation_events_count,sound_lookup_ms,sound_lookup_count,read_ubit_var_ms,"
 				  "read_ubit_var_count,"
 				  "reacquire_reason,simulating,focused,coop\n"
@@ -288,11 +316,12 @@ namespace p2boost {
 				   << sample.m_render_worker_queued_calls << ',' << sample.m_render_worker_parameter_bytes << ','
 				   << sample.m_render_worker_vertex_bytes << ',' << sample.m_render_worker_index_bytes << ',' << sample.m_world_surface_ms
 				   << ',' << sample.m_world_surface_count << ",0x" << std::hex << sample.m_world_surface_flags << std::dec << ','
+				   << sample.m_portal_mesh_ms << ',' << sample.m_portal_mesh_count << ',' << sample.m_portal_mesh_portals << ','
 				   << sample.m_portal_movement_spatial_ms << ',' << sample.m_portal_movement_spatial_count << ','
-				   << sample.m_animation_events_ms << ',' << sample.m_animation_events_count << ',' << sample.m_sound_lookup_ms << ','
-				   << sample.m_sound_lookup_count << ',' << sample.m_read_ubit_var_ms << ',' << sample.m_read_ubit_var_count << ','
-				   << sample.m_reacquire_reason << ',' << ( sample.m_simulating ? 1 : 0 ) << ',' << ( sample.m_focused ? 1 : 0 ) << ','
-				   << ( sample.m_coop ? 1 : 0 ) << '\n';
+				   << sample.m_portal_laser_ms << ',' << sample.m_portal_laser_count << ',' << sample.m_animation_events_ms << ','
+				   << sample.m_animation_events_count << ',' << sample.m_sound_lookup_ms << ',' << sample.m_sound_lookup_count << ','
+				   << sample.m_read_ubit_var_ms << ',' << sample.m_read_ubit_var_count << ',' << sample.m_reacquire_reason << ','
+				   << ( sample.m_simulating ? 1 : 0 ) << ',' << ( sample.m_focused ? 1 : 0 ) << ',' << ( sample.m_coop ? 1 : 0 ) << '\n';
 		}
 		const bool frame_output_good = output.good( );
 		output.close( );

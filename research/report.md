@@ -347,6 +347,44 @@ two batches: 0.0072 ms total and 0.0019 ms worst. No query was created at the
 device reset and cannot remove the measured portal stall, so no query-lifetime
 change ships.
 
+### Portal mesh and laser-simulation exclusions
+
+Headless analysis resolves `client.dll` preferred address `0x102c5ee0` to
+`CPortalRender::CreateMeshForPortals`. Its two callers are the normal stencil
+portal path and the early-Z portal path. Both pass the current view and portal
+set, so retaining geometry across changed views would first require an
+equivalence proof rather than an assumed frame cache.
+
+A research-only signature hook measured the complete mesh builder during a
+30-second intro3 playback. It observed 29,092 calls and 64,547 input portal
+entries, but only 59.4025 ms of total CPU time. The average call cost was
+2.042 microseconds and the largest complete-frame contribution was 0.1000 ms.
+No mesh cache can materially remove the 38--55 ms first-portal worker stall,
+so no lifecycle or geometry change ships.
+
+The expensive-room hypothesis on `sp_a2_laser_relays` was tested separately.
+Ghidra resolves `server.dll` preferred address `0x103b5a40` to
+`CPortalLaser::StrikeThink`. It clears the retained beam path, resolves the
+live source, transforms the beam through portals, traces it, and updates its
+touch links. A grounded 24-second route rode the elevator into the main room,
+continued forward through the room, fired both portal colors, and retained a
+connected portal on screen.
+
+The trace observed 967 laser-think calls over 668 rendered frames. They cost
+30.1226 ms in total, averaged 31.151 microseconds, and contributed at most
+0.1690 ms to one frame. The portal-opening interval still contained a
+42.3111 ms queued-render batch: 35.0566 ms was inside 429 native D3D9 draws,
+including an 11.1299 ms longest draw. The following worker blocked for
+16.4363 ms in the already identified explicit hardware fence. Portal CPU
+rendering, mesh construction, laser simulation, world-surface construction,
+and GPU-busy time were individually small in the corresponding presented
+frames. This reproduces the cold driver-submission/fence sequence on a second
+real gameplay route and rules out skipping server laser logic as a valid fix.
+
+The dedicated runner writes both PresentMon and exact-QPC p2boost metrics,
+releases every queued input, restores the original cvars, and closes Portal 2
+after the benchmark by default.
+
 ## Sphere Peek chamber-entry reproduction
 
 The Sphere Peek route now starts from the ordinary `sp_a2_sphere_peek` spawn,

@@ -51,6 +51,10 @@ namespace p2boost::portal2 {
 		constexpr auto primary_portal_render   = "8D 95 18 FB FF FF 52 8D 85 C0 FD FF FF 50 8B CE E8 ? ? ? ? 8B 0D";
 		constexpr auto secondary_portal_render = "51 8D 95 94 FD FF FF 52 8B CB E8 ? ? ? ? A1";
 
+		// CPortalRender::CreateMeshForPortals. The research hook times the
+		// complete geometry build without relying on a preferred address.
+		constexpr auto create_portal_mesh = "55 8B EC 81 EC 74 06 00 00 8B 0D ? ? ? ? 53 56 57 FF 15 ? ? ? ? 88 45 EF";
+
 		// client-shadow xrefs for the manager object and flashlight-model list.
 		constexpr auto shadow_manager	 = "50 57 53 B9 ? ? ? ? E8 ? ? ? ? 5F 5B 5E 5D C3";
 		constexpr auto flashlight_models = "6A 00 68 ? ? ? ? FF 15 ? ? ? ? 8B 0D ? ? ? ? 83 79 30 00 8D 86 A0 00 00 00";
@@ -61,6 +65,10 @@ namespace p2boost::portal2 {
 		// CPortalGameMovement virtual spatial query sampled in Sphere Peek.
 		constexpr auto portal_movement_spatial =
 			"53 8B DC 83 EC 08 83 E4 F0 83 C4 04 55 8B 6B 04 89 6C 24 04 8B EC 83 EC 58 56 8B F1 8B 8E 80 07 00 00";
+
+		// CPortalLaser::StrikeThink clears and traces one server laser. This
+		// research probe tests the periodic Laser Relays simulation cost.
+		constexpr auto portal_laser_think = "55 8B EC 83 EC 2C 53 56 8B D9 8B 0D ? ? ? ? 57 FF 15 ? ? ? ? 88 45 FF";
 
 		// Functions sampled together during first visibility of the Sphere Peek chamber.
 		constexpr auto animation_events = "55 8B EC 83 EC 20 53 56 57 8B 3D ? ? ? ? 8B 07 8B 50 78";

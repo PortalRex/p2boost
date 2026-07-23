@@ -161,7 +161,9 @@ namespace p2boost {
 		void record_shadow_update( double milliseconds, bool same_projection, bool same_full, bool skipped ) noexcept;
 		void record_render_worker( RenderWorkerMetrics sample ) noexcept;
 		void record_world_surface( double milliseconds, unsigned int flags ) noexcept;
+		void record_portal_mesh( double milliseconds, unsigned int portals ) noexcept;
 		void record_portal_movement_spatial( double milliseconds ) noexcept;
+		void record_portal_laser( double milliseconds ) noexcept;
 		void record_animation_events( double milliseconds ) noexcept;
 		void record_sound_lookup( double milliseconds ) noexcept;
 		void record_read_ubit_var( double milliseconds ) noexcept;
@@ -201,8 +203,13 @@ namespace p2boost {
 			double					m_world_surface_ms{ };
 			unsigned int			m_world_surface_count{ };
 			unsigned int			m_world_surface_flags{ };
+			double					m_portal_mesh_ms{ };
+			unsigned int			m_portal_mesh_count{ };
+			unsigned int			m_portal_mesh_portals{ };
 			double					m_portal_movement_spatial_ms{ };
 			unsigned int			m_portal_movement_spatial_count{ };
+			double					m_portal_laser_ms{ };
+			unsigned int			m_portal_laser_count{ };
 			double					m_animation_events_ms{ };
 			unsigned int			m_animation_events_count{ };
 			double					m_sound_lookup_ms{ };
@@ -243,8 +250,13 @@ namespace p2boost {
 		double					m_pending_world_surface_ms{ };
 		unsigned int			m_pending_world_surface_count{ };
 		unsigned int			m_pending_world_surface_flags{ };
+		double					m_pending_portal_mesh_ms{ };
+		unsigned int			m_pending_portal_mesh_count{ };
+		unsigned int			m_pending_portal_mesh_portals{ };
 		double					m_pending_portal_movement_spatial_ms{ };
 		unsigned int			m_pending_portal_movement_spatial_count{ };
+		double					m_pending_portal_laser_ms{ };
+		unsigned int			m_pending_portal_laser_count{ };
 		double					m_pending_animation_events_ms{ };
 		unsigned int			m_pending_animation_events_count{ };
 		double					m_pending_sound_lookup_ms{ };
