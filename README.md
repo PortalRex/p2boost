@@ -151,12 +151,15 @@ Start the game with `+ss_map mp_coop_lobby_2` before a combined run, then use:
 ```powershell
 .\scripts\run-live-gameplay.ps1 -Scenario Both -FpsMax 360
 .\scripts\run-live-gameplay.ps1 -Scenario Both -FpsMax 999
+.\scripts\run-live-gameplay.ps1 -Scenario Both -FpsMax 360 -CandidateFirst
 ```
 
 The runner restores `fps_max`, `sv_cheats`, all held inputs, tracing, and the
 enabled patch state even after a failed capture. PresentMon's undefined first
 interval on each swap chain is excluded by `analyze-presentmon.ps1`; otherwise
 that trace-boundary sample can be misreported as a multi-second game hitch.
+Release comparisons run both normal and `-CandidateFirst` orders so cold
+native-driver work cannot be silently credited to the second variant.
 
 `run-laser-trace.ps1` is the research-metrics version of the same grounded SP
 route. It records the complete portal-mesh and server laser-think timers

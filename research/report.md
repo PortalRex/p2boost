@@ -49,6 +49,20 @@ a 3.9244 ms p99, compared with 359.84 FPS and 3.7853 ms for the existing
 overshoot correction. This second design was also removed. The result rejects
 timer substitution as the remaining source of CPU frame-time variance.
 
+A third prototype left the engine's `ThreadSleep(1)` call unchanged and used a
+verified wrapper only to mark frames that had actually waited in the limiter.
+Those frames could distinguish ordinary scheduler overshoot from renderer work
+without relying on the existing 10% inference threshold.
+
+Two complete 360 FPS Laser Relays A/B pairs were run in opposite orders. With
+the old policy first, the sleep-aware policy measured 359.50 versus 358.40 FPS
+and 4.0307 versus 4.0756 ms p99. Reversing the order reversed the result: the
+old policy measured 359.54 versus 358.21 FPS and 4.0377 versus 4.0815 ms p99.
+In both pairs, the second map pass won while the first absorbed the cold 35 ms
+native-draw burst. The marker is therefore neutral and has been removed. The
+live runner retains a `-CandidateFirst` option so future claims can be repeated
+in both orders instead of crediting warm-process state to a patch.
+
 ## Device/focus causality
 
 `shaderapidx9.dll` RVA `0x24690` handles lost/reset states and calls RVA

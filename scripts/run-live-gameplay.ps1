@@ -3,6 +3,7 @@ param(
     [string]$OutputDirectory = 'artifacts\benchmarks\live-gameplay',
     [ValidateRange(24, 30)][int]$DurationSeconds = 24,
     [ValidateSet(360, 500, 999)][int]$FpsMax = 999,
+    [switch]$CandidateFirst,
     [int]$ProcessId = 0,
     [string]$RconPassword = 'p2boostlab',
     [string]$GameRoot = 'D:\SteamLibrary\steamapps\common\Portal 2',
@@ -193,13 +194,18 @@ function Stop-AllInputs {
     ) | Out-Null
 }
 
-function Measure-Scene([string]$Name, [bool]$Patched, [scriptblock]$Setup, [scriptblock]$Actions) {
+function Measure-Scene(
+    [string]$Name,
+    [string]$Variant,
+    [bool]$Patched,
+    [scriptblock]$Setup,
+    [scriptblock]$Actions
+) {
     & $Setup
     Invoke-Game @("p2boost_enable $([int]$Patched)") | Out-Null
     Start-Sleep -Milliseconds 300
 
-    $variant = if ($Patched) { 'patched' } else { 'unpatched' }
-    $csv = Join-Path $output "$Name-$variant.csv"
+    $csv = Join-Path $output "$Name-$Variant.csv"
 
     if (Test-Path -LiteralPath $csv) {
         Remove-Item -LiteralPath $csv -Force
@@ -248,6 +254,22 @@ function Measure-Scene([string]$Name, [bool]$Patched, [scriptblock]$Setup, [scri
     & $analyze -InputCsv $csv
 }
 
+function Measure-Comparison([string]$Name, [scriptblock]$Setup, [scriptblock]$Actions) {
+    # Reverse-order runs expose cold-driver bias instead of silently crediting
+    # whichever variant happens to run second in the same game process.
+    $runs = @(
+        [pscustomobject]@{ Variant = 'unpatched'; Patched = $false },
+        [pscustomobject]@{ Variant = 'patched'; Patched = $true }
+    )
+
+    if ($CandidateFirst) {
+        [array]::Reverse($runs)
+    }
+    foreach ($run in $runs) {
+        Measure-Scene $Name $run.Variant $run.Patched $Setup $Actions
+    }
+}
+
 $originalFpsMax = Read-Cvar 'fps_max'
 $originalCheats = Read-Cvar 'sv_cheats'
 
@@ -268,14 +290,12 @@ try {
             }
         }
 
-        Measure-Scene 'coop-lobby' $false ${function:Set-CoopScene} ${function:Invoke-CoopActions}
-        Measure-Scene 'coop-lobby' $true ${function:Set-CoopScene} ${function:Invoke-CoopActions}
+        Measure-Comparison 'coop-lobby' ${function:Set-CoopScene} ${function:Invoke-CoopActions}
         Save-Proof 'mp_coop_lobby_2' 'coop-lobby'
     }
 
     if ($Scenario -in @('Both', 'SinglePlayer')) {
-        Measure-Scene 'sp-laser-relays' $false ${function:Set-SinglePlayerScene} ${function:Invoke-SinglePlayerActions}
-        Measure-Scene 'sp-laser-relays' $true ${function:Set-SinglePlayerScene} ${function:Invoke-SinglePlayerActions}
+        Measure-Comparison 'sp-laser-relays' ${function:Set-SinglePlayerScene} ${function:Invoke-SinglePlayerActions}
         Save-Proof 'sp_a2_laser_relays' 'sp-laser-relays'
     }
 } finally {
