@@ -5,9 +5,11 @@ import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 import ghidra.app.decompiler.DecompInterface;
@@ -35,6 +37,11 @@ public class ExportP2Analysis extends GhidraScript {
         "pvs", "split screen", "splitscreen", "co-op", "coop"
     };
 
+    // A target may first be discovered with no caller depth and later with a
+    // deeper explicit request. Track expansion separately from membership so
+    // traversal does not depend on HashSet insertion order.
+    private final Map<Address, Integer> expandedDepth = new HashMap<>();
+
     private static String clean(String value) {
         if (value == null) return "";
         return value.replace("\\", "\\\\").replace("\t", "\\t")
@@ -61,7 +68,11 @@ public class ExportP2Analysis extends GhidraScript {
         if (function == null && getInstructionAt(targetAddress) != null) {
             function = createFunction(targetAddress, null);
         }
-        if (function == null || !targets.add(function) || depth <= 0) return;
+        if (function == null) return;
+        targets.add(function);
+        int previousDepth = expandedDepth.getOrDefault(function.getEntryPoint(), -1);
+        if (depth <= 0 || previousDepth >= depth) return;
+        expandedDepth.put(function.getEntryPoint(), depth);
         // Samples normally land inside a function. Once the containing
         // function is known, callers reference its entry point rather than
         // the sampled instruction, so walk references to the entry address.
@@ -137,6 +148,9 @@ public class ExportP2Analysis extends GhidraScript {
                 0x10307f39L
             };
             for (long address : profileTargets) addFunctionAndCallers(targets, address, 1);
+            // Follow the Sphere Peek world-surface builder through its single
+            // direct caller to the high-level view setup that supplies flags.
+            addFunctionAndCallers(targets, 0x100e7d90L, 3);
             long[] queuedSubmissionTargets = {
                 // Suspected callback identities correlated with the
                 // deterministic co-op paint burst. The material-system
@@ -313,9 +327,16 @@ public class ExportP2Analysis extends GhidraScript {
         }
         if (base.equalsIgnoreCase("server.dll")) {
             // The server-side instruction sampled inside the same Sphere Peek
-            // chamber-entry frame. Export its callers alongside the engine
-            // samples before assigning any gameplay or visibility semantics.
-            addFunctionAndCallers(targets, 0x1033d840L, 2);
+            // chamber-entry frame is CPortalGameMovement vtable slot 12.
+            // Export its adjacent virtuals because the method is reached by
+            // indirect dispatch and therefore has no direct code caller.
+            long[] portalMovementTargets = {
+                0x1004e800L, 0x1033d840L, 0x1033d800L,
+                0x1033d820L, 0x1033ed70L
+            };
+            for (long address : portalMovementTargets) {
+                addFunctionAndCallers(targets, address, 2);
+            }
         }
         if (base.equalsIgnoreCase("soundemittersystem.dll")) {
             // Sound-emitter instruction sampled in the same 8.10 ms chamber
@@ -367,20 +388,20 @@ public class ExportP2Analysis extends GhidraScript {
             }
         }
 
-		// Preserve exact static xrefs for every selected target. Function-pointer
-		// references are especially useful when a queued functor has no direct call.
-		try (BufferedWriter writer = new BufferedWriter(new FileWriter(new File(output, base + "-target-xrefs.tsv")))) {
-			writer.write("target_address\ttarget_name\tfrom_address\treference_type\treferencing_function\n");
-			for (Function target : targets) {
-				monitor.checkCancelled();
-				for (Reference reference : getReferencesTo(target.getEntryPoint())) {
-					Function caller = containingFunction(reference.getFromAddress());
-					writer.write(target.getEntryPoint() + "\t" + clean(target.getName(true)) + "\t" +
-						reference.getFromAddress() + "\t" + reference.getReferenceType() + "\t" +
-						(caller == null ? "" : clean(caller.getName(true))) + "\n");
-				}
-			}
-		}
+        // Preserve exact static xrefs for every selected target. Function-pointer
+        // references are especially useful when a queued functor has no direct call.
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(new File(output, base + "-target-xrefs.tsv")))) {
+            writer.write("target_address\ttarget_name\tfrom_address\treference_type\treferencing_function\n");
+            for (Function target : targets) {
+                monitor.checkCancelled();
+                for (Reference reference : getReferencesTo(target.getEntryPoint())) {
+                    Function caller = containingFunction(reference.getFromAddress());
+                    writer.write(target.getEntryPoint() + "\t" + clean(target.getName(true)) + "\t" +
+                        reference.getFromAddress() + "\t" + reference.getReferenceType() + "\t" +
+                        (caller == null ? "" : clean(caller.getName(true))) + "\n");
+                }
+            }
+        }
 
         DecompInterface decompiler = new DecompInterface();
         decompiler.openProgram(currentProgram);

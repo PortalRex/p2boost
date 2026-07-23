@@ -371,6 +371,25 @@ cache skipped an unchanged update, and no focus reacquisition occurred. A
 separate GeneralProfile trace of the same grounded route recorded no gameplay
 file read during the transition.
 
+Static ownership narrows the four synchronized CPU samples further. The
+server instruction belongs to `CPortalGameMovement` vtable slot 12. That
+method resets a retained collision enumerator, resolves the live player/entity
+handle, transforms current bounds through portal movement state, and submits a
+world-space box to the spatial partition. The route changes those inputs while
+the player crosses the chamber, and the frame contains no duplicate invocation
+with equal bounds.
+
+The engine instruction at preferred address `0x100e80fd` is inside the
+world-surface mesh builder at `0x100e7d90`. It has one direct caller,
+`0x100e9770`, reached through the world-list path only for the corresponding
+draw-flag combination. The routine enumerates the current view's selected
+surface lists, material properties, and mesh capacity before emitting geometry.
+Its inputs change as new BSP leaves enter the camera view. The bit-buffer sample
+belongs to a shared copy primitive with five independent callers, while the CRT
+`memset` sample is likewise insufficient to identify one owner. None establishes
+equivalent input or redundant output, so these samples do not justify skipping
+movement collision, world geometry, or memory initialization.
+
 PresentMon and the low-overhead main-thread sampler were then started together
 and correlated using their shared QPC timestamps. Sampling increased the
 maximum to 8.0124 ms, so that timing is research-only, but it isolated four
