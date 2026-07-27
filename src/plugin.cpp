@@ -142,7 +142,8 @@ namespace p2boost {
 			if( _stricmp( command, "p2boost_status" ) == 0 ) {
 				const bool sar_loaded = GetModuleHandleW( L"sar.dll" ) != nullptr;
 				console_print( "[p2boost] build=23973718 supported=%d native_d3d9=%d enabled=%d "
-							   "pacer_installed=%d tracing=%d overlay=%d sar=%d samples=%zu focus_sync=%d lighting_fix=%d "
+							   "pacer_installed=%d tracing=%d overlay=%d overlay_available=%d sar=%d samples=%zu "
+							   "focus_sync=%d lighting_fix=%d "
 							   "lighting_skips=%u shadow_cache=%d shadow_skips=%u root=%s\n",
 					m_verification.m_supported,
 					m_verification.m_native_d3d9,
@@ -150,6 +151,7 @@ namespace p2boost {
 					m_frame_pacer.installed( ),
 					m_metrics.tracing( ),
 					m_profiler_overlay.enabled( ),
+					m_profiler_overlay.available( ),
 					sar_loaded,
 					m_metrics.count( ),
 					m_renderer_trace.focus_sync_available( ),
@@ -186,7 +188,7 @@ namespace p2boost {
 				else
 					console_print( "usage: p2boost_overlay 0|1\n" );
 				if( !m_profiler_overlay.available( ) )
-					console_print( "[p2boost] profiler overlay unavailable: VEngineClient interface missing\n" );
+					console_print( "[p2boost] profiler overlay unavailable: VDebugOverlay004 interface missing\n" );
 				return sdk::Stop;
 			}
 			if( _stricmp( command, "p2boost_dump_metrics" ) == 0 ) {

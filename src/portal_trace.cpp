@@ -86,7 +86,7 @@ namespace p2boost {
 		if( !instance || !instance->m_original )
 			return;
 
-		if( !instance->m_metrics || !instance->m_metrics->tracing( ) ) {
+		if( !instance->m_metrics || !instance->m_metrics->collecting( ) ) {
 			instance->m_original( self, view, clear_flags );
 			return;
 		}

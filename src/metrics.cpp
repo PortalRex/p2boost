@@ -267,10 +267,15 @@ namespace p2boost {
 			if( sample.m_delta_ms > 0.0 && sample.m_simulating ) {
 				frame_times[ frame_count++ ] = sample.m_delta_ms;
 				frame_total += sample.m_delta_ms;
+				// Preserve a short newest-to-oldest graph independently of the
+				// percentile array, which is sorted below.
+				if( result.m_graph_count < result.m_graph_ms.size( ) )
+					result.m_graph_ms[ result.m_graph_count++ ] = sample.m_delta_ms;
 			}
 			result.m_portal_ms += sample.m_portal_render_ms;
 			result.m_portal_count += sample.m_portal_render_count;
 			result.m_render_worker_ms += sample.m_render_worker_ms;
+			result.m_render_worker_count += sample.m_render_worker_count;
 			result.m_shadow_skips += sample.m_shadow_skipped_count;
 			if( sample.m_reacquire_ms > 0.0 )
 				++result.m_focus_events;
@@ -348,6 +353,7 @@ namespace p2boost {
 						 "pixel_shader_create_count,pixel_shader_create_ms,max_pixel_shader_create_ms,max_draw_ms,max_"
 						 "draw_method,max_draw_primitive_type,max_draw_"
 						 "primitive_count,max_draw_vertex_count,max_draw_vertex_shader,max_draw_pixel_shader,max_"
+						 "draw_vertex_shader_hash,max_draw_pixel_shader_hash,max_"
 						 "draw_texture_0,max_draw_texture_1,max_draw_texture_2,max_draw_texture_3,max_draw_first_"
 						 "vertex_shader,max_draw_first_pixel_shader,max_draw_first_pipeline,max_draw_first_"
 						 "texture_mask,max_draw_texture0_type,max_draw_texture0_format,max_draw_texture0_width,"
@@ -410,7 +416,8 @@ namespace p2boost {
 							  << Qpc::milliseconds( sample.m_max_draw_qpc ) << ',' << sample.m_max_draw_method << ','
 							  << sample.m_max_draw_primitive_type << ',' << sample.m_max_draw_primitive_count << ','
 							  << sample.m_max_draw_vertex_count;
-				worker_output << ",0x" << std::hex << sample.m_max_draw_vertex_shader << ",0x" << sample.m_max_draw_pixel_shader;
+				worker_output << ",0x" << std::hex << sample.m_max_draw_vertex_shader << ",0x" << sample.m_max_draw_pixel_shader << ",0x"
+							  << sample.m_max_draw_vertex_shader_hash << ",0x" << sample.m_max_draw_pixel_shader_hash;
 				for( const auto texture : sample.m_max_draw_textures )
 					worker_output << ",0x" << texture;
 				worker_output << std::dec << ',' << static_cast< unsigned int >( sample.m_max_draw_first_vertex_shader ) << ','

@@ -13,17 +13,22 @@ namespace p2boost {
 
 	// Small read-only summary consumed by the optional in-game profiler.
 	struct OverlayMetrics {
-		double		 m_frame_ms{ };
-		double		 m_average_ms{ };
-		double		 m_p99_ms{ };
-		double		 m_max_ms{ };
-		double		 m_portal_ms{ };
-		double		 m_render_worker_ms{ };
-		unsigned int m_portal_count{ };
-		unsigned int m_focus_events{ };
-		unsigned int m_shadow_skips{ };
-		bool		 m_focused{ };
-		bool		 m_coop{ };
+		static constexpr size_t graph_capacity{ 48 };
+
+		double								 m_frame_ms{ };
+		double								 m_average_ms{ };
+		double								 m_p99_ms{ };
+		double								 m_max_ms{ };
+		double								 m_portal_ms{ };
+		double								 m_render_worker_ms{ };
+		unsigned int						 m_portal_count{ };
+		unsigned int						 m_render_worker_count{ };
+		unsigned int						 m_focus_events{ };
+		unsigned int						 m_shadow_skips{ };
+		std::array< double, graph_capacity > m_graph_ms{ };
+		size_t								 m_graph_count{ };
+		bool								 m_focused{ };
+		bool								 m_coop{ };
 	};
 
 	// stores one execution of the queued material render worker.
@@ -82,6 +87,8 @@ namespace p2boost {
 		unsigned int					 m_max_draw_vertex_count{ };
 		std::uint32_t					 m_max_draw_vertex_shader{ };
 		std::uint32_t					 m_max_draw_pixel_shader{ };
+		std::uint64_t					 m_max_draw_vertex_shader_hash{ };
+		std::uint64_t					 m_max_draw_pixel_shader_hash{ };
 		std::array< std::uint32_t, 4 >	 m_max_draw_textures{ };
 		std::uint8_t					 m_max_draw_first_vertex_shader{ };
 		std::uint8_t					 m_max_draw_first_pixel_shader{ };
@@ -135,6 +142,10 @@ namespace p2boost {
 
 		void set_overlay_collection( bool collecting ) noexcept {
 			m_overlay_collection.store( collecting, std::memory_order_relaxed );
+		}
+
+		bool collecting( ) const noexcept {
+			return tracing( ) || m_overlay_collection.load( std::memory_order_relaxed );
 		}
 
 		// Build a bounded rolling summary without exposing the history ring.
@@ -230,10 +241,6 @@ namespace p2boost {
 		std::atomic< bool >			   m_overlay_collection{ };
 		std::atomic< bool >			   m_simulating{ };
 		bool						   m_coop{ };
-
-		bool collecting( ) const noexcept {
-			return tracing( ) || m_overlay_collection.load( std::memory_order_relaxed );
-		}
 
 		// pending events are consumed by the next frame.
 		double					m_pending_reacquire_ms{ };

@@ -69,16 +69,18 @@ the default `OFF` configuration.
 ## Commands
 
 - `p2boost_status` prints hashes/build support, native-D3D9 state, SAR state,
-  enabled state, and metric count.
+  enabled state, overlay-interface availability, and metric count.
 - `p2boost_enable 0|1` switches the verified fix at runtime for A/B testing.
 - `p2boost_trace 0|1` enables fixed-size QPC frame, D3D9 resource, portal,
   projected-shadow, queued-worker, concrete hardware-fence, and Present tracing.
 - `p2boost_overlay 0|1` toggles a compact in-game profiler. Its one-second
-  rolling panel shows current/average frame time, FPS, p99, maximum, hitch
-  state, portal and render-worker time, shadow skips, focus events, SP/co-op,
-  SAR, and fix state. Frames are sampled at the verified `CEngine::Frame`
-  completion hook, not the 60 Hz server simulation callback. Collection and
-  display stop completely when disabled.
+  rolling panel shows actual render FPS, current frame time, p99, maximum, a
+  48-frame hitch graph, average portal cost, render-thread utilization, SP/co-op,
+  SAR, and fix state. It uses Portal 2's public `VDebugOverlay004` interface,
+  so one local panel works for either online co-op role without duplicating
+  across local split-screen views. Frames are sampled at the verified
+  `CEngine::Frame` completion hook, not the 60 Hz server simulation callback.
+  Collection and display stop completely when disabled.
 - `p2boost_dump_metrics` writes `p2boost_metrics.csv` in the game root, including
   simulation, focus, local-co-op, resource-reacquisition, portal, and
   projected-shadow timings/cache decisions. When renderer-worker tracing has

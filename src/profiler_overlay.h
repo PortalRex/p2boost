@@ -6,6 +6,7 @@
 namespace p2boost {
 
 	class Metrics;
+	struct OverlayMetrics;
 
 	// Draws a low-frequency metrics summary through Valve's public engine ABI.
 	class ProfilerOverlay {
@@ -16,7 +17,7 @@ namespace p2boost {
 		void draw( const Metrics& metrics, bool fixes_enabled, bool sar_loaded ) noexcept;
 
 		bool available( ) const noexcept {
-			return m_engine != nullptr;
+			return m_debug_overlay != nullptr;
 		}
 
 		bool enabled( ) const noexcept {
@@ -24,9 +25,9 @@ namespace p2boost {
 		}
 
 	private:
-		void clear( ) const noexcept;
+		void draw_panel( const OverlayMetrics& sample, bool fixes_enabled, bool sar_loaded ) noexcept;
 
-		void*		m_engine{ };
+		void*		m_debug_overlay{ };
 		Qpc::tick_t m_next_update{ };
 		bool		m_enabled{ };
 	};

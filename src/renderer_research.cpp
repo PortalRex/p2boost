@@ -10,6 +10,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstring>
+#include <vector>
 
 namespace p2boost::renderer_research {
 	namespace {
@@ -27,6 +28,29 @@ namespace p2boost::renderer_research {
 		alignas( 64 ) std::atomic_uint32_t g_pixel_shader_keys[ pipeline_table_size ]{ };
 		alignas( 64 ) std::atomic_uint32_t g_pipeline_keys[ pipeline_table_size ]{ };
 		alignas( 64 ) std::atomic_uint32_t g_texture_keys[ pipeline_table_size ]{ };
+
+		std::uint64_t hash_bytes( const std::uint8_t* bytes, std::size_t size ) noexcept {
+			// FNV-1a gives stable research identities without storing bytecode.
+			std::uint64_t hash = 14695981039346656037ull;
+			for( std::size_t index = 0; index < size; ++index ) {
+				hash ^= bytes[ index ];
+				hash *= 1099511628211ull;
+			}
+			return hash;
+		}
+
+		template < typename Shader >
+		std::uint64_t shader_hash( Shader* shader ) noexcept {
+			if( !shader )
+				return 0;
+			UINT size = 0;
+			if( FAILED( shader->GetFunction( nullptr, &size ) ) || size == 0 )
+				return 0;
+			std::vector< std::uint8_t > bytecode( size );
+			if( FAILED( shader->GetFunction( bytecode.data( ), &size ) ) )
+				return 0;
+			return hash_bytes( bytecode.data( ), size );
+		}
 
 		bool insert_thread_key( std::uint32_t value, std::uint32_t* table ) noexcept {
 			// multiplicative hashing spreads aligned pointer values across the table.
@@ -94,9 +118,9 @@ namespace p2boost::renderer_research {
 			return key;
 		}
 
-		void describe_texture_0( RenderWorkerMetrics& metrics, const PipelineObservation& pipeline ) noexcept {
+		void describe_texture_0( RenderWorkerMetrics& metrics ) noexcept {
 			// inspect only the texture attached to the slowest draw in this worker.
-			auto* texture = reinterpret_cast< IDirect3DBaseTexture9* >( static_cast< std::uintptr_t >( pipeline.m_state.m_textures[ 0 ] ) );
+			auto* texture = reinterpret_cast< IDirect3DBaseTexture9* >( static_cast< std::uintptr_t >( metrics.m_max_draw_textures[ 0 ] ) );
 			if( !texture ) {
 				return;
 			}
@@ -252,6 +276,7 @@ namespace p2boost::renderer_research {
 	}
 
 	void record_draw( RenderWorkerMetrics& metrics,
+		IDirect3DDevice9*				   device,
 		Qpc::tick_t						   begin_qpc,
 		unsigned int					   method,
 		unsigned int					   primitive_type,
@@ -289,11 +314,38 @@ namespace p2boost::renderer_research {
 		metrics.m_max_draw_vertex_shader   = pipeline.m_state.m_vertex_shader;
 		metrics.m_max_draw_pixel_shader	   = pipeline.m_state.m_pixel_shader;
 		std::copy_n( pipeline.m_state.m_textures, metrics.m_max_draw_textures.size( ), metrics.m_max_draw_textures.begin( ) );
+
+		// Some ShaderAPI paths restore state without passing through the public
+		// setters. Query only a newly slowest draw so the trace records the
+		// driver's authoritative objects without burdening every submission.
+		if( device ) {
+			IDirect3DVertexShader9* vertex_shader{ };
+			if( SUCCEEDED( device->GetVertexShader( &vertex_shader ) ) && vertex_shader ) {
+				metrics.m_max_draw_vertex_shader	  = static_cast< std::uint32_t >( reinterpret_cast< std::uintptr_t >( vertex_shader ) );
+				metrics.m_max_draw_vertex_shader_hash = shader_hash( vertex_shader );
+				vertex_shader->Release( );
+			}
+
+			IDirect3DPixelShader9* pixel_shader{ };
+			if( SUCCEEDED( device->GetPixelShader( &pixel_shader ) ) && pixel_shader ) {
+				metrics.m_max_draw_pixel_shader		 = static_cast< std::uint32_t >( reinterpret_cast< std::uintptr_t >( pixel_shader ) );
+				metrics.m_max_draw_pixel_shader_hash = shader_hash( pixel_shader );
+				pixel_shader->Release( );
+			}
+
+			for( DWORD stage = 0; stage < metrics.m_max_draw_textures.size( ); ++stage ) {
+				IDirect3DBaseTexture9* texture{ };
+				if( SUCCEEDED( device->GetTexture( stage, &texture ) ) && texture ) {
+					metrics.m_max_draw_textures[ stage ] = static_cast< std::uint32_t >( reinterpret_cast< std::uintptr_t >( texture ) );
+					texture->Release( );
+				}
+			}
+		}
 		metrics.m_max_draw_first_vertex_shader = pipeline.m_first_vertex_shader;
 		metrics.m_max_draw_first_pixel_shader  = pipeline.m_first_pixel_shader;
 		metrics.m_max_draw_first_pipeline	   = pipeline.m_first_pipeline;
 		metrics.m_max_draw_first_texture_mask  = pipeline.m_first_texture_mask;
-		describe_texture_0( metrics, pipeline );
+		describe_texture_0( metrics );
 
 		// stack capture is limited to material stalls above two milliseconds.
 		static const Qpc::tick_t capture_threshold = Qpc::ticks( 2.0 );

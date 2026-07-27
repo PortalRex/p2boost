@@ -40,6 +40,7 @@ namespace p2boost::renderer_research {
 	void							  set_pixel_shader( IDirect3DPixelShader9* shader ) noexcept;
 	[[nodiscard]] PipelineObservation observe_pipeline( ) noexcept;
 	void							  record_draw( RenderWorkerMetrics& metrics,
+									 IDirect3DDevice9*					device,
 									 Qpc::tick_t						begin_qpc,
 									 unsigned int						method,
 									 unsigned int						primitive_type,

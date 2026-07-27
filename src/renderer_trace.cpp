@@ -410,7 +410,7 @@ namespace p2boost {
 		if( !previous )
 			return;
 		const bool tracing = !instance->m_removing.load( std::memory_order_acquire ) && instance->m_metrics &&
-							 instance->m_metrics->tracing( ) && queued_context;
+							 instance->m_metrics->collecting( ) && queued_context;
 		if( !tracing ) {
 			previous( self, queued_context );
 			return;
@@ -663,16 +663,17 @@ namespace p2boost {
 		auto  previous = instance ? reinterpret_cast< decltype( &CreateTexture ) >( instance->m_create_texture.previous( ) ) : nullptr;
 		if( !previous )
 			return D3DERR_INVALIDCALL;
-		if( !instance->m_metrics || !instance->m_metrics->tracing( ) )
-			return previous( self, width, height, levels, usage, format, pool, texture, shared_handle );
-
-		const Qpc::tick_t begin	  = Qpc::now( );
+		const bool		  tracing = instance->m_metrics && instance->m_metrics->tracing( );
+		const Qpc::tick_t begin	  = tracing ? Qpc::now( ) : 0;
 		const HRESULT	  result  = previous( self, width, height, levels, usage, format, pool, texture, shared_handle );
-		const Qpc::tick_t elapsed = Qpc::now( ) - begin;
-		record_timing( instance->m_pending_texture_create_count,
-			instance->m_pending_texture_create_qpc,
-			instance->m_pending_max_texture_create_qpc,
-			elapsed );
+		if( tracing ) {
+			const Qpc::tick_t elapsed = Qpc::now( ) - begin;
+			record_timing( instance->m_pending_texture_create_count,
+				instance->m_pending_texture_create_qpc,
+				instance->m_pending_max_texture_create_qpc,
+				elapsed );
+		}
+
 		return result;
 	}
 
@@ -763,6 +764,7 @@ namespace p2boost {
 		const Qpc::tick_t begin	 = Qpc::now( );
 		const HRESULT	  result = previous( self, primitive_type, start_vertex, primitive_count );
 		renderer_research::record_draw( g_worker_trace,
+			self,
 			begin,
 			portal2::d3d9::draw_primitive,
 			primitive_type,
@@ -792,6 +794,7 @@ namespace p2boost {
 		const HRESULT	  result =
 			previous( self, primitive_type, base_vertex_index, min_vertex_index, vertex_count, start_index, primitive_count );
 		renderer_research::record_draw( g_worker_trace,
+			self,
 			begin,
 			portal2::d3d9::draw_indexed_primitive,
 			primitive_type,
@@ -814,6 +817,7 @@ namespace p2boost {
 		const Qpc::tick_t begin	 = Qpc::now( );
 		const HRESULT	  result = previous( self, primitive_type, primitive_count, vertex_data, vertex_stride );
 		renderer_research::record_draw( g_worker_trace,
+			self,
 			begin,
 			portal2::d3d9::draw_primitive_up,
 			primitive_type,
@@ -861,6 +865,7 @@ namespace p2boost {
 			vertex_data,
 			vertex_stride );
 		renderer_research::record_draw( g_worker_trace,
+			self,
 			begin,
 			portal2::d3d9::draw_indexed_primitive_up,
 			primitive_type,

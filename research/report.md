@@ -319,9 +319,9 @@ portal. Instead, the capture identifies the first frame with a nonzero portal
 render count, which occurs near 15.7--15.9 seconds after PresentMon starts and
 corresponds to the successful placement around 14 seconds of demo simulation.
 
-Three independent cold-process captures reproduce the same sequence. Portal
+Five independent cold-process captures reproduce the same sequence. Portal
 CPU rendering begins at only 0.18--0.23 ms. The following material worker then
-spends 38--55 ms, including 16--39 ms in native D3D9 draw submission. A later
+spends 38--66 ms, including 16--47 ms in native D3D9 draw submission. A later
 queued `materialsystem.dll+0x13c60` command blocks for 55--56 ms in the already
 identified hardware-synchronization path, with another 21--23 ms occurrence in
 some runs. Present itself can independently cost about 9 ms during this burst.
@@ -329,12 +329,24 @@ some runs. Present itself can independently cost about 9 ms during this burst.
 Resource-creation hooks separate late Source allocation from driver first use.
 During map load, one observed batch creates 901 textures, 656 vertex shaders,
 and 1,066 pixel shaders roughly thirteen seconds before the portal. The
-portal-opening workers create zero resources of those types. The stall is therefore not a
-portal-resource allocation bug: it is first-use D3D9 draw/pipeline work followed
-by Source's explicit fence. D3D9 exposes no pipeline-precompile object, and the
-only known way to force this work earlier is a dummy draw. That workaround is
-explicitly excluded, as is deleting the fence when doing so merely transfers
-the backlog to Present. These rejected approaches do not ship.
+portal-opening workers create zero resources of those types. The stall is
+therefore not a portal-resource allocation bug: it is first-use D3D9 resource
+and draw work followed by Source's explicit fence. Authoritative device-state
+queries corrected an earlier setter-cache ambiguity. In the latest cold run,
+the 66.4278 ms worker spent 35.7085 ms in 535 draws. Its slowest 10.7459 ms draw
+used an already-seen shader pair but a first-seen managed 512x512 DXT1 mipmapped
+texture. New shader-pair draws accounted for only 0.8855 ms in that worker.
+
+A research-only lifecycle prototype called the native D3D9 `PreLoad()` method
+after the last mip of each managed texture was unlocked. It did not change
+format, pool, mip count, pixels, filtering, or draw order. A cold comparison
+still measured a 62.4643 ms portal worker frame followed by a 56.4762 ms wait,
+equivalent to the 67.7877/57.3897 ms control. The same first-visible texture
+behavior remained, showing that the driver's managed-resource preload is
+advisory here or is invalidated by later Source updates. The prototype was
+removed completely. D3D9 exposes no pipeline-precompile object; deleting the
+fence merely transfers the backlog to Present. These rejected approaches do
+not ship.
 
 A cold-process control repeated the complete demo with the engine default
 `r_portal_use_pvs_optimization 1`, restoring the user's `0` value afterward.
@@ -527,6 +539,18 @@ verified `CEngine::Frame` completion call. In a simultaneous five-second
 capture, PresentMon reported 837.52 FPS, 1.0922 ms median, and 3.0146 ms p99;
 p2boost reported 842.55 FPS, 1.0816 ms median, and 2.8466 ms p99. The small
 boundary difference is expected because the two collectors start separately.
+
+The original display backend also used `Con_NXPrintf`, whose global console
+rows duplicated both panels over the orange half of Portal 2's vertical
+split-screen layout and could silently fail for an online orange client. The
+replacement binds the exact public `VDebugOverlay004` interface registered by
+this build and uses its normalized screen-text API. Visual SP and local co-op
+tests show one stable top-left panel, while `p2boost_status` separately reports
+`overlay_available` and `overlay` so a remote co-op installation failure is no
+longer silent. Portal and render-worker collection now remains active when the
+overlay is enabled even if full CSV tracing is off. Summed worker CPU time is
+presented as render-thread utilization and call count rather than misleading
+wall-clock milliseconds.
 
 The focus harness now rejects a window that does not cover its monitor. Before
 each cycle it fizzles both prior portals, alt-tabs away, restores the game, and
