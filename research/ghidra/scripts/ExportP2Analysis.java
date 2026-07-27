@@ -34,7 +34,7 @@ public class ExportP2Analysis extends GhidraScript {
     private static final String[] TERMS = {
         "portal", "present", "reset", "device lost", "focus", "alt-tab",
         "framerate", "fps_max", "frametime", "render target", "visibility",
-        "pvs", "split screen", "splitscreen", "co-op", "coop"
+        "pvs", "split screen", "splitscreen", "co-op", "coop", "video", "avi"
     };
 
     // A target may first be discovered with no caller depth and later with a
@@ -347,6 +347,42 @@ public class ExportP2Analysis extends GhidraScript {
             // Sound-emitter instruction sampled in the same 8.10 ms chamber
             // frame. Export two caller levels before assigning semantics.
             addFunctionAndCallers(targets, 0x1000b668L, 2);
+        }
+        if (base.equalsIgnoreCase("valve_avi.dll")) {
+            // A deterministic queued command lands here about eight seconds
+            // after the intro3 portal opens. Export the frame-state helpers and
+            // queue builder before deciding whether the movie frame is new.
+            long[] videoFrameTargets = {
+                0x10003e60L,
+                0x10003ee0L,
+                0x10003f90L,
+                0x100050e0L,
+                0x10005220L,
+                0x100053d0L,
+            };
+            for (long address : videoFrameTargets) {
+                addFunctionAndCallers(targets, address, 4);
+            }
+        }
+        if (base.equalsIgnoreCase("binkw32.dll")) {
+            // Portal 2 ships but does not use Bink's asynchronous frame
+            // decoder. Export its lifecycle before prototyping that pipeline.
+            long[] asyncDecodeTargets = {
+                0x1800f300L,
+                0x1800f380L,
+                0x1800f620L,
+                0x1800f810L,
+                0x180138d0L,
+                0x180138e0L,
+                0x180138f0L,
+                0x18013a60L,
+                0x18013bb0L,
+                0x18013ee0L,
+                0x18014080L,
+            };
+            for (long address : asyncDecodeTargets) {
+                addFunctionAndCallers(targets, address, 2);
+            }
         }
 
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(new File(output, base + "-functions.tsv")))) {

@@ -336,6 +336,21 @@ only known way to force this work earlier is a dummy draw. That workaround is
 explicitly excluded, as is deleting the fence when doing so merely transfers
 the backlog to Present. These rejected approaches do not ship.
 
+A cold-process control repeated the complete demo with the engine default
+`r_portal_use_pvs_optimization 1`, restoring the user's `0` value afterward.
+The successful portal still produced a 52.7052 ms draw-submission frame followed
+by a 57.8891 ms synchronization frame. Portal CPU work remained 0.2088--0.2496
+ms. The user's broader-PVS configuration therefore is not the cause of this
+first-portal stall and remains untouched.
+
+One later queued command was separately resolved with a fresh Ghidra project to
+`valve_avi.dll+0x3f90`. It performs a real Bink frame decode and updates the
+movie's three texture planes. A research-only attempt to pipeline that decode
+through the asynchronous functions already exported by the shipped
+`binkw32.dll` changed in-game video playback while leaving the portal event at
+approximately 55--57 ms. The experiment was rejected in full; no Bink hook or
+movie-frame scheduling change ships.
+
 Playback completes with the expected `sp_a1_intro3` header and 1,346 demo ticks.
 The standalone runner disables tracing, restores `fps_max` and patch state, and
 fully closes the game even when analysis fails so research hooks cannot remain
