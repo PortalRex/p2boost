@@ -19,7 +19,9 @@ jobs:
     # Portal 2 is an x86 VS 2022 target. windows-latest moved to the VS 2026
     # image in June 2026 and no longer provides CMake's VS 17 generator.
     runs-on: windows-2022
-    timeout-minutes: 10
+    # A cold Windows runner must build every x86 translation unit from scratch.
+    # Keep a finite guard while allowing normal hosted-runner variance.
+    timeout-minutes: 15
 
     steps:
       - name: Check out source
@@ -35,7 +37,7 @@ jobs:
 
       - name: Build
         shell: pwsh
-        run: cmake --build --preset release
+        run: cmake --build --preset release -- /m
 
       - name: Test
         shell: pwsh
