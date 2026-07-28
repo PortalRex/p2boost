@@ -75,8 +75,9 @@ the default `OFF` configuration.
   projected-shadow, queued-worker, concrete hardware-fence, and Present tracing.
 - `p2boost_overlay 0|1` toggles a compact in-game profiler. Its one-second
   rolling panel shows actual render FPS, current frame time, p99, maximum, a
-  48-frame hitch graph, average portal cost, render-thread utilization, SP/co-op,
-  SAR, and fix state. It uses Portal 2's public `VDebugOverlay004` interface,
+  48-frame hitch graph, average portal cost, measured render-worker occupancy,
+  post-worker main-tail p99, SP/co-op, SAR, and fix state. It uses Portal 2's
+  public `VDebugOverlay004` interface,
   so one local panel works for either online co-op role without duplicating
   across local split-screen views. Frames are sampled at the verified
   `CEngine::Frame` completion hook, not the 60 Hz server simulation callback.

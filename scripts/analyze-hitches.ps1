@@ -35,8 +35,29 @@ $frameTimeColumn = if ($frames[0].PSObject.Properties.Name -contains 'CPUFrameTi
 
 $frequency = [Diagnostics.Stopwatch]::Frequency
 $captureStart = [double]$frames[0].CPUStartQPC
+$captureEnd = [double]$frames[-1].CPUStartQPC +
+    [double]$frames[-1].$frameTimeColumn * $frequency / 1000.0
 $metrics = if ($MetricsCsv -and (Test-Path -LiteralPath $MetricsCsv)) {
-    @(Import-Csv -LiteralPath $MetricsCsv | Sort-Object { [double]$_.qpc })
+    # The fixed metrics ring can contain a minute of high-FPS history and more
+    # than two million CSV fields. Filter its chronological text rows by QPC
+    # before constructing PowerShell objects so short captures analyze quickly.
+    $metricHeader = Get-Content -LiteralPath $MetricsCsv -TotalCount 1
+    $metricLines = [Collections.Generic.List[string]]::new()
+    foreach ($line in [IO.File]::ReadLines([IO.Path]::GetFullPath($MetricsCsv))) {
+        if ($line -eq $metricHeader) { continue }
+        $separator = $line.IndexOf(',')
+        if ($separator -le 0) { continue }
+        $qpc = 0L
+        if (-not [long]::TryParse($line.Substring(0, $separator), [ref]$qpc)) { continue }
+        if ($qpc -ge $captureStart - $frequency -and $qpc -le $captureEnd + $frequency) {
+            $metricLines.Add($line)
+        }
+    }
+    if ($metricLines.Count) {
+        @(@($metricHeader) + $metricLines) | ConvertFrom-Csv
+    } else {
+        @()
+    }
 } else {
     @()
 }
@@ -86,11 +107,22 @@ $rows = foreach ($frame in $frames) {
     } else {
         [double]::NaN
     }
+    $workerMs = if ($metric) { [double]$metric.render_worker_ms } else { 0.0 }
+    $mainTailMs = if ($metric -and [long]$metric.render_worker_end_qpc -gt 0 -and
+        [long]$metric.render_worker_end_qpc -le [long]$metric.qpc) {
+        ([double]$metric.qpc - [double]$metric.render_worker_end_qpc) * 1000.0 / $frequency
+    } else {
+        0.0
+    }
 
     # This label is deliberately coarse. ETW is still required to identify the
     # responsible function; the label prevents CPU work, waits, and GPU work
     # from being conflated before that trace is collected.
-    $kind = if ($gpuBusy -ge $frameMs * 0.7) {
+    $kind = if ($metric -and $metricDistanceMs -le 2.0 -and $workerMs -ge $frameMs * 0.7) {
+        'render-worker'
+    } elseif ($metric -and $metricDistanceMs -le 2.0 -and $mainTailMs -ge $frameMs * 0.5) {
+        'main-tail'
+    } elseif ($gpuBusy -ge $frameMs * 0.7) {
         'gpu-busy'
     } elseif ($cpuBusy -ge $frameMs * 0.7) {
         'cpu-busy'
@@ -111,7 +143,8 @@ $rows = foreach ($frame in $frames) {
         PortalMs = if ($metric) { [double]$metric.portal_render_ms } else { 0.0 }
         ShadowMs = if ($metric) { [double]$metric.shadow_update_ms } else { 0.0 }
         ShadowSkips = if ($metric) { [int]$metric.shadow_skipped_count } else { 0 }
-        WorkerMs = if ($metric) { [double]$metric.render_worker_ms } else { 0.0 }
+        WorkerMs = [Math]::Round($workerMs, 4)
+        MainTailMs = [Math]::Round($mainTailMs, 4)
         WorldMs = if ($metric -and $metric.PSObject.Properties.Name -contains 'world_surface_ms') {
             [double]$metric.world_surface_ms
         } else { 0.0 }
@@ -160,4 +193,7 @@ $largestFrame = $values[-1]
     Report = $output
 } | Format-List
 
-$largest | Format-Table -AutoSize
+$largest |
+    Select-Object RelativeMs, FrameMs, Kind, CPUBusyMs, CPUWaitMs, GPUBusyMs,
+        WorkerMs, MainTailMs, PortalMs, ReacquireMs, MetricDistanceMs |
+    Format-Table -AutoSize

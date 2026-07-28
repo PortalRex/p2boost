@@ -334,3 +334,19 @@ mutable current-view, render-flag, BSP-generation, and output-list state in
 the player/portal visibility builders. Parallelizing those calls without a
 per-view engine-state rewrite would change or race visibility, so no unsafe
 threading hook is included.
+
+A subsequent uncapped production run repeated the grounded Laser Relays route
+with the elevator, both portal shots, and a linked portal interior on screen.
+It averaged 873.31 FPS with a 1.0699 ms median, but cold portal activation
+contained 21.6935, 36.3260, and 24.5148 ms frames. Their queued render batches
+took 19.3305, 36.3047, and 24.4925 ms, respectively; the largest batch spent
+35.6328 ms in native D3D9 `Present` and only 0.0014 ms in the Source hardware
+fence. Post-worker main tails were below 0.48 ms and measured portal CPU work
+was below 0.17 ms.
+
+The identical warm fizzle-and-reopen sequence averaged 940.09 FPS, measured a
+1.0363 ms median, 1.7860 ms p99, 3.5742 ms maximum, and had no frame above
+8.3 ms. The first-use gate therefore remains **not met**: the remaining cold
+event is a native-driver submission/presentation cost. It is not reported as
+fixed, and p2boost does not hide it by pre-rendering a dummy portal or moving
+the same wait into loading.

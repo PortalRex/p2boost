@@ -698,3 +698,30 @@ result. That is an engine rewrite, not a chain-safe plugin hook, and it risks
 view-dependent omissions, nondeterministic demos, and SAR incompatibility.
 No parallel-view prototype is shipped without an isolated state-equivalence
 proof.
+
+## Grounded render-handoff validation
+
+A fresh production build was exercised through the full grounded Laser Relays
+route with the elevator, main room, two portal shots, and a connected portal
+interior visible. The overlay reported real render completion rates near
+900 FPS rather than the 60 Hz simulation rate. Its worker percentage and
+post-worker tail agreed with the timestamped CSV trace.
+
+The cold portal sequence produced 21.6935, 36.3260, and 24.5148 ms presented
+frames. The corresponding queued material batches took 19.3305, 36.3047, and
+24.4925 ms, while the post-worker main-thread tails were only 0.476, 0.351,
+and 0.240 ms. On the largest frame, 35.6328 ms was spent in the native D3D9
+`Present` call; the recorded hardware fence was 0.0014 ms. Portal CPU work was
+0.0624--0.1695 ms across the three frames.
+
+Repeating the same fizzle-and-reopen sequence in the same process produced a
+3.5742 ms maximum, 1.7860 ms p99, and no frame above 8.3 ms. This isolates the
+large event to cold driver submission/presentation, not portal simulation,
+visibility construction, the Source hardware fence, or an idle main thread.
+Adding another Source worker cannot parallelize an ordered D3D9 `Present`.
+
+The hitch analyzer now aligns the bounded metric interval to the PresentMon
+capture and reports queued-worker and post-worker-main timing explicitly.
+This makes render handoff, main tail, portal work, GPU work, and focus
+reacquisition independently visible instead of classifying every CPU-busy
+frame alike.
