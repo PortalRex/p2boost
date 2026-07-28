@@ -5,6 +5,7 @@ param(
     [ValidateRange(1,1000)][int]$Cycles = 5,
     [ValidateSet('AltTab','Minimize')][string]$FocusMode = 'AltTab',
     [switch]$TraceP2Boost,
+    [switch]$QuickLifecycle,
     [switch]$KeepGameOpen
 )
 $ErrorActionPreference = 'Stop'
@@ -73,20 +74,34 @@ if (-not $listener) { throw 'Launch Portal 2 with -usercon and a non-empty rcon_
 # Each cycle includes one RCON setup round trip in addition to 2.45 seconds of
 # focus and delayed input. Budget its observed worst case so a 30-cycle release
 # run cannot outlive PresentMon on a busy machine.
-$duration = [Math]::Max(10, [int]([Math]::Ceiling($Cycles * 3.25 + 8)))
+$secondsPerCycle = if ($QuickLifecycle) { 1.45 } else { 3.25 }
+$duration = [Math]::Max(10, [int]([Math]::Ceiling($Cycles * $secondsPerCycle + 8)))
 $arguments = @(
     '--process_id', $gameProcess.Id, '--output_file', $outputPath, '--v2_metrics',
     '--qpc_time', '--timed', $duration, '--terminate_after_timed',
     '--no_console_stats', '--set_circular_buffer_size', '32768'
 )
+
+# Start PresentMon before scheduling the first portal. The normal action delay
+# previously hid its startup time, but quick lifecycle runs can reach the first
+# shot before a synchronously launched capture has attached to the process.
+$capture = Start-Process -FilePath $presentMon -ArgumentList $arguments `
+    -NoNewWindow -PassThru
+Start-Sleep -Milliseconds 750
+if ($capture.HasExited) {
+    throw "PresentMon exited before focus actions began (exit $($capture.ExitCode))."
+}
+
 $actionScript = Join-Path $PSScriptRoot 'invoke-focus-portal-actions.ps1'
 $actionArgs = "-NoProfile -ExecutionPolicy Bypass -File `"$actionScript`" -ProcessId $($gameProcess.Id) -Cycles $Cycles -EventPath `"$eventPath`" -FocusMode $FocusMode -RconPassword `"$RconPassword`""
 if ($TraceP2Boost) { $actionArgs += ' -TraceP2Boost' }
+if ($QuickLifecycle) { $actionArgs += ' -QuickLifecycle' }
 $actions = Start-Process powershell.exe -ArgumentList $actionArgs -WindowStyle Hidden -PassThru `
     -RedirectStandardOutput "$eventPath.out.txt" -RedirectStandardError "$eventPath.err.txt"
-& $presentMon @arguments
-$presentExit = $LASTEXITCODE
 $actions.WaitForExit()
+$capture.WaitForExit()
+$capture.Refresh()
+$presentExit = $capture.ExitCode
 $actions.Refresh()
 $actionExit = $actions.ExitCode
 $errorText = Get-Content "$eventPath.err.txt" -Raw -ErrorAction SilentlyContinue
@@ -96,7 +111,9 @@ if ($null -ne $actionExit -and $actionExit -ne 0) {
 if ($null -eq $actionExit -and $errorText) {
     throw "focus action helper failed without an exit code: $errorText"
 }
-if ($presentExit -ne 0) { throw "PresentMon exited with $presentExit" }
+if ($null -ne $presentExit -and $presentExit -ne 0) {
+    throw "PresentMon exited with $presentExit"
+}
 $events = @(Import-Csv -LiteralPath $eventPath)
 $frames = @(Import-Csv -LiteralPath $outputPath)
 if ($events.Count -ne $Cycles) {

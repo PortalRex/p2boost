@@ -120,6 +120,22 @@ each file and lets individual hitches align with p2boost metrics. Its final
 diagnostic trace always runs with the candidate enabled, independent of A/B
 order.
 
+`run-sar-compatibility.ps1` repeatedly constructs both SAR/p2boost load
+orders, unloads each plugin while the other remains resident, validates every
+p2boost hook/status field and `sar_about`, then closes the game. It discovers
+the displayed plugin indexes by name and never assumes that SAR is slot zero.
+
+For the long lifecycle gate, the quick mode preserves real focus loss/restore
+and both portal-gun shots while shortening only the idle delay between cycles:
+
+```powershell
+.\scripts\run-focus-portal-cycles.ps1 -Cycles 100 -QuickLifecycle
+```
+
+After verified restore and synchronous device reacquisition, the connected
+portal is scheduled 300 ms later in simulation time. This makes it a stricter
+first-use check than the normal profiling schedule.
+
 For a synchronized CPU, GPU, disk, module-load, and frame-time trace, start
 Portal 2 from an elevated PowerShell and run:
 

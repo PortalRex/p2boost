@@ -107,6 +107,23 @@ namespace {
 		return installed && encoded && removed;
 	}
 
+	bool test_call_site_chain( ) {
+		auto* memory = static_cast< unsigned char* >( VirtualAlloc( nullptr, 64, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE ) );
+		if( !memory )
+			return false;
+		const std::vector< std::uint8_t > expected{ 0xff, 0x15, 1, 2, 3, 4 };
+		const std::uint8_t				  later_owner[]{ 0xe9, 5, 6, 7, 8, 0x90 };
+		std::memcpy( memory, expected.data( ), expected.size( ) );
+		p2boost::CallSitePatch patch;
+		const bool			   installed = patch.install( memory, expected, reinterpret_cast< void* >( &replacement ) );
+
+		// A later owner must survive p2boost removal byte-for-byte.
+		std::memcpy( memory, later_owner, sizeof( later_owner ) );
+		const bool preserved = !patch.remove( ) && std::memcmp( memory, later_owner, sizeof( later_owner ) ) == 0;
+		VirtualFree( memory, 0, MEM_RELEASE );
+		return installed && preserved;
+	}
+
 	bool test_pointer_immediate_patch( ) {
 		auto* memory = static_cast< unsigned char* >( VirtualAlloc( nullptr, 64, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE ) );
 		if( !memory )
@@ -127,6 +144,24 @@ namespace {
 		return installed && points_to_replacement && removed;
 	}
 
+	bool test_pointer_immediate_chain( ) {
+		auto* memory = static_cast< unsigned char* >( VirtualAlloc( nullptr, 64, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE ) );
+		if( !memory )
+			return false;
+		std::vector< std::uint8_t > expected{ 0xb8, 0, 0, 0, 0 };
+		const auto					original_pointer = static_cast< std::uint32_t >( reinterpret_cast< std::uintptr_t >( &original ) );
+		std::memcpy( expected.data( ) + 1, &original_pointer, sizeof( original_pointer ) );
+		std::memcpy( memory, expected.data( ), expected.size( ) );
+		p2boost::PointerImmediatePatch patch;
+		const bool					   installed = patch.install( memory, expected, 1, reinterpret_cast< void* >( &replacement ) );
+
+		const std::uint8_t later_owner[]{ 0xb8, 9, 8, 7, 6 };
+		std::memcpy( memory, later_owner, sizeof( later_owner ) );
+		const bool preserved = !patch.remove( ) && std::memcmp( memory, later_owner, sizeof( later_owner ) ) == 0;
+		VirtualFree( memory, 0, MEM_RELEASE );
+		return installed && preserved;
+	}
+
 	bool test_inline_detour( ) {
 		auto* memory = static_cast< unsigned char* >( VirtualAlloc( nullptr, 64, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE ) );
 		if( !memory )
@@ -139,6 +174,24 @@ namespace {
 		const bool			  removed	= hook.remove( ) && std::memcmp( memory, expected.data( ), expected.size( ) ) == 0;
 		VirtualFree( memory, 0, MEM_RELEASE );
 		return installed && encoded && removed;
+	}
+
+	bool test_inline_detour_chain( ) {
+		auto* memory = static_cast< unsigned char* >( VirtualAlloc( nullptr, 64, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE ) );
+		if( !memory )
+			return false;
+		const std::vector< std::uint8_t > expected{ 0xa1, 1, 2, 3, 4 };
+		std::memcpy( memory, expected.data( ), expected.size( ) );
+		p2boost::InlineDetour hook;
+		const bool			  installed = hook.install( memory, expected, reinterpret_cast< void* >( &replacement ) );
+
+		// The trampoline intentionally stays mapped while a later owner may
+		// still chain through it; only the contested entry bytes are asserted.
+		const std::uint8_t later_owner[]{ 0xe9, 4, 3, 2, 1 };
+		std::memcpy( memory, later_owner, sizeof( later_owner ) );
+		const bool preserved = !hook.remove( ) && std::memcmp( memory, later_owner, sizeof( later_owner ) ) == 0;
+		VirtualFree( memory, 0, MEM_RELEASE );
+		return installed && preserved;
 	}
 
 	bool test_known_hash( ) {
@@ -217,19 +270,23 @@ namespace {
 }
 
 int main( ) {
-	const bool address		 = test_address_and_stack_frame( );
-	const bool relative_call = test_relative_call_encoding( );
-	const bool pattern		 = test_pattern_scanner( );
-	const bool hook			 = test_hook_chain( );
-	const bool callsite		 = test_call_site_patch( );
-	const bool pointer		 = test_pointer_immediate_patch( );
-	const bool inline_detour = test_inline_detour( );
-	const bool hash			 = test_known_hash( );
-	const bool metrics		 = test_metrics( );
-	const bool overlay		 = test_overlay_worker_metrics( );
-	const bool phase		 = test_frame_phase_carry( );
-	const bool qpc			 = test_qpc( );
-	std::printf( "address=%s rel32=%s pattern=%s hook_chain=%s callsite=%s pointer=%s inline=%s hash=%s "
+	const bool address		  = test_address_and_stack_frame( );
+	const bool relative_call  = test_relative_call_encoding( );
+	const bool pattern		  = test_pattern_scanner( );
+	const bool hook			  = test_hook_chain( );
+	const bool callsite		  = test_call_site_patch( );
+	const bool callsite_chain = test_call_site_chain( );
+	const bool pointer		  = test_pointer_immediate_patch( );
+	const bool pointer_chain  = test_pointer_immediate_chain( );
+	const bool inline_detour  = test_inline_detour( );
+	const bool inline_chain	  = test_inline_detour_chain( );
+	const bool hash			  = test_known_hash( );
+	const bool metrics		  = test_metrics( );
+	const bool overlay		  = test_overlay_worker_metrics( );
+	const bool phase		  = test_frame_phase_carry( );
+	const bool qpc			  = test_qpc( );
+	std::printf( "address=%s rel32=%s pattern=%s hook_chain=%s callsite=%s callsite_chain=%s "
+				 "pointer=%s pointer_chain=%s inline=%s inline_chain=%s hash=%s "
 				 "metrics=%s overlay=%s "
 				 "phase=%s qpc=%s\n",
 		address ? "ok" : "FAIL",
@@ -237,14 +294,18 @@ int main( ) {
 		pattern ? "ok" : "FAIL",
 		hook ? "ok" : "FAIL",
 		callsite ? "ok" : "FAIL",
+		callsite_chain ? "ok" : "FAIL",
 		pointer ? "ok" : "FAIL",
+		pointer_chain ? "ok" : "FAIL",
 		inline_detour ? "ok" : "FAIL",
+		inline_chain ? "ok" : "FAIL",
 		hash ? "ok" : "FAIL",
 		metrics ? "ok" : "FAIL",
 		overlay ? "ok" : "FAIL",
 		phase ? "ok" : "FAIL",
 		qpc ? "ok" : "FAIL" );
-	return address && relative_call && pattern && hook && callsite && pointer && inline_detour && hash && metrics && overlay && phase && qpc
+	return address && relative_call && pattern && hook && callsite && callsite_chain && pointer && pointer_chain && inline_detour &&
+				   inline_chain && hash && metrics && overlay && phase && qpc
 			   ? 0
 			   : 1;
 }

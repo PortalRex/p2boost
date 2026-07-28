@@ -73,9 +73,21 @@ in both orders instead of crediting warm-process state to a patch.
 - material resource callbacks: approximately 274-317 ms.
 
 The callback target resolves to `materialsystem.dll` RVA `0x11230`, which
-restores material shader objects and registered resource owners. After this
-reset settles, 30 portal placements produced no frame above 2.8055 ms. The
-portal is not lazily allocating the missing 300 ms; the D3D9 device reset is.
+restores material shader objects and registered resource owners. An original
+30-cycle test appeared to show no portal frame above 2.8055 ms, but its portal
+QPC was derived from `wait_for` commands queued before focus loss. Reset paused
+simulation and invalidated that conversion, so the result is rejected.
+
+The corrected harness verifies focus restoration before scheduling both real
+portal-gun inputs. Three patched cycles measured 19.1558--26.7104 ms
+post-connected-portal maxima, and a traced repeat measured
+21.6339--22.0775 ms. Their connected-portal workers consumed
+20.5790--21.0216 ms and were followed by 16.8300--17.9684 ms raw `Present`
+calls. A patch-off control measured 21.6212--34.0130 ms. The resource-reset
+optimization remains real, but the native device again incurs ordered
+draw/presentation work when portal rendering resumes after focus.
+The shots occurred 388--423 ms after the measured reacquisition call ended,
+so these frames are not part of the synchronous reset interval.
 
 A forced restore also produced a reproducible access violation at
 `d3d9.dll+0xefd7b` on the material-system queued-render worker. The saved
@@ -661,6 +673,21 @@ now restores the queued-worker target first, tracks in-flight batches, and
 requires a 50 ms zero-callback grace interval before removing downstream
 hooks. Ten consecutive unload/reload cycles passed while the co-op paint demo
 was rendering with tracing enabled.
+
+A dedicated current-build lifecycle harness now discovers the live plugin
+indexes by name and constructs both relative load orders without editing the
+user's autoexec. Three complete cycles performed six p2boost unload/reloads
+and six SAR reloads. Each transition revalidated native D3D9, frame-pacer,
+projected-shadow, build, and SAR status; the log contained no signature
+mismatch or warning.
+
+Portal 2 marks a surviving later plugin disabled when an earlier list entry is
+removed. The harness explicitly calls `plugin_unpause` on that shifted entry
+before testing it. This engine list behavior caused an early manual command to
+look like a SAR failure even though `sar_about` remained registered; it is now
+handled deterministically. CI unit tests separately replace every p2boost
+patch primitive with a simulated later owner and prove removal preserves the
+later bytes or slot exactly.
 
 ## Grounded Laser Relays reproduction
 

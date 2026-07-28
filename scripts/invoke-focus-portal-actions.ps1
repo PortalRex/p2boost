@@ -4,7 +4,8 @@ param(
     [Parameter(Mandatory)][string]$EventPath,
     [ValidateSet('AltTab','Minimize')][string]$FocusMode = 'AltTab',
     [string]$RconPassword = 'p2boostlab',
-    [switch]$TraceP2Boost
+    [switch]$TraceP2Boost,
+    [switch]$QuickLifecycle
 )
 $ErrorActionPreference = 'Stop'
 $rcon = Join-Path $PSScriptRoot 'invoke-rcon.ps1'
@@ -111,6 +112,17 @@ function Read-Cvar([string]$Name) {
 
 $originalCheats = Read-Cvar 'sv_cheats'
 $events = [Collections.Generic.List[object]]::new()
+
+# The release gate can repeat the exact focus/resource lifecycle quickly. It
+# still fires both real portal-gun inputs after restore, but avoids two seconds
+# of idle time between cycles.
+$primaryDown = if ($QuickLifecycle) { 6 } else { 75 }
+$primaryUp = if ($QuickLifecycle) { 10 } else { 81 }
+$secondaryAngle = if ($QuickLifecycle) { 12 } else { 99 }
+$secondaryDown = if ($QuickLifecycle) { 18 } else { 105 }
+$secondaryUp = if ($QuickLifecycle) { 22 } else { 111 }
+$cameraRestore = if ($QuickLifecycle) { 28 } else { 129 }
+$cycleSettleMilliseconds = if ($QuickLifecycle) { 900 } else { 2200 }
 try {
     if ($TraceP2Boost) { Invoke-Game @('p2boost_trace 1') | Out-Null }
 
@@ -127,17 +139,13 @@ try {
 
     Start-Sleep -Seconds 2
     for ($index = 0; $index -lt $Cycles; ++$index) {
-        # Remove both old portals before focus is lost. The delayed commands
-        # below execute entirely inside the engine, avoiding an RCON parse in
-        # the frame whose first newly connected portal begins rendering.
+        # Remove both old portals before focus is lost. The portal inputs are
+        # scheduled only after a verified restore, so a device-reset pause
+        # cannot shift their simulation ticks away from the recorded QPC.
         Invoke-Game @(
             'ent_fire prop_portal fizzle',
-            'setang 0 -90 0',
-			'wait_for 75 +attack; wait_for 81 -attack; ' +
-			'wait_for 99 setang 0 0 0; wait_for 105 +attack2; wait_for 111 -attack2; ' +
-			'wait_for 129 setang 0 -90 0'
+            'setang 0 -90 0'
         ) | Out-Null
-        $scheduleQpc = [Diagnostics.Stopwatch]::GetTimestamp()
 
         $window = (Get-Game).MainWindowHandle
         if ($FocusMode -eq 'Minimize') {
@@ -152,17 +160,24 @@ try {
         Set-VerifiedForeground $window
         $restoreQpc = [Diagnostics.Stopwatch]::GetTimestamp()
 
-		# wait_for is expressed in 60 Hz session ticks. The second shot is the
+        # The RCON parse finishes well before either shot. wait_for is
+        # expressed in 60 Hz session ticks, and the second shot is the
         # instant at which the first connected pair becomes renderable.
-        $primaryQpc = $scheduleQpc + 75.0 / 60.0 * [Diagnostics.Stopwatch]::Frequency
-        $connectedQpc = $scheduleQpc + 105.0 / 60.0 * [Diagnostics.Stopwatch]::Frequency
+        Invoke-Game @(
+            "wait_for $primaryDown +attack; wait_for $primaryUp -attack; " +
+            "wait_for $secondaryAngle setang 0 0 0; wait_for $secondaryDown +attack2; " +
+            "wait_for $secondaryUp -attack2; wait_for $cameraRestore setang 0 -90 0"
+        ) | Out-Null
+        $scheduleQpc = [Diagnostics.Stopwatch]::GetTimestamp()
+        $primaryQpc = $scheduleQpc + $primaryDown / 60.0 * [Diagnostics.Stopwatch]::Frequency
+        $connectedQpc = $scheduleQpc + $secondaryDown / 60.0 * [Diagnostics.Stopwatch]::Frequency
         $events.Add([pscustomobject]@{
             cycle = $index
             restore_qpc = $restoreQpc
             primary_qpc = $primaryQpc
             portal_qpc = $connectedQpc
         })
-        Start-Sleep -Milliseconds 2200
+        Start-Sleep -Milliseconds $cycleSettleMilliseconds
     }
     $events | Export-Csv -LiteralPath $EventPath -NoTypeInformation
     if ($TraceP2Boost) { Invoke-Game @('p2boost_dump_metrics', 'p2boost_trace 0') | Out-Null }

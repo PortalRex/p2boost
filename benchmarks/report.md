@@ -86,6 +86,12 @@ versus 2.8551 ms. The patched maximum was 3.8876 ms with no frame above 8.3 ms.
 Both SAR-to-p2boost and p2boost-to-SAR runtime load orders retained a validated
 shadow-cache hook and native-D3D9 status.
 
+The current automated lifecycle repeat strengthens that smoke evidence. Three
+cycles constructed both orders, unloaded/reloaded p2boost six times, reloaded
+SAR six times, and tested each survivor before restoring the normal SAR-first
+order. All p2boost build/native-D3D9/pacer/shadow/SAR fields and every
+`sar_about` response passed with zero warnings or signature mismatches.
+
 ## Short real-gameplay coverage
 
 Fresh-process playback of the 40.9-second `sp_a2_trust_fling` demo exercises
@@ -190,24 +196,36 @@ that boundary row is not a game frame. No interior or final samples are trimmed.
 ## Focus and portal results
 
 The original timestamped native-D3D9 harness completed 30 minimize/restore/
-portal-placement cycles. After allowing the synchronous reset to complete, the
-100 ms post-portal windows measured:
+portal-placement cycles. It reported:
 
 - median worst frame: 2.1289 ms;
 - p95 worst frame: 2.6520 ms;
 - absolute worst frame: 2.8055 ms;
 - frames above 8.3 ms: 0.
 
-The apparent first-portal stall is therefore the preceding focus reset, not
-lazy first-portal rendering. In the portal-visible co-op lobby, the unpatched
-resource reacquisition averaged about 564 ms. Sampling isolated two redundant
-CPU static-lighting cache rebuilds inside that interval. With the focus
-synchronization and both scoped lighting skips enabled, three direct restores
-measured 245.36, 246.31, and 261.11 ms (250.93 ms average), a 55.5% reduction.
-A subsequent 30-cycle stability run averaged 258.75 ms, with 296.06 ms p95 and
-297.02 ms maximum. No static-lighting work appeared in the two seconds after
-the reacquisition interval, so the removed work was not deferred to the first
-portal frame.
+That portal result is now rejected. The old helper queued `wait_for` commands
+before losing focus and converted their nominal 60 Hz ticks directly to QPC.
+Device restoration paused simulation, shifting the real shots away from those
+estimated timestamps. The corrected helper first verifies restore and only
+then schedules both portal inputs.
+
+Three corrected patched cycles measured 21.0945 ms median and 26.7104 ms worst
+post-connected-portal frames; all exceeded 8.3 ms. A matched patch-off control
+measured 22.3531 ms median and 34.0130 ms worst, also with all three failures.
+A second patched trace reproduced 21.9258 ms median and 22.0775 ms worst.
+The corresponding queued workers consumed 20.5790--21.0216 ms and were
+followed by 16.8300--17.9684 ms native `Present` calls. Portal CPU work and the
+explicit Source fence were small. The focus patch improves the reset path but
+does not eliminate the post-reset native-D3D9 first-use submission cost.
+
+In the portal-visible co-op lobby, the unpatched resource reacquisition
+averaged about 564 ms. Sampling isolated two redundant CPU static-lighting
+cache rebuilds inside that interval. With the focus synchronization and both
+scoped lighting skips enabled, three direct restores measured 245.36, 246.31,
+and 261.11 ms (250.93 ms average), a 55.5% reduction. A subsequent 30-cycle
+stability run averaged 258.75 ms, with 296.06 ms p95 and 297.02 ms maximum.
+No static-lighting work appeared in the two seconds after the reacquisition
+interval, so the removed work itself was not deferred.
 
 Frozen-camera before/after-focus image differences were within the temporal
 and JPEG noise of a no-focus control pair. A complete lossless fixed-tick image
@@ -272,13 +290,18 @@ fresh file-mode trace. `analyze-etw.ps1` rejects an ETL that contains no Portal
 
 ## Gate status
 
-- Post-focus portal frame <=8.3 ms: **met** in 30 valid timestamped cycles.
+- Post-focus portal frame <=8.3 ms: **not met**; corrected post-restore
+  scheduling reproduced 19--34 ms frames in every patched and unpatched smoke
+  cycle.
 - Co-op 1% low improvement >=35%: **provisional**; the short live 999 run
   improves by 35.7%, but longer repeated live runs are still required.
 - p99 <=1.25x median at 360: **not met**; the live SP and co-op ratios are
   1.3898 and 1.3648 respectively, though both cadence and p99 improve.
 - <=2% SP throughput regression: **met**; measured throughput improves.
 - 100 map/focus cycles and lossless visual/state equivalence: **not yet completed**.
+  The focus runner now has a real-input `-QuickLifecycle` mode that reduces the
+  100-cycle wall time without replacing focus or portal events; the full run
+  and fixed-tick lossless comparison remain outstanding.
 
 No release should claim the full original acceptance plan is complete.
 
@@ -296,9 +319,9 @@ first-use submission path.
 The focus helper previously trusted an unchecked foreground request. Windows
 could reject that request and leave PresentMon with only the frames before the
 first alt-tab. The helper now joins the relevant input queues temporarily and
-verifies every focus-away/restore transition. Five valid current-build
-fullscreen cycles measured a 2.4042 ms median post-portal maximum, 2.8383 ms
-worst frame, and zero cycles above 8.3 ms.
+verifies every focus-away/restore transition. Its first five current-build
+cycles still used the invalid pre-restore tick estimate and are superseded by
+the corrected post-restore results above.
 
 Clean-profile co-op tests temporarily used Portal 2's default
 `r_portal_use_pvs_optimization 1`; the stored user value remained untouched.
