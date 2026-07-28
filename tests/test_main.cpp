@@ -181,6 +181,25 @@ namespace {
 		return lines == 3 && worker_lines == 2;
 	}
 
+	bool test_overlay_worker_metrics( ) {
+		auto metrics = std::make_unique< p2boost::Metrics >( );
+		metrics->set_overlay_collection( true );
+		metrics->set_simulating( true );
+		metrics->frame( );
+
+		// Model one real worker interval between consecutive render frames.
+		p2boost::RenderWorkerMetrics worker{ };
+		worker.m_begin_qpc = p2boost::Qpc::now( );
+		Sleep( 1 );
+		worker.m_end_qpc = p2boost::Qpc::now( );
+		metrics->record_render_worker( worker );
+		metrics->frame( );
+
+		const p2boost::OverlayMetrics result = metrics->overlay_metrics( );
+		return result.m_average_ms > 0.0 && result.m_render_worker_count == 1 && result.m_render_worker_percent > 0.0 &&
+			   std::isfinite( result.m_render_tail_p99_ms );
+	}
+
 	bool test_frame_phase_carry( ) {
 		constexpr float epsilon = 0.000001f;
 		return std::abs( p2boost::carry_frame_overshoot( 0.0021f, 0.0020f, true ) - 0.0001f ) < epsilon &&
@@ -207,10 +226,11 @@ int main( ) {
 	const bool inline_detour = test_inline_detour( );
 	const bool hash			 = test_known_hash( );
 	const bool metrics		 = test_metrics( );
+	const bool overlay		 = test_overlay_worker_metrics( );
 	const bool phase		 = test_frame_phase_carry( );
 	const bool qpc			 = test_qpc( );
 	std::printf( "address=%s rel32=%s pattern=%s hook_chain=%s callsite=%s pointer=%s inline=%s hash=%s "
-				 "metrics=%s "
+				 "metrics=%s overlay=%s "
 				 "phase=%s qpc=%s\n",
 		address ? "ok" : "FAIL",
 		relative_call ? "ok" : "FAIL",
@@ -221,7 +241,10 @@ int main( ) {
 		inline_detour ? "ok" : "FAIL",
 		hash ? "ok" : "FAIL",
 		metrics ? "ok" : "FAIL",
+		overlay ? "ok" : "FAIL",
 		phase ? "ok" : "FAIL",
 		qpc ? "ok" : "FAIL" );
-	return address && relative_call && pattern && hook && callsite && pointer && inline_detour && hash && metrics && phase && qpc ? 0 : 1;
+	return address && relative_call && pattern && hook && callsite && pointer && inline_detour && hash && metrics && overlay && phase && qpc
+			   ? 0
+			   : 1;
 }

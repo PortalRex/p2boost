@@ -21,6 +21,8 @@ namespace p2boost {
 		double								 m_max_ms{ };
 		double								 m_portal_ms{ };
 		double								 m_render_worker_ms{ };
+		double								 m_render_worker_percent{ };
+		double								 m_render_tail_p99_ms{ };
 		unsigned int						 m_portal_count{ };
 		unsigned int						 m_render_worker_count{ };
 		unsigned int						 m_focus_events{ };

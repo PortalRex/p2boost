@@ -133,11 +133,11 @@ namespace p2boost {
 		const double portal_average = sample.m_portal_count > 0 ? sample.m_portal_ms / static_cast< double >( sample.m_portal_count ) : 0.0;
 		std::snprintf( line,
 			sizeof( line ),
-			"CPU  PORTALS %u x %.2f ms   RENDER THREAD %.1f%% / %u calls",
+			"CPU  PORTALS %u x %.2f ms   WORKER %.1f%%   MAIN TAIL P99 %.2f ms",
 			sample.m_portal_count,
 			portal_average,
-			sample.m_render_worker_ms / 10.0,
-			sample.m_render_worker_count );
+			sample.m_render_worker_percent,
+			sample.m_render_tail_p99_ms );
 		draw_line( m_debug_overlay, 3, neutral, line );
 		draw_line( m_debug_overlay, 4, neutral, "FRAME GRAPH  . <1ms   - 1ms   = 2ms   ^ 4ms   ! hitch (8.3ms+)" );
 	}

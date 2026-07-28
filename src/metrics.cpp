@@ -251,13 +251,15 @@ namespace p2boost {
 		// old map-load spikes to remain on screen indefinitely.
 		constexpr size_t					  window_capacity = 1024;
 		std::array< double, window_capacity > frame_times{ };
-		size_t								  frame_count = 0;
-		double								  frame_total = 0.0;
-		const size_t						  newest	  = ( m_cursor + capacity - 1 ) % capacity;
-		const auto&							  latest	  = m_samples[ newest ];
-		result.m_frame_ms								  = latest.m_delta_ms;
-		result.m_focused								  = latest.m_focused;
-		result.m_coop									  = latest.m_coop;
+		std::array< double, window_capacity > render_tail_times{ };
+		size_t								  frame_count		= 0;
+		size_t								  render_tail_count = 0;
+		double								  frame_total		= 0.0;
+		const size_t						  newest			= ( m_cursor + capacity - 1 ) % capacity;
+		const auto&							  latest			= m_samples[ newest ];
+		result.m_frame_ms										= latest.m_delta_ms;
+		result.m_focused										= latest.m_focused;
+		result.m_coop											= latest.m_coop;
 
 		const Qpc::tick_t cutoff = latest.m_qpc - Qpc::ticks( 1000.0 );
 		for( size_t offset = 0; offset < m_count && frame_count < window_capacity; ++offset ) {
@@ -267,16 +269,25 @@ namespace p2boost {
 			if( sample.m_delta_ms > 0.0 && sample.m_simulating ) {
 				frame_times[ frame_count++ ] = sample.m_delta_ms;
 				frame_total += sample.m_delta_ms;
+				result.m_portal_ms += sample.m_portal_render_ms;
+				result.m_portal_count += sample.m_portal_render_count;
+				result.m_render_worker_ms += sample.m_render_worker_ms;
+				result.m_render_worker_count += sample.m_render_worker_count;
+				result.m_shadow_skips += sample.m_shadow_skipped_count;
+
+				// A completed worker normally belongs to the interval ending at
+				// this frame marker. The remainder identifies main-thread work
+				// that another render worker cannot hide.
+				if( sample.m_render_worker_end_qpc > 0 && sample.m_render_worker_end_qpc <= sample.m_qpc ) {
+					const double render_tail = Qpc::milliseconds( sample.m_qpc - sample.m_render_worker_end_qpc );
+					if( render_tail <= sample.m_delta_ms )
+						render_tail_times[ render_tail_count++ ] = render_tail;
+				}
 				// Preserve a short newest-to-oldest graph independently of the
 				// percentile array, which is sorted below.
 				if( result.m_graph_count < result.m_graph_ms.size( ) )
 					result.m_graph_ms[ result.m_graph_count++ ] = sample.m_delta_ms;
 			}
-			result.m_portal_ms += sample.m_portal_render_ms;
-			result.m_portal_count += sample.m_portal_render_count;
-			result.m_render_worker_ms += sample.m_render_worker_ms;
-			result.m_render_worker_count += sample.m_render_worker_count;
-			result.m_shadow_skips += sample.m_shadow_skipped_count;
 			if( sample.m_reacquire_ms > 0.0 )
 				++result.m_focus_events;
 		}
@@ -284,9 +295,14 @@ namespace p2boost {
 		if( frame_count == 0 )
 			return result;
 		std::sort( frame_times.begin( ), frame_times.begin( ) + frame_count );
-		result.m_average_ms = frame_total / static_cast< double >( frame_count );
-		result.m_p99_ms		= frame_times[ ( frame_count - 1 ) * 99 / 100 ];
-		result.m_max_ms		= frame_times[ frame_count - 1 ];
+		result.m_average_ms			   = frame_total / static_cast< double >( frame_count );
+		result.m_p99_ms				   = frame_times[ ( frame_count - 1 ) * 99 / 100 ];
+		result.m_max_ms				   = frame_times[ frame_count - 1 ];
+		result.m_render_worker_percent = frame_total > 0.0 ? result.m_render_worker_ms * 100.0 / frame_total : 0.0;
+		if( render_tail_count > 0 ) {
+			std::sort( render_tail_times.begin( ), render_tail_times.begin( ) + render_tail_count );
+			result.m_render_tail_p99_ms = render_tail_times[ ( render_tail_count - 1 ) * 99 / 100 ];
+		}
 		return result;
 	}
 

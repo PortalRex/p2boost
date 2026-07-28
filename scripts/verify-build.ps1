@@ -16,3 +16,6 @@ foreach ($entry in $expected.GetEnumerator()) {
 }
 if ($failed) { exit 1 }
 
+# Do not inherit an unrelated native tool's stale $LASTEXITCODE when this
+# verifier is called from a longer benchmark or installation session.
+exit 0

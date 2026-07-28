@@ -326,8 +326,11 @@ multithreading. Its existing ordered material worker measured 1.4967 ms
 median and 1.8057 ms p99 against 1.7229 ms and 2.7408 ms whole-frame timing.
 Portal rendering measured 0.2484 ms median. Whole-frame correlation was only
 0.1685 for worker time and 0.2969 for portal time, so the p99 tail is not a
-single unthreaded render block. Ghidra analysis also found shared mutable
-current-view, render-flag, BSP-generation, and output-list state in the
-player/portal visibility builders. Parallelizing those calls without a
+single unthreaded render block. The worker starts 0.0388 ms median before the
+preceding frame marker and ends 0.2499 ms median before the current one,
+confirming that Source already overlaps it with main-thread construction. The
+post-worker main tail reaches 1.2407 ms p99. Ghidra analysis also found shared
+mutable current-view, render-flag, BSP-generation, and output-list state in
+the player/portal visibility builders. Parallelizing those calls without a
 per-view engine-state rewrite would change or race visibility, so no unsafe
 threading hook is included.

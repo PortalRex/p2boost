@@ -666,6 +666,17 @@ be fixed by dispatching the same D3D9 command stream to another worker.
 D3D9 immediate-context state and draw order remain serial even if command
 construction is moved between CPU threads.
 
+The QPC endpoints prove that this worker is already pipelined with the next
+main-thread frame. It begins 0.0388 ms median before the preceding
+`CEngine::Frame` completion marker, then finishes 0.2499 ms median before the
+current marker. At p99 the post-worker main-thread remainder grows to 1.2407
+ms while worker wall time is still only 1.8057 ms. A second submission worker
+cannot hide that remainder and would instead contend for the same ordered
+D3D9 device. The profiler overlay now computes worker occupancy against the
+actual sampled frame interval and displays this post-worker main-tail p99;
+its previous division by a presumed exact one-second window was inaccurate
+during startup and short collection windows.
+
 Static analysis then evaluated the more plausible modern design: build the
 two player views and their portal views concurrently, followed by ordered
 material submission. This build cannot do so locally. Client preferred
