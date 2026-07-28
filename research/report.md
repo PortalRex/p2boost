@@ -405,6 +405,32 @@ the portal still produced 53.0841 ms and 59.1647 ms frames. Both prototypes
 were removed completely: neither performs driver translation early enough,
 and the latter merely moves synchronous work into another visible interval.
 
+The final native-call audit retains the twelve slowest D3D9 calls in each
+queued worker together with their original submission sequence. It covers raw
+`Present`, both draw families, update/copy operations, render-target and
+depth-stencil changes, scene boundaries, and clears. These hooks and fields
+exist only in `P2BOOST_RESEARCH_DRAW_TRACE` builds.
+
+A fresh 24-second intro3 playback recorded the successful portal sequence as
+a 37.3205 ms worker, followed by 30.9419 and 56.0161 ms workers and a later
+22.0390 ms worker. The first worker issued 737 observed driver calls. Every
+slow retained call was `IDirect3DDevice9::DrawIndexedPrimitive`; twelve calls
+accounted for most of its 28.4041 ms native draw time, led by 10.5361,
+5.6599, 3.1232, 2.4609, and 2.4100 ms submissions. First-resource draws cost
+23.2456 ms, while first shader-pair draws cost 6.6148 ms. No update, copy,
+clear, render-target switch, depth switch, or scene boundary blocked.
+
+The next two workers spent 29.4166 and 54.0631 ms in the recovered Source
+hardware fence with otherwise sub-millisecond native calls. The final worker's
+raw D3D9 `Present`, sequence 879 of 882 observed calls, consumed 20.4464 ms.
+This chronology proves that the backlog begins in ordered indexed-draw
+submission, is drained by the real fence, and can independently transfer to
+raw `Present`; it is not hidden in another high-level portal operation. The
+dominant draw remains the recovered batched studio-render callback and uses
+the same first-visible managed DXT1 resource class described above. There is
+no independent D3D9 command queue to parallelize and no non-drawing lifecycle
+API that reproduces the driver's draw-time translation.
+
 The native managed-resource eviction path was also checked for an accidental
 purge before first portal use. The only exported
 `IDirect3DDevice9::EvictManagedResources` dispatch in the texture-creation

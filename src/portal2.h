@@ -157,7 +157,16 @@ namespace p2boost::portal2 {
 
 	// native D3D9 vtable slots used only by research instrumentation.
 	namespace d3d9 {
+		constexpr size_t present{ 17 };
 		constexpr size_t create_texture{ 23 };
+		constexpr size_t update_surface{ 30 };
+		constexpr size_t update_texture{ 31 };
+		constexpr size_t stretch_rect{ 34 };
+		constexpr size_t set_render_target{ 37 };
+		constexpr size_t set_depth_stencil_surface{ 39 };
+		constexpr size_t begin_scene{ 41 };
+		constexpr size_t end_scene{ 42 };
+		constexpr size_t clear{ 43 };
 		constexpr size_t set_texture{ 65 };
 		constexpr size_t draw_primitive{ 81 };
 		constexpr size_t draw_indexed_primitive{ 82 };

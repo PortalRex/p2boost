@@ -500,8 +500,11 @@ namespace p2boost {
 						 "max_draw_texture0_height,max_draw_texture0_usage,max_draw_texture0_pool,max_draw_"
 						 "texture0_levels,max_draw_texture0_hash,draw_stack_0,draw_stack_1,draw_stack_2,draw_"
 						 "stack_3,draw_stack_4,draw_stack_5,draw_stack_6,draw_stack_7,draw_stack_8,draw_stack_9,"
-						 "draw_stack_10,draw_stack_11,draw_stack_12,draw_stack_13,draw_stack_14,draw_stack_15"
-					  << ",command_execute_count,command_execute_ms,slow_command_key,slow_command_ms,command_key_0,"
+						 "draw_stack_10,draw_stack_11,draw_stack_12,draw_stack_13,draw_stack_14,draw_stack_15,"
+						 "driver_call_count";
+		for( size_t event = 0; event < RenderWorkerMetrics::driver_event_capacity; ++event )
+			worker_output << ",driver_event_method_" << event << ",driver_event_sequence_" << event << ",driver_event_ms_" << event;
+		worker_output << ",command_execute_count,command_execute_ms,slow_command_key,slow_command_ms,command_key_0,"
 						 "command_count_0,command_ms_0,command_key_1,command_count_1,command_ms_1,command_key_2,"
 						 "command_count_2,command_ms_2,command_key_3,command_count_3,command_ms_3,command_key_4,"
 						 "command_count_4,command_ms_4,command_key_5,command_count_5,command_ms_5,command_key_6,"
@@ -570,6 +573,10 @@ namespace p2boost {
 							  << sample.m_max_draw_texture0_levels << ",0x" << std::hex << sample.m_max_draw_texture0_hash << std::dec;
 				for( const auto address : sample.m_max_draw_stack )
 					worker_output << ",0x" << std::hex << address << std::dec;
+				worker_output << ',' << sample.m_driver_call_count;
+				for( size_t event = 0; event < sample.m_driver_event_qpc.size( ); ++event )
+					worker_output << ',' << sample.m_driver_event_methods[ event ] << ',' << sample.m_driver_event_sequences[ event ] << ','
+								  << Qpc::milliseconds( sample.m_driver_event_qpc[ event ] );
 				worker_output << ',' << sample.m_command_execute_count << ',' << Qpc::milliseconds( sample.m_command_execute_qpc ) << ",0x"
 							  << std::hex << sample.m_slow_command_key << std::dec << ',' << Qpc::milliseconds( sample.m_slow_command_qpc );
 				for( size_t command = 0; command < sample.m_command_keys.size( ); ++command )

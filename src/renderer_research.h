@@ -39,14 +39,17 @@ namespace p2boost::renderer_research {
 	void							  set_vertex_shader( IDirect3DVertexShader9* shader ) noexcept;
 	void							  set_pixel_shader( IDirect3DPixelShader9* shader ) noexcept;
 	[[nodiscard]] PipelineObservation observe_pipeline( ) noexcept;
-	void							  record_draw( RenderWorkerMetrics& metrics,
-									 IDirect3DDevice9*					device,
-									 Qpc::tick_t						begin_qpc,
-									 unsigned int						method,
-									 unsigned int						primitive_type,
-									 unsigned int						primitive_count,
-									 unsigned int						vertex_count,
-									 const PipelineObservation&			pipeline ) noexcept;
+	[[nodiscard]] unsigned int		  begin_driver_call( ) noexcept;
+	void record_driver_call( RenderWorkerMetrics& metrics, unsigned int method, unsigned int sequence, Qpc::tick_t begin_qpc ) noexcept;
+	void record_draw( RenderWorkerMetrics& metrics,
+		IDirect3DDevice9*				   device,
+		Qpc::tick_t						   begin_qpc,
+		unsigned int					   sequence,
+		unsigned int					   method,
+		unsigned int					   primitive_type,
+		unsigned int					   primitive_count,
+		unsigned int					   vertex_count,
+		const PipelineObservation&		   pipeline ) noexcept;
 
 }
 

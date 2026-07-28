@@ -23,6 +23,7 @@ namespace p2boost::renderer_research {
 		thread_local std::uint32_t g_dynamic_light_table[ pointer_table_size ]{ };
 		thread_local std::uint32_t g_dynamic_surface_table[ pointer_table_size ]{ };
 		thread_local PipelineState g_pipeline_state;
+		thread_local unsigned int  g_driver_call_sequence{ };
 
 		alignas( 64 ) std::atomic_uint32_t g_vertex_shader_keys[ pipeline_table_size ]{ };
 		alignas( 64 ) std::atomic_uint32_t g_pixel_shader_keys[ pipeline_table_size ]{ };
@@ -165,6 +166,7 @@ namespace p2boost::renderer_research {
 		// uniqueness is scoped to a single queued render-worker execution.
 		std::memset( g_dynamic_light_table, 0, sizeof( g_dynamic_light_table ) );
 		std::memset( g_dynamic_surface_table, 0, sizeof( g_dynamic_surface_table ) );
+		g_driver_call_sequence = 0;
 	}
 
 	void count_queued_command( RenderWorkerMetrics& metrics,
@@ -275,9 +277,37 @@ namespace p2boost::renderer_research {
 		return observation;
 	}
 
+	unsigned int begin_driver_call( ) noexcept {
+		// Sequence numbers preserve the call order after the slowest events are
+		// selected. Zero remains the sentinel for an unused CSV entry.
+		return ++g_driver_call_sequence;
+	}
+
+	void record_driver_call( RenderWorkerMetrics& metrics, unsigned int method, unsigned int sequence, Qpc::tick_t begin_qpc ) noexcept {
+		const Qpc::tick_t elapsed = Qpc::now( ) - begin_qpc;
+		++metrics.m_driver_call_count;
+
+		// Keep only the twelve slowest calls, ordered by duration. Their original
+		// sequence values reconstruct chronology without logging every draw.
+		size_t slot = 0;
+		while( slot < metrics.m_driver_event_qpc.size( ) && elapsed <= metrics.m_driver_event_qpc[ slot ] )
+			++slot;
+		if( slot == metrics.m_driver_event_qpc.size( ) )
+			return;
+		for( size_t move = metrics.m_driver_event_qpc.size( ) - 1; move > slot; --move ) {
+			metrics.m_driver_event_methods[ move ]	 = metrics.m_driver_event_methods[ move - 1 ];
+			metrics.m_driver_event_sequences[ move ] = metrics.m_driver_event_sequences[ move - 1 ];
+			metrics.m_driver_event_qpc[ move ]		 = metrics.m_driver_event_qpc[ move - 1 ];
+		}
+		metrics.m_driver_event_methods[ slot ]	 = method;
+		metrics.m_driver_event_sequences[ slot ] = sequence;
+		metrics.m_driver_event_qpc[ slot ]		 = elapsed;
+	}
+
 	void record_draw( RenderWorkerMetrics& metrics,
 		IDirect3DDevice9*				   device,
 		Qpc::tick_t						   begin_qpc,
+		unsigned int					   sequence,
 		unsigned int					   method,
 		unsigned int					   primitive_type,
 		unsigned int					   primitive_count,
@@ -285,6 +315,7 @@ namespace p2boost::renderer_research {
 		const PipelineObservation&		   pipeline ) noexcept {
 		// retain detailed state only when this becomes the slowest draw.
 		const Qpc::tick_t elapsed = Qpc::now( ) - begin_qpc;
+		record_driver_call( metrics, method, sequence, begin_qpc );
 		++metrics.m_draw_count;
 		metrics.m_draw_qpc += elapsed;
 

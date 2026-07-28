@@ -147,7 +147,10 @@ successful portal. The runner saves playback, frame, engine, and render-worker
 artifacts, restores settings, and closes Portal 2 by default after every run.
 Pass `-KeepGameOpen` only for an explicitly interactive follow-up. The shared
 shutdown helper waits after forced termination, preventing a mapped research
-DLL from leaking into the next run.
+DLL from leaking into the next run. Research captures may add
+`-SampleMainThread` for one-millisecond main-thread instruction samples or
+`-SampleAdaptive` for coarse process-wide worker attribution. The modes are
+mutually exclusive and use the same QPC clock as PresentMon and p2boost.
 
 `run-live-gameplay.ps1` is the primary short performance check. It records
 matched single-player Laser Relays and two-player lobby runs while genuine

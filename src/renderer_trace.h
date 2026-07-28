@@ -68,6 +68,16 @@ namespace p2boost {
 			IDirect3DDevice9*, UINT, UINT, UINT, DWORD, D3DFORMAT, D3DPOOL, IDirect3DTexture9**, HANDLE* );
 		static HRESULT __stdcall CreateVertexShader( IDirect3DDevice9*, const DWORD*, IDirect3DVertexShader9** );
 		static HRESULT __stdcall CreatePixelShader( IDirect3DDevice9*, const DWORD*, IDirect3DPixelShader9** );
+		static HRESULT __stdcall NativePresent( IDirect3DDevice9*, const RECT*, const RECT*, HWND, const RGNDATA* );
+		static HRESULT __stdcall UpdateSurface( IDirect3DDevice9*, IDirect3DSurface9*, const RECT*, IDirect3DSurface9*, const POINT* );
+		static HRESULT __stdcall UpdateTexture( IDirect3DDevice9*, IDirect3DBaseTexture9*, IDirect3DBaseTexture9* );
+		static HRESULT __stdcall StretchRect(
+			IDirect3DDevice9*, IDirect3DSurface9*, const RECT*, IDirect3DSurface9*, const RECT*, D3DTEXTUREFILTERTYPE );
+		static HRESULT __stdcall SetRenderTarget( IDirect3DDevice9*, DWORD, IDirect3DSurface9* );
+		static HRESULT __stdcall SetDepthStencilSurface( IDirect3DDevice9*, IDirect3DSurface9* );
+		static HRESULT __stdcall BeginScene( IDirect3DDevice9* );
+		static HRESULT __stdcall EndScene( IDirect3DDevice9* );
+		static HRESULT __stdcall Clear( IDirect3DDevice9*, DWORD, const D3DRECT*, DWORD, D3DCOLOR, float, DWORD );
 		static HRESULT __stdcall SetTexture( IDirect3DDevice9*, DWORD, IDirect3DBaseTexture9* );
 		static HRESULT __stdcall SetVertexShader( IDirect3DDevice9*, IDirect3DVertexShader9* );
 		static HRESULT __stdcall SetPixelShader( IDirect3DDevice9*, IDirect3DPixelShader9* );
@@ -95,6 +105,15 @@ namespace p2boost {
 		VtableSlotHook		  m_create_texture;
 		VtableSlotHook		  m_create_vertex_shader;
 		VtableSlotHook		  m_create_pixel_shader;
+		VtableSlotHook		  m_native_present;
+		VtableSlotHook		  m_update_surface;
+		VtableSlotHook		  m_update_texture;
+		VtableSlotHook		  m_stretch_rect;
+		VtableSlotHook		  m_set_render_target;
+		VtableSlotHook		  m_set_depth_stencil_surface;
+		VtableSlotHook		  m_begin_scene;
+		VtableSlotHook		  m_end_scene;
+		VtableSlotHook		  m_clear;
 		VtableSlotHook		  m_draw_primitive;
 		VtableSlotHook		  m_draw_indexed_primitive;
 		VtableSlotHook		  m_draw_primitive_up;

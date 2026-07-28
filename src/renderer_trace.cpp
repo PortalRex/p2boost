@@ -229,6 +229,21 @@ namespace p2boost {
 				d3d_device,
 				portal2::d3d9::create_pixel_shader,
 				reinterpret_cast< void* >( &CreatePixelShader ) ) &&
+			install_slot( m_native_present, d3d_device, portal2::d3d9::present, reinterpret_cast< void* >( &NativePresent ) ) &&
+			install_slot( m_update_surface, d3d_device, portal2::d3d9::update_surface, reinterpret_cast< void* >( &UpdateSurface ) ) &&
+			install_slot( m_update_texture, d3d_device, portal2::d3d9::update_texture, reinterpret_cast< void* >( &UpdateTexture ) ) &&
+			install_slot( m_stretch_rect, d3d_device, portal2::d3d9::stretch_rect, reinterpret_cast< void* >( &StretchRect ) ) &&
+			install_slot( m_set_render_target,
+				d3d_device,
+				portal2::d3d9::set_render_target,
+				reinterpret_cast< void* >( &SetRenderTarget ) ) &&
+			install_slot( m_set_depth_stencil_surface,
+				d3d_device,
+				portal2::d3d9::set_depth_stencil_surface,
+				reinterpret_cast< void* >( &SetDepthStencilSurface ) ) &&
+			install_slot( m_begin_scene, d3d_device, portal2::d3d9::begin_scene, reinterpret_cast< void* >( &BeginScene ) ) &&
+			install_slot( m_end_scene, d3d_device, portal2::d3d9::end_scene, reinterpret_cast< void* >( &EndScene ) ) &&
+			install_slot( m_clear, d3d_device, portal2::d3d9::clear, reinterpret_cast< void* >( &Clear ) ) &&
 			install_slot( m_set_texture, d3d_device, portal2::d3d9::set_texture, reinterpret_cast< void* >( &SetTexture ) ) &&
 			install_slot( m_set_vertex_shader,
 				d3d_device,
@@ -341,6 +356,15 @@ namespace p2boost {
 		m_set_pixel_shader.remove( );
 		m_set_vertex_shader.remove( );
 		m_set_texture.remove( );
+		m_clear.remove( );
+		m_end_scene.remove( );
+		m_begin_scene.remove( );
+		m_set_depth_stencil_surface.remove( );
+		m_set_render_target.remove( );
+		m_stretch_rect.remove( );
+		m_update_texture.remove( );
+		m_update_surface.remove( );
+		m_native_present.remove( );
 		m_create_pixel_shader.remove( );
 		m_create_vertex_shader.remove( );
 		m_create_texture.remove( );
@@ -715,6 +739,155 @@ namespace p2boost {
 		return result;
 	}
 
+	HRESULT __stdcall RendererTrace::NativePresent(
+		IDirect3DDevice9* self, const RECT* source, const RECT* destination, HWND window, const RGNDATA* dirty_region ) {
+		auto* instance = m_instance;
+		auto  previous = instance ? reinterpret_cast< decltype( &NativePresent ) >( instance->m_native_present.previous( ) ) : nullptr;
+		if( !previous )
+			return D3DERR_INVALIDCALL;
+		if( !g_worker_trace.m_active || !instance->m_metrics || !instance->m_metrics->tracing( ) )
+			return previous( self, source, destination, window, dirty_region );
+
+		const unsigned int sequence = renderer_research::begin_driver_call( );
+		const Qpc::tick_t  begin	= Qpc::now( );
+		const HRESULT	   result	= previous( self, source, destination, window, dirty_region );
+		renderer_research::record_driver_call( g_worker_trace, portal2::d3d9::present, sequence, begin );
+		return result;
+	}
+
+	HRESULT __stdcall RendererTrace::UpdateSurface( IDirect3DDevice9* self,
+		IDirect3DSurface9*											  source,
+		const RECT*													  source_rectangle,
+		IDirect3DSurface9*											  destination,
+		const POINT*												  destination_point ) {
+		auto* instance = m_instance;
+		auto  previous = instance ? reinterpret_cast< decltype( &UpdateSurface ) >( instance->m_update_surface.previous( ) ) : nullptr;
+		if( !previous )
+			return D3DERR_INVALIDCALL;
+		if( !g_worker_trace.m_active || !instance->m_metrics || !instance->m_metrics->tracing( ) )
+			return previous( self, source, source_rectangle, destination, destination_point );
+
+		const unsigned int sequence = renderer_research::begin_driver_call( );
+		const Qpc::tick_t  begin	= Qpc::now( );
+		const HRESULT	   result	= previous( self, source, source_rectangle, destination, destination_point );
+		renderer_research::record_driver_call( g_worker_trace, portal2::d3d9::update_surface, sequence, begin );
+		return result;
+	}
+
+	HRESULT __stdcall RendererTrace::UpdateTexture(
+		IDirect3DDevice9* self, IDirect3DBaseTexture9* source, IDirect3DBaseTexture9* destination ) {
+		auto* instance = m_instance;
+		auto  previous = instance ? reinterpret_cast< decltype( &UpdateTexture ) >( instance->m_update_texture.previous( ) ) : nullptr;
+		if( !previous )
+			return D3DERR_INVALIDCALL;
+		if( !g_worker_trace.m_active || !instance->m_metrics || !instance->m_metrics->tracing( ) )
+			return previous( self, source, destination );
+
+		const unsigned int sequence = renderer_research::begin_driver_call( );
+		const Qpc::tick_t  begin	= Qpc::now( );
+		const HRESULT	   result	= previous( self, source, destination );
+		renderer_research::record_driver_call( g_worker_trace, portal2::d3d9::update_texture, sequence, begin );
+		return result;
+	}
+
+	HRESULT __stdcall RendererTrace::StretchRect( IDirect3DDevice9* self,
+		IDirect3DSurface9*											source,
+		const RECT*													source_rectangle,
+		IDirect3DSurface9*											destination,
+		const RECT*													destination_rectangle,
+		D3DTEXTUREFILTERTYPE										filter ) {
+		auto* instance = m_instance;
+		auto  previous = instance ? reinterpret_cast< decltype( &StretchRect ) >( instance->m_stretch_rect.previous( ) ) : nullptr;
+		if( !previous )
+			return D3DERR_INVALIDCALL;
+		if( !g_worker_trace.m_active || !instance->m_metrics || !instance->m_metrics->tracing( ) )
+			return previous( self, source, source_rectangle, destination, destination_rectangle, filter );
+
+		const unsigned int sequence = renderer_research::begin_driver_call( );
+		const Qpc::tick_t  begin	= Qpc::now( );
+		const HRESULT	   result	= previous( self, source, source_rectangle, destination, destination_rectangle, filter );
+		renderer_research::record_driver_call( g_worker_trace, portal2::d3d9::stretch_rect, sequence, begin );
+		return result;
+	}
+
+	HRESULT __stdcall RendererTrace::SetRenderTarget( IDirect3DDevice9* self, DWORD index, IDirect3DSurface9* target ) {
+		auto* instance = m_instance;
+		auto  previous = instance ? reinterpret_cast< decltype( &SetRenderTarget ) >( instance->m_set_render_target.previous( ) ) : nullptr;
+		if( !previous )
+			return D3DERR_INVALIDCALL;
+		if( !g_worker_trace.m_active || !instance->m_metrics || !instance->m_metrics->tracing( ) )
+			return previous( self, index, target );
+
+		const unsigned int sequence = renderer_research::begin_driver_call( );
+		const Qpc::tick_t  begin	= Qpc::now( );
+		const HRESULT	   result	= previous( self, index, target );
+		renderer_research::record_driver_call( g_worker_trace, portal2::d3d9::set_render_target, sequence, begin );
+		return result;
+	}
+
+	HRESULT __stdcall RendererTrace::SetDepthStencilSurface( IDirect3DDevice9* self, IDirect3DSurface9* surface ) {
+		auto* instance = m_instance;
+		auto  previous = instance
+							 ? reinterpret_cast< decltype( &SetDepthStencilSurface ) >( instance->m_set_depth_stencil_surface.previous( ) )
+							 : nullptr;
+		if( !previous )
+			return D3DERR_INVALIDCALL;
+		if( !g_worker_trace.m_active || !instance->m_metrics || !instance->m_metrics->tracing( ) )
+			return previous( self, surface );
+
+		const unsigned int sequence = renderer_research::begin_driver_call( );
+		const Qpc::tick_t  begin	= Qpc::now( );
+		const HRESULT	   result	= previous( self, surface );
+		renderer_research::record_driver_call( g_worker_trace, portal2::d3d9::set_depth_stencil_surface, sequence, begin );
+		return result;
+	}
+
+	HRESULT __stdcall RendererTrace::BeginScene( IDirect3DDevice9* self ) {
+		auto* instance = m_instance;
+		auto  previous = instance ? reinterpret_cast< decltype( &BeginScene ) >( instance->m_begin_scene.previous( ) ) : nullptr;
+		if( !previous )
+			return D3DERR_INVALIDCALL;
+		if( !g_worker_trace.m_active || !instance->m_metrics || !instance->m_metrics->tracing( ) )
+			return previous( self );
+
+		const unsigned int sequence = renderer_research::begin_driver_call( );
+		const Qpc::tick_t  begin	= Qpc::now( );
+		const HRESULT	   result	= previous( self );
+		renderer_research::record_driver_call( g_worker_trace, portal2::d3d9::begin_scene, sequence, begin );
+		return result;
+	}
+
+	HRESULT __stdcall RendererTrace::EndScene( IDirect3DDevice9* self ) {
+		auto* instance = m_instance;
+		auto  previous = instance ? reinterpret_cast< decltype( &EndScene ) >( instance->m_end_scene.previous( ) ) : nullptr;
+		if( !previous )
+			return D3DERR_INVALIDCALL;
+		if( !g_worker_trace.m_active || !instance->m_metrics || !instance->m_metrics->tracing( ) )
+			return previous( self );
+
+		const unsigned int sequence = renderer_research::begin_driver_call( );
+		const Qpc::tick_t  begin	= Qpc::now( );
+		const HRESULT	   result	= previous( self );
+		renderer_research::record_driver_call( g_worker_trace, portal2::d3d9::end_scene, sequence, begin );
+		return result;
+	}
+
+	HRESULT __stdcall RendererTrace::Clear(
+		IDirect3DDevice9* self, DWORD count, const D3DRECT* rectangles, DWORD flags, D3DCOLOR color, float depth, DWORD stencil ) {
+		auto* instance = m_instance;
+		auto  previous = instance ? reinterpret_cast< decltype( &Clear ) >( instance->m_clear.previous( ) ) : nullptr;
+		if( !previous )
+			return D3DERR_INVALIDCALL;
+		if( !g_worker_trace.m_active || !instance->m_metrics || !instance->m_metrics->tracing( ) )
+			return previous( self, count, rectangles, flags, color, depth, stencil );
+
+		const unsigned int sequence = renderer_research::begin_driver_call( );
+		const Qpc::tick_t  begin	= Qpc::now( );
+		const HRESULT	   result	= previous( self, count, rectangles, flags, color, depth, stencil );
+		renderer_research::record_driver_call( g_worker_trace, portal2::d3d9::clear, sequence, begin );
+		return result;
+	}
+
 	// Mirror texture bindings without retaining COM references.
 	HRESULT __stdcall RendererTrace::SetTexture( IDirect3DDevice9* self, DWORD stage, IDirect3DBaseTexture9* texture ) {
 		auto* instance = m_instance;
@@ -761,11 +934,13 @@ namespace p2boost {
 		const auto pipeline = renderer_research::observe_pipeline( );
 		if( !g_worker_trace.m_active || !instance->m_metrics || !instance->m_metrics->tracing( ) )
 			return previous( self, primitive_type, start_vertex, primitive_count );
-		const Qpc::tick_t begin	 = Qpc::now( );
-		const HRESULT	  result = previous( self, primitive_type, start_vertex, primitive_count );
+		const unsigned int sequence = renderer_research::begin_driver_call( );
+		const Qpc::tick_t  begin	= Qpc::now( );
+		const HRESULT	   result	= previous( self, primitive_type, start_vertex, primitive_count );
 		renderer_research::record_draw( g_worker_trace,
 			self,
 			begin,
+			sequence,
 			portal2::d3d9::draw_primitive,
 			primitive_type,
 			primitive_count,
@@ -790,12 +965,14 @@ namespace p2boost {
 		const auto pipeline = renderer_research::observe_pipeline( );
 		if( !g_worker_trace.m_active || !instance->m_metrics || !instance->m_metrics->tracing( ) )
 			return previous( self, primitive_type, base_vertex_index, min_vertex_index, vertex_count, start_index, primitive_count );
-		const Qpc::tick_t begin = Qpc::now( );
-		const HRESULT	  result =
+		const unsigned int sequence = renderer_research::begin_driver_call( );
+		const Qpc::tick_t  begin	= Qpc::now( );
+		const HRESULT	   result =
 			previous( self, primitive_type, base_vertex_index, min_vertex_index, vertex_count, start_index, primitive_count );
 		renderer_research::record_draw( g_worker_trace,
 			self,
 			begin,
+			sequence,
 			portal2::d3d9::draw_indexed_primitive,
 			primitive_type,
 			primitive_count,
@@ -814,11 +991,13 @@ namespace p2boost {
 		const auto pipeline = renderer_research::observe_pipeline( );
 		if( !g_worker_trace.m_active || !instance->m_metrics || !instance->m_metrics->tracing( ) )
 			return previous( self, primitive_type, primitive_count, vertex_data, vertex_stride );
-		const Qpc::tick_t begin	 = Qpc::now( );
-		const HRESULT	  result = previous( self, primitive_type, primitive_count, vertex_data, vertex_stride );
+		const unsigned int sequence = renderer_research::begin_driver_call( );
+		const Qpc::tick_t  begin	= Qpc::now( );
+		const HRESULT	   result	= previous( self, primitive_type, primitive_count, vertex_data, vertex_stride );
 		renderer_research::record_draw( g_worker_trace,
 			self,
 			begin,
+			sequence,
 			portal2::d3d9::draw_primitive_up,
 			primitive_type,
 			primitive_count,
@@ -854,19 +1033,21 @@ namespace p2boost {
 				index_format,
 				vertex_data,
 				vertex_stride );
-		const Qpc::tick_t begin	 = Qpc::now( );
-		const HRESULT	  result = previous( self,
-			primitive_type,
-			min_vertex_index,
-			vertex_count,
-			primitive_count,
-			index_data,
-			index_format,
-			vertex_data,
-			vertex_stride );
+		const unsigned int sequence = renderer_research::begin_driver_call( );
+		const Qpc::tick_t  begin	= Qpc::now( );
+		const HRESULT	   result	= previous( self,
+			   primitive_type,
+			   min_vertex_index,
+			   vertex_count,
+			   primitive_count,
+			   index_data,
+			   index_format,
+			   vertex_data,
+			   vertex_stride );
 		renderer_research::record_draw( g_worker_trace,
 			self,
 			begin,
+			sequence,
 			portal2::d3d9::draw_indexed_primitive_up,
 			primitive_type,
 			primitive_count,
