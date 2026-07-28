@@ -42,7 +42,33 @@ $metrics = if ($MetricsCsv -and (Test-Path -LiteralPath $MetricsCsv)) {
     # than two million CSV fields. Filter its chronological text rows by QPC
     # before constructing PowerShell objects so short captures analyze quickly.
     $metricHeader = Get-Content -LiteralPath $MetricsCsv -TotalCount 1
-    $metricLines = [Collections.Generic.List[string]]::new()
+    $metricNames = $metricHeader.Split(',')
+    $wantedNames = @(
+        'qpc',
+        'reacquire_ms',
+        'portal_render_ms',
+        'shadow_update_ms',
+        'shadow_skipped_count',
+        'render_worker_ms',
+        'render_worker_end_qpc',
+        'world_surface_ms',
+        'world_surface_count',
+        'world_surface_flags',
+        'portal_movement_spatial_ms',
+        'portal_movement_spatial_count',
+        'animation_events_ms',
+        'sound_lookup_ms',
+        'read_ubit_var_ms',
+        'focused'
+    )
+    $wantedColumns = [Collections.Generic.List[object]]::new()
+    foreach ($name in $wantedNames) {
+        $index = [Array]::IndexOf($metricNames, $name)
+        if ($index -ge 0) {
+            $wantedColumns.Add([pscustomobject]@{ Name = $name; Index = $index })
+        }
+    }
+    $metricRows = [Collections.Generic.List[object]]::new()
     foreach ($line in [IO.File]::ReadLines([IO.Path]::GetFullPath($MetricsCsv))) {
         if ($line -eq $metricHeader) { continue }
         $separator = $line.IndexOf(',')
@@ -50,14 +76,19 @@ $metrics = if ($MetricsCsv -and (Test-Path -LiteralPath $MetricsCsv)) {
         $qpc = 0L
         if (-not [long]::TryParse($line.Substring(0, $separator), [ref]$qpc)) { continue }
         if ($qpc -ge $captureStart - $frequency -and $qpc -le $captureEnd + $frequency) {
-            $metricLines.Add($line)
+            # Metrics contain only numeric and identifier fields. Avoid
+            # ConvertFrom-Csv allocating every unused column in the wide trace.
+            $values = $line.Split(',')
+            $properties = [ordered]@{}
+            foreach ($column in $wantedColumns) {
+                if ($column.Index -lt $values.Count) {
+                    $properties[$column.Name] = $values[$column.Index]
+                }
+            }
+            $metricRows.Add([pscustomobject]$properties)
         }
     }
-    if ($metricLines.Count) {
-        @(@($metricHeader) + $metricLines) | ConvertFrom-Csv
-    } else {
-        @()
-    }
+    @($metricRows)
 } else {
     @()
 }
