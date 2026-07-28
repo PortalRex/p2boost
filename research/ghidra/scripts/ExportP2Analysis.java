@@ -148,6 +148,25 @@ public class ExportP2Analysis extends GhidraScript {
         String base = currentProgram.getName().replaceAll("[^A-Za-z0-9_.-]", "_");
         Set<Function> targets = new HashSet<>();
         if (base.equalsIgnoreCase("engine.dll")) {
+            // Separate PVS decompression/setup from the later camera-dependent
+            // BSP surface traversal before considering exact-input reuse.
+            addFunctionsReferencingString(targets, "r_novis", 4);
+            addFunctionsReferencingString(targets, "r_lockpvs", 4);
+            addFunctionsReferencingString(targets, "Turn off the PVS.", 4);
+            addFunctionsReferencingString(targets,
+                "Lock the PVS so you can fly around and inspect what is being drawn.", 4);
+            addFunctionsReferencingGlobal(targets, 0x106ad1d0L, 4);
+            addFunctionsReferencingGlobal(targets, 0x106aae90L, 4);
+            long[] pvsTargets = {
+                // Public origin/PVS wrappers and their BSP cluster/decompress
+                // leaves; callers reveal whether render views share this path.
+                0x1013f610L, 0x1013f660L, 0x10159b40L, 0x10159c80L,
+                0x1015a570L, 0x1015a680L, 0x1015a710L, 0x1015ac70L
+            };
+            for (long address : pvsTargets)
+                addFunctionAndCallers(targets, address, 4);
+            addFunctionsReferencingString(targets,
+                "%d Leaves in PVS, %d visible, %d outside of PVS\n", 3);
             addFunctionAndCallers(targets, 0x101f9d40L, 2);
             long[] profileTargets = {
                 0x100e4240L, 0x10120bd0L, 0x101249f0L, 0x10109e10L,

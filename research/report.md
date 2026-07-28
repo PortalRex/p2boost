@@ -421,6 +421,32 @@ by a 57.8891 ms synchronization frame. Portal CPU work remained 0.2088--0.2496
 ms. The user's broader-PVS configuration therefore is not the cause of this
 first-portal stall and remains untouched.
 
+### Local split-screen PVS decompression audit
+
+The engine export now names the compressed-visibility path around preferred
+addresses `0x1015a570` through `0x1015a710`. The first routine expands the
+map's zero-run encoded visibility row into `(cluster_count + 7) / 8` bytes.
+Its inputs are the BSP model, cluster, visibility type, and a caller-owned
+output buffer. The wrapper at `0x1015a710` instead returns the engine's shared
+`0x2000`-byte workspace, which makes concurrent use unsafe.
+
+A research-only entry detour timed the real decompressor and hashed every
+completed output. It also compared exact `(model, cluster, type, byte_count)`
+keys within each rendered frame. The fixed two-camera linked-portal lobby
+produced zero calls during 877 traced steady frames. A second capture enabled
+the probe before a local co-op map reload, retained it through server startup,
+placed both linked portals, and relocated both cameras across the lobby. It
+again produced zero calls across 44,509 recorded frame markers.
+
+This rules the routine out as either steady-state or transition work in the
+local split-screen render path. That path uses the live BSP surface traversal
+and its shared generation state described below. The decompressor belongs to
+a separate PVS consumer such as transmission or an explicit public PVS query;
+caching it would not improve the reported SP/local-co-op hitches and could
+alter network visibility. No cache is shipped. The probe remains behind
+`P2BOOST_RESEARCH_WORLD_TRACE` so this conclusion can be reproduced without
+adding production hooks.
+
 One later queued command was separately resolved with a fresh Ghidra project to
 `valve_avi.dll+0x3f90`. It performs a real Bink frame decode and updates the
 movie's three texture planes. A research-only attempt to pipeline that decode

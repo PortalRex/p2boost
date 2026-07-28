@@ -174,6 +174,8 @@ namespace p2boost {
 		void record_shadow_update( double milliseconds, bool same_projection, bool same_full, bool skipped ) noexcept;
 		void record_render_worker( RenderWorkerMetrics sample ) noexcept;
 		void record_world_surface( double milliseconds, unsigned int flags ) noexcept;
+		void record_pvs_decompress(
+			double milliseconds, std::uintptr_t model, int cluster, int type, size_t bytes, std::uint64_t hash ) noexcept;
 		void record_portal_mesh( double milliseconds, unsigned int portals ) noexcept;
 		void record_portal_movement_spatial( double milliseconds ) noexcept;
 		void record_portal_laser( double milliseconds ) noexcept;
@@ -216,6 +218,10 @@ namespace p2boost {
 			double					m_world_surface_ms{ };
 			unsigned int			m_world_surface_count{ };
 			unsigned int			m_world_surface_flags{ };
+			double					m_pvs_decompress_ms{ };
+			unsigned int			m_pvs_decompress_count{ };
+			unsigned int			m_pvs_same_input_count{ };
+			unsigned int			m_pvs_same_output_count{ };
 			double					m_portal_mesh_ms{ };
 			unsigned int			m_portal_mesh_count{ };
 			unsigned int			m_portal_mesh_portals{ };
@@ -244,6 +250,18 @@ namespace p2boost {
 		std::atomic< bool >			   m_simulating{ };
 		bool						   m_coop{ };
 
+		// Research-only exact inputs observed since the previous frame marker.
+		struct PvsObservation {
+			std::uintptr_t m_model{ };
+			int			   m_cluster{ };
+			int			   m_type{ };
+			size_t		   m_bytes{ };
+			std::uint64_t  m_hash{ };
+		};
+		static constexpr size_t								   pvs_observation_capacity{ 16 };
+		std::array< PvsObservation, pvs_observation_capacity > m_pvs_observations{ };
+		size_t												   m_pvs_observation_count{ };
+
 		// pending events are consumed by the next frame.
 		double					m_pending_reacquire_ms{ };
 		Qpc::tick_t				m_pending_reacquire_begin_qpc{ };
@@ -259,6 +277,10 @@ namespace p2boost {
 		double					m_pending_world_surface_ms{ };
 		unsigned int			m_pending_world_surface_count{ };
 		unsigned int			m_pending_world_surface_flags{ };
+		double					m_pending_pvs_decompress_ms{ };
+		unsigned int			m_pending_pvs_decompress_count{ };
+		unsigned int			m_pending_pvs_same_input_count{ };
+		unsigned int			m_pending_pvs_same_output_count{ };
 		double					m_pending_portal_mesh_ms{ };
 		unsigned int			m_pending_portal_mesh_count{ };
 		unsigned int			m_pending_portal_mesh_portals{ };

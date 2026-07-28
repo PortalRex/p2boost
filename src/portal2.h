@@ -62,6 +62,10 @@ namespace p2boost::portal2 {
 		// Single caller of the BSP world-surface mesh construction routine.
 		constexpr auto world_surface = "F6 C3 40 74 14 8B 45 08 53 50 56 E8 ? ? ? ? 83 C4 0C";
 
+		// Engine CM_Vis RLE decompressor. The research hook verifies whether
+		// split-screen views repeat identical cluster visibility requests.
+		constexpr auto pvs_decompress = "55 8B EC 8B 55 08 8B 82 34 02 00 00 56 8B 75 0C 3B F0 0F 8F ? ? ? ? 85 F6";
+
 		// CPortalGameMovement virtual spatial query sampled in Sphere Peek.
 		constexpr auto portal_movement_spatial =
 			"53 8B DC 83 EC 08 83 E4 F0 83 C4 04 55 8B 6B 04 89 6C 24 04 8B EC 83 EC 58 56 8B F1 8B 8E 80 07 00 00";

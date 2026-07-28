@@ -376,3 +376,11 @@ and 5.3270 ms maximum. Unpatched measured 403.42 FPS average, 243.24 FPS 1% low,
 4.1111 ms p99, and 5.7950 ms maximum. The short run shows a 37.9% throughput
 increase and no frame above 8.3 ms in either variant; its 20.0% 1%-low gain is
 supporting smoke evidence rather than the unresolved 35% acceptance claim.
+
+The next co-op hypothesis was duplicate compressed-PVS expansion for the two
+nearby players. A research build recorded decompressor time, exact input keys,
+and output hashes. It observed zero calls in 877 steady linked-portal frames
+and zero calls in 44,509 markers spanning a traced lobby reload, two-player
+startup, linked-portal placement, and camera relocation. The local renderer
+does not use that decompressor, so no PVS cache was promoted to production.
+This is a rejected optimization, not a zero-cost estimate.

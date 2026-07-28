@@ -79,6 +79,30 @@ namespace p2boost {
 		m_pending_world_surface_flags |= flags;
 	}
 
+	void Metrics::record_pvs_decompress(
+		double milliseconds, std::uintptr_t model, int cluster, int type, size_t bytes, std::uint64_t hash ) noexcept {
+		if( !tracing( ) )
+			return;
+
+		m_pending_pvs_decompress_ms += milliseconds;
+		++m_pending_pvs_decompress_count;
+
+		// A repeated exact key in one rendered frame is the only candidate that
+		// could safely reuse decompressed bytes. The output hash proves equality.
+		for( size_t index = 0; index < m_pvs_observation_count; ++index ) {
+			const auto& previous = m_pvs_observations[ index ];
+			if( previous.m_model == model && previous.m_cluster == cluster && previous.m_type == type && previous.m_bytes == bytes ) {
+				++m_pending_pvs_same_input_count;
+				if( previous.m_hash == hash )
+					++m_pending_pvs_same_output_count;
+				return;
+			}
+		}
+
+		if( m_pvs_observation_count < m_pvs_observations.size( ) )
+			m_pvs_observations[ m_pvs_observation_count++ ] = { model, cluster, type, bytes, hash };
+	}
+
 	void Metrics::record_portal_mesh( double milliseconds, unsigned int portals ) noexcept {
 		if( !collecting( ) )
 			return;
@@ -190,6 +214,10 @@ namespace p2boost {
 			m_pending_world_surface_ms,
 			m_pending_world_surface_count,
 			m_pending_world_surface_flags,
+			m_pending_pvs_decompress_ms,
+			m_pending_pvs_decompress_count,
+			m_pending_pvs_same_input_count,
+			m_pending_pvs_same_output_count,
 			m_pending_portal_mesh_ms,
 			m_pending_portal_mesh_count,
 			m_pending_portal_mesh_portals,
@@ -222,6 +250,11 @@ namespace p2boost {
 		m_pending_world_surface_ms				= 0.0;
 		m_pending_world_surface_count			= 0;
 		m_pending_world_surface_flags			= 0;
+		m_pending_pvs_decompress_ms				= 0.0;
+		m_pending_pvs_decompress_count			= 0;
+		m_pending_pvs_same_input_count			= 0;
+		m_pending_pvs_same_output_count			= 0;
+		m_pvs_observation_count					= 0;
 		m_pending_portal_mesh_ms				= 0.0;
 		m_pending_portal_mesh_count				= 0;
 		m_pending_portal_mesh_portals			= 0;
@@ -317,7 +350,8 @@ namespace p2boost {
 				  "same_projection_count,shadow_same_full_count,shadow_skipped_count,render_worker_"
 				  "begin_qpc,render_worker_end_qpc,render_worker_ms,render_worker_cycles,render_worker_"
 				  "count,render_worker_queued_calls,render_worker_parameter_bytes,render_worker_vertex_"
-				  "bytes,render_worker_index_bytes,world_surface_ms,world_surface_count,world_surface_flags,portal_mesh_ms,"
+				  "bytes,render_worker_index_bytes,world_surface_ms,world_surface_count,world_surface_flags,pvs_decompress_ms,"
+				  "pvs_decompress_count,pvs_same_input_count,pvs_same_output_count,portal_mesh_ms,"
 				  "portal_mesh_count,portal_mesh_portals,portal_movement_spatial_ms,portal_movement_spatial_count,"
 				  "portal_laser_ms,portal_laser_count,"
 				  "animation_events_ms,animation_events_count,sound_lookup_ms,sound_lookup_count,read_ubit_var_ms,"
@@ -337,12 +371,14 @@ namespace p2boost {
 				   << sample.m_render_worker_queued_calls << ',' << sample.m_render_worker_parameter_bytes << ','
 				   << sample.m_render_worker_vertex_bytes << ',' << sample.m_render_worker_index_bytes << ',' << sample.m_world_surface_ms
 				   << ',' << sample.m_world_surface_count << ",0x" << std::hex << sample.m_world_surface_flags << std::dec << ','
-				   << sample.m_portal_mesh_ms << ',' << sample.m_portal_mesh_count << ',' << sample.m_portal_mesh_portals << ','
-				   << sample.m_portal_movement_spatial_ms << ',' << sample.m_portal_movement_spatial_count << ','
-				   << sample.m_portal_laser_ms << ',' << sample.m_portal_laser_count << ',' << sample.m_animation_events_ms << ','
-				   << sample.m_animation_events_count << ',' << sample.m_sound_lookup_ms << ',' << sample.m_sound_lookup_count << ','
-				   << sample.m_read_ubit_var_ms << ',' << sample.m_read_ubit_var_count << ',' << sample.m_reacquire_reason << ','
-				   << ( sample.m_simulating ? 1 : 0 ) << ',' << ( sample.m_focused ? 1 : 0 ) << ',' << ( sample.m_coop ? 1 : 0 ) << '\n';
+				   << sample.m_pvs_decompress_ms << ',' << sample.m_pvs_decompress_count << ',' << sample.m_pvs_same_input_count << ','
+				   << sample.m_pvs_same_output_count << ',' << sample.m_portal_mesh_ms << ',' << sample.m_portal_mesh_count << ','
+				   << sample.m_portal_mesh_portals << ',' << sample.m_portal_movement_spatial_ms << ','
+				   << sample.m_portal_movement_spatial_count << ',' << sample.m_portal_laser_ms << ',' << sample.m_portal_laser_count << ','
+				   << sample.m_animation_events_ms << ',' << sample.m_animation_events_count << ',' << sample.m_sound_lookup_ms << ','
+				   << sample.m_sound_lookup_count << ',' << sample.m_read_ubit_var_ms << ',' << sample.m_read_ubit_var_count << ','
+				   << sample.m_reacquire_reason << ',' << ( sample.m_simulating ? 1 : 0 ) << ',' << ( sample.m_focused ? 1 : 0 ) << ','
+				   << ( sample.m_coop ? 1 : 0 ) << '\n';
 		}
 		const bool frame_output_good = output.good( );
 		output.close( );
