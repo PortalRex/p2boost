@@ -654,3 +654,36 @@ additional paint workers, so the user value is neither changed nor blamed for
 the remaining hitches. These results also show why adding threads generically
 is not a correction: Portal 2's dominant renderer and driver paths are already
 concurrent, and short jobs can become slower when split.
+
+The fixed two-camera, linked-portal lobby trace also measures the existing
+material render worker directly. Across 1,250 steady frames, frame time was
+1.7229 ms median and 2.7408 ms p99. The single ordered render worker occupied
+1.4967 ms median and 1.8057 ms p99, while all four portal-stencil calls
+together occupied only 0.2484 ms median and 0.4015 ms p99. Worker time has
+only 0.1685 correlation with whole-frame time, and portal time has 0.2969
+correlation. The remaining tail is therefore not an idle main thread that can
+be fixed by dispatching the same D3D9 command stream to another worker.
+D3D9 immediate-context state and draw order remain serial even if command
+construction is moved between CPU threads.
+
+Static analysis then evaluated the more plausible modern design: build the
+two player views and their portal views concurrently, followed by ordered
+material submission. This build cannot do so locally. Client preferred
+address `0x101f1190` saves and replaces the global current-view pointer
+`DAT_10937f40`, mutates the shared view object's flags, and calls multiple
+render-context methods before restoring that state. The engine visibility
+path at preferred address `0x101249f0` mutates each shared BSP surface's
+generation field and compares it with the global generation
+`DAT_1061532c`. Its output lists and counters are likewise owned by the
+current world-list builder. Two concurrent calls would race the active view,
+surface visitation, and output storage.
+
+Making that safe would require replacing the complete client/engine
+world-list contract with per-view state, merging visibility results in a
+deterministic order, and auditing every downstream renderable and occlusion
+consumer. An atomic change to the surface generation alone is insufficient:
+it could cause one view to treat a surface visited by another view as its own
+result. That is an engine rewrite, not a chain-safe plugin hook, and it risks
+view-dependent omissions, nondeterministic demos, and SAR incompatibility.
+No parallel-view prototype is shipped without an isolated state-equivalence
+proof.

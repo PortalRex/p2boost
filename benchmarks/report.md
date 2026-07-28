@@ -320,3 +320,14 @@ Trace timing of the cached projected-light path shows its mandatory two-tree
 dirty-list cleanup costs 0.0002 ms median and 0.0004 ms p99. Removing it could
 leave renderables incorrectly marked dirty and cannot materially improve the
 remaining tail, so the cleanup stays.
+
+The same 1,250-frame fixed-view trace was used to audit additional
+multithreading. Its existing ordered material worker measured 1.4967 ms
+median and 1.8057 ms p99 against 1.7229 ms and 2.7408 ms whole-frame timing.
+Portal rendering measured 0.2484 ms median. Whole-frame correlation was only
+0.1685 for worker time and 0.2969 for portal time, so the p99 tail is not a
+single unthreaded render block. Ghidra analysis also found shared mutable
+current-view, render-flag, BSP-generation, and output-list state in the
+player/portal visibility builders. Parallelizing those calls without a
+per-view engine-state rewrite would change or race visibility, so no unsafe
+threading hook is included.
