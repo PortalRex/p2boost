@@ -8,6 +8,7 @@
 
 #include <Windows.h>
 #include <cstring>
+#include <fstream>
 
 namespace p2boost {
 
@@ -81,6 +82,20 @@ namespace p2boost {
 			invalidate( );
 	}
 
+#ifdef P2BOOST_RESEARCH_SHADOW_TRACE
+	bool ShadowTrace::dump_changes( const std::string& path ) const {
+		std::ofstream output( path, std::ios::trunc );
+		if( !output )
+			return false;
+		output << "offset,changes,comparisons,flashlight_model_changes\n";
+		for( size_t offset = 0; offset < m_change_counts.size( ); ++offset )
+			output << "0x" << std::hex << offset << std::dec << ',' << m_change_counts[ offset ].load( std::memory_order_relaxed ) << ','
+				   << m_comparisons.load( std::memory_order_relaxed ) << ',' << m_flashlight_model_changes.load( std::memory_order_relaxed )
+				   << '\n';
+		return output.good( );
+	}
+#endif
+
 	void __fastcall ShadowTrace::UpdateProjected( void* self, void*, unsigned int handle, bool force ) {
 		auto* instance = m_instance;
 		if( !instance )
@@ -116,11 +131,22 @@ namespace p2boost {
 
 		auto* flashlight_models_parent = *instance->m_flashlight_models_parent;
 		// model-list changes affect the generated projection despite equal bytes.
-		const int  flashlight_models = flashlight_models_parent
-										   ? *reinterpret_cast< int* >( reinterpret_cast< std::uint8_t* >( flashlight_models_parent ) +
-																		portal2::shadow::flashlight_models )
-										   : 0;
-		const bool same				 = prior != instance->m_states.end( ) && prior->m_flashlight_models == flashlight_models &&
+		const int flashlight_models = flashlight_models_parent
+										  ? *reinterpret_cast< int* >( reinterpret_cast< std::uint8_t* >( flashlight_models_parent ) +
+																	   portal2::shadow::flashlight_models )
+										  : 0;
+#ifdef P2BOOST_RESEARCH_SHADOW_TRACE
+		if( prior != instance->m_states.end( ) ) {
+			++instance->m_comparisons;
+			for( size_t offset = 0; offset < prior->m_bytes.size( ); ++offset ) {
+				if( prior->m_bytes[ offset ] != shadow[ offset ] )
+					++instance->m_change_counts[ offset ];
+			}
+			if( prior->m_flashlight_models != flashlight_models )
+				++instance->m_flashlight_model_changes;
+		}
+#endif
+		const bool same = prior != instance->m_states.end( ) && prior->m_flashlight_models == flashlight_models &&
 						  std::memcmp( prior->m_bytes.data( ), shadow, prior->m_bytes.size( ) ) == 0;
 
 		// preserve dirty-list cleanup while omitting only the identical rebuild.

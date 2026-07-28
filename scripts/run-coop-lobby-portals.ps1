@@ -19,7 +19,11 @@ $process = if ($ProcessId) { Get-Process -Id $ProcessId -ErrorAction Stop } else
     Get-Process portal2 -ErrorAction Stop | Select-Object -First 1
 }
 $prefix = [IO.Path]::GetFullPath((Join-Path $repo $OutputPrefix))
+$shadowChanges = Join-Path $GameRoot 'p2boost_shadow_changes.csv'
+$statusLog = "$prefix-status.txt"
 New-Item -ItemType Directory -Force (Split-Path $prefix) | Out-Null
+Remove-Item -LiteralPath $shadowChanges -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath $statusLog -Force -ErrorAction SilentlyContinue
 
 function Invoke-Game([string[]]$Commands) {
     & $rcon -ProcessId $process.Id -Password $RconPassword -Command $Commands
@@ -137,14 +141,24 @@ try {
     }
     foreach ($run in $runs) {
         Invoke-Game @("p2boost_enable $($run.Enabled)") | Out-Null
+        Add-Content -LiteralPath $statusLog -Value "[$($run.Name) before]"
+        Invoke-Game @('p2boost_status') | Add-Content -LiteralPath $statusLog
         & $capture -Output "$prefix-$($run.Name).csv" -DurationSeconds $DurationSeconds
+        Add-Content -LiteralPath $statusLog -Value "[$($run.Name) after]"
+        Invoke-Game @('p2boost_status') | Add-Content -LiteralPath $statusLog
     }
 
-    Invoke-Game @('p2boost_trace 1') | Out-Null
+    # Always profile the candidate after the A/B pair.  CandidateFirst leaves
+    # the last measured run disabled, which previously made this dump describe
+    # the baseline and obscured whether the shadow cache actually fired.
+    Invoke-Game @('p2boost_enable 1', 'p2boost_trace 1') | Out-Null
     Start-Sleep -Seconds 2
     Invoke-Game @('p2boost_dump_metrics', 'p2boost_trace 0') | Out-Null
     Copy-Item -LiteralPath (Join-Path $GameRoot 'p2boost_metrics.csv') `
         -Destination "$prefix-metrics.csv" -Force
+    if (Test-Path -LiteralPath $shadowChanges) {
+        Copy-Item -LiteralPath $shadowChanges -Destination "$prefix-shadow-changes.csv" -Force
+    }
     Write-Host "Lobby portal A/B complete: $prefix-{unpatched,patched,metrics,proof}"
 } finally {
     try { Invoke-Game @('p2boost_trace 0', 'p2boost_enable 1', "fps_max $originalFpsMax", "sv_cheats $originalCheats") | Out-Null } catch {}

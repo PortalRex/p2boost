@@ -114,6 +114,12 @@ Laser Relays runners accept `-AlreadyForeground` when an external controller
 has already activated the verified game window, avoiding a second focus
 mechanism.
 
+The co-op runner also writes a `-status.txt` file around each A/B interval and
+captures PresentMon QPC timestamps. This proves which runtime state produced
+each file and lets individual hitches align with p2boost metrics. Its final
+diagnostic trace always runs with the candidate enabled, independent of A/B
+order.
+
 For a synchronized CPU, GPU, disk, module-load, and frame-time trace, start
 Portal 2 from an elevated PowerShell and run:
 

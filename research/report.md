@@ -836,3 +836,29 @@ workers and a 22.2276 ms wait-bearing frame, with portal CPU work below
 0.39 ms. A separate fresh-process, patched-first split-screen lobby smoke A/B
 measured 556.13 versus 403.42 average FPS and zero frames above 8.3 ms. The
 proof image contains both player views and both linked portal interiors.
+
+### Projected-shadow cache input audit
+
+The production cache compares the complete 276-byte projected-light entry
+consumed by the verified rebuild, plus the flashlight-model input. A
+research-only byte-difference probe observed 11,241 consecutive entry
+comparisons during the fixed two-camera lobby scene with both linked portal
+interiors visible. No byte changed and the flashlight model did not change.
+This independently validates the full-state cache key; narrowing it would add
+risk without finding another repeated-work class.
+
+The lobby runner now records `p2boost_status` immediately before and after
+each variant. In normal order, the disabled interval added zero cache hits and
+the enabled interval added 2,861 exact hits. Patched performance was 546.00
+FPS average, 1.7663 ms median, and 335.32 FPS 1% low versus 413.45 FPS,
+2.3403 ms, and 238.99 FPS. In reverse order, the enabled interval added 3,120
+hits and the disabled interval again added zero. Patched performance was
+594.25 FPS average, 1.5990 ms median, and 324.81 FPS 1% low versus 431.07 FPS,
+2.2384 ms, and 286.89 FPS. Neither order had a frame above 8.3 ms.
+
+The average and median improvements survive both orders. The short-window
+1%-low improvement does not consistently clear the 35% acceptance gate, so
+that gate remains provisional rather than being inferred from the stronger
+normal-order result. The runner also forces the candidate back on before its
+final diagnostic trace; previously `-CandidateFirst` left that trace
+describing the disabled baseline even though the A/B CSV files were correct.

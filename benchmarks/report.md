@@ -410,3 +410,19 @@ and 22.4148 ms render-worker frames. Portal CPU work was only
 0.1517--0.5268 ms. The research refactor introduced no production regression,
 but the native-driver first-use gate remains unresolved and is not claimed as
 fixed.
+
+The current fixed-lobby runner now stores a status record around every A/B
+interval and requests PresentMon QPC timestamps. A normal-order production
+repeat measured 546.00 versus 413.45 average FPS, 335.32 versus 238.99 FPS
+1% low, and 2.9822 versus 4.1842 ms p99 for patched versus unpatched. A
+reverse-order repeat measured 594.25 versus 431.07 average FPS, 324.81 versus
+286.89 FPS 1% low, and 3.0787 versus 3.4856 ms p99. Neither repeat exceeded
+8.3 ms.
+
+Runtime counters prove that the cache skipped 2,861 and 3,120 exact rebuilds
+in the two enabled intervals and zero in both disabled intervals. A separate
+research build compared all 276 input bytes for 11,241 consecutive calls and
+found zero changes. This confirms that the shipped full-state key is neither
+missing changing state nor silently inactive. Average and median gains are
+repeatable in both orders; the five-second reverse-order 1%-low gain is only
+13.2%, so the 35% 1%-low acceptance gate remains **not met**.

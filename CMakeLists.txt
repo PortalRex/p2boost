@@ -6,6 +6,7 @@ option(P2BOOST_RESEARCH_WORLD_TRACE "Instrument BSP world-surface construction f
 option(P2BOOST_RESEARCH_VISIBILITY_TRACE "Instrument only engine/client visibility construction" OFF)
 option(P2BOOST_RESEARCH_PVS_TRACE "Instrument compressed PVS expansion" OFF)
 option(P2BOOST_RESEARCH_RENDERABLE_TRACE "Instrument client renderable-list construction" OFF)
+option(P2BOOST_RESEARCH_SHADOW_TRACE "Record projected-shadow entry byte changes" OFF)
 
 if(NOT WIN32)
   message(FATAL_ERROR "p2boost currently targets Portal 2 for Windows")
@@ -59,6 +60,9 @@ endif()
 if(P2BOOST_RESEARCH_RENDERABLE_TRACE)
   target_compile_definitions(p2boost_core PUBLIC P2BOOST_RESEARCH_RENDERABLE_TRACE=1
     P2BOOST_RESEARCH_VISIBILITY_ANY=1 P2BOOST_RESEARCH_VISIBILITY_METRICS=1)
+endif()
+if(P2BOOST_RESEARCH_SHADOW_TRACE)
+  target_compile_definitions(p2boost_core PUBLIC P2BOOST_RESEARCH_SHADOW_TRACE=1)
 endif()
 
 add_library(p2boost SHARED

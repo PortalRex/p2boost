@@ -15,7 +15,7 @@ $target = if ([IO.Path]::IsPathRooted($Output)) {
 $directory = Split-Path -Parent $target
 New-Item -ItemType Directory -Force $directory | Out-Null
 if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Force }
-& $presentMon --process_name $ProcessName --output_file $target --v2_metrics --timed $DurationSeconds --terminate_after_timed --no_console_stats --set_circular_buffer_size 32768
+& $presentMon --process_name $ProcessName --output_file $target --v2_metrics --qpc_time --timed $DurationSeconds --terminate_after_timed --no_console_stats --set_circular_buffer_size 32768
 if ($LASTEXITCODE -ne 0) { throw "PresentMon exited with $LASTEXITCODE" }
 if (-not (Test-Path -LiteralPath $target) -or (Get-Item -LiteralPath $target).Length -eq 0) {
     throw "PresentMon produced no frames: $target"

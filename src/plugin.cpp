@@ -199,6 +199,12 @@ namespace p2boost {
 				// keep captures beside the game for predictable script discovery.
 				const std::string path = m_verification.m_game_root + "\\p2boost_metrics.csv";
 				console_print( "[p2boost] metrics %s: %s\n", m_metrics.dump( path ) ? "written" : "write failed", path.c_str( ) );
+#ifdef P2BOOST_RESEARCH_SHADOW_TRACE
+				const std::string shadow_path = m_verification.m_game_root + "\\p2boost_shadow_changes.csv";
+				console_print( "[p2boost] shadow changes %s: %s\n",
+					m_shadow_trace.dump_changes( shadow_path ) ? "written" : "write failed",
+					shadow_path.c_str( ) );
+#endif
 				return sdk::Stop;
 			}
 			return sdk::Continue;
