@@ -199,6 +199,25 @@ public class ExportP2Analysis extends GhidraScript {
             for (long address : queuedSubmissionTargets) addFunctionAndCallers(targets, address, 3);
         }
         if (base.equalsIgnoreCase("shaderapidx9.dll")) {
+            // Recover device construction before considering modern D3D9
+            // threading flags. The imported thunk and IAT pointer lead to the
+            // adapter/behavior flags passed to IDirect3D9::CreateDevice.
+            addFunctionAndCallers(targets, 0x1004d1ecL, 4);
+            addFunctionsReferencingGlobal(targets, 0x1006e168L, 4);
+            long[] deviceConstructionTargets = {
+                0x10021020L, 0x10021090L, 0x10021150L, 0x100211b0L,
+                0x10021200L, 0x10021260L, 0x100212d0L, 0x10021370L,
+                0x100213d0L, 0x10021400L, 0x10021450L, 0x10021470L,
+                0x100215b0L, 0x100215d0L, 0x10021600L, 0x10021670L,
+                0x10021720L, 0x10021740L, 0x10021770L, 0x10021790L,
+                0x100217f0L, 0x10021830L, 0x10021990L, 0x10021ae0L,
+                0x10021b20L, 0x10021b80L, 0x10021bc0L, 0x10021c30L,
+                0x10021e80L, 0x10021f50L, 0x10021fd0L,
+                // IDirect3D9::CreateDevice dispatch and its retry helpers.
+                0x100231b0L, 0x100231d0L, 0x10023200L, 0x10023260L
+            };
+            for (long address : deviceConstructionTargets)
+                addFunctionAndCallers(targets, address, 2);
             addFunctionAndCallers(targets, 0x100241a0L, 1);
             addFunctionAndCallers(targets, 0x10024450L, 2);
             addFunctionAndCallers(targets, 0x10024690L, 2);

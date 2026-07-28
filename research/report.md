@@ -405,6 +405,15 @@ the portal still produced 53.0841 ms and 59.1647 ms frames. Both prototypes
 were removed completely: neither performs driver translation early enough,
 and the latter merely moves synchronous work into another visible interval.
 
+The native managed-resource eviction path was also checked for an accidental
+purge before first portal use. The only exported
+`IDirect3DDevice9::EvictManagedResources` dispatch in the texture-creation
+path runs after `CreateTexture` returns either `D3DERR_OUTOFVIDEOMEMORY`
+(`0x8876017c`) or `E_OUTOFMEMORY` (`0x8007000e`), then retries the allocation.
+The successful intro3 load does not enter that recovery branch. Source is not
+discarding the managed set immediately before the measured portal event, so
+removing an eviction call is not an available lifecycle correction.
+
 A cold-process control repeated the complete demo with the engine default
 `r_portal_use_pvs_optimization 1`, restoring the user's `0` value afterward.
 The successful portal still produced a 52.7052 ms draw-submission frame followed
@@ -699,6 +708,29 @@ view-dependent omissions, nondeterministic demos, and SAR incompatibility.
 No parallel-view prototype is shipped without an isolated state-equivalence
 proof.
 
+### D3D9 device threading audit
+
+The headless export now includes the complete native-device construction path.
+`shaderapidx9.dll` preferred address `0x10023370` queries
+`IDirect3D9::GetDeviceCaps`, selects the vertex-processing behavior, and calls
+the helper at `0x10023260`. That helper dispatches the real
+`IDirect3D9::CreateDevice` vtable slot and retries only after a failed creation.
+
+The behavior flags passed by this build are `0x42` for hardware vertex
+processing plus `D3DCREATE_FPU_PRESERVE`, `0x52` when pure-device support is
+selected, or `0x22` for the software vertex-processing fallback. The
+`D3DCREATE_MULTITHREADED` bit (`0x4`) is deliberately absent. This is consistent
+with the measured architecture: Source constructs commands on the main thread
+and gives the ordered native D3D9 device to one queued material worker.
+
+`D3DCREATE_MULTITHREADED` does not add a rendering worker. It asks the D3D9
+runtime to serialize concurrent device entry with additional locking. Because
+the device already has one Source owner, enabling it would add overhead without
+parallelizing draws or `Present`. The flag is immutable after device creation,
+and p2boost loads after the device exists; changing it would require a
+destructive device replacement with different resource/reset semantics. No
+such prototype is justified or shipped.
+
 ## Grounded render-handoff validation
 
 A fresh production build was exercised through the full grounded Laser Relays
@@ -725,3 +757,10 @@ capture and reports queued-worker and post-worker-main timing explicitly.
 This makes render handoff, main tail, portal work, GPU work, and focus
 reacquisition independently visible instead of classifying every CPU-busy
 frame alike.
+
+The final shared-core link layout was exercised in a new process with the
+intro3 demo. It again produced 57.9831 and 61.9770 ms portal-adjacent render
+workers and a 22.2276 ms wait-bearing frame, with portal CPU work below
+0.39 ms. A separate fresh-process, patched-first split-screen lobby smoke A/B
+measured 556.13 versus 403.42 average FPS and zero frames above 8.3 ms. The
+proof image contains both player views and both linked portal interiors.

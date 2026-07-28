@@ -6,6 +6,7 @@ param(
 	[ValidateSet('Patched', 'Unpatched')][string]$Variant = 'Patched',
 	[string]$RconPassword = 'p2boostlab',
 	[string]$GameRoot = 'D:\SteamLibrary\steamapps\common\Portal 2',
+	[switch]$AlreadyForeground,
 	[switch]$KeepGameOpen
 )
 
@@ -75,7 +76,9 @@ try {
 		'p2boost_trace 1'
 	) | Out-Null
 
-	& $focusGame -ProcessId $game.Id
+	if(-not $AlreadyForeground) {
+		& $focusGame -ProcessId $game.Id
+	}
 	$capture = Start-Process -FilePath $presentMon -NoNewWindow -PassThru -ArgumentList @(
 		'--process_id', $game.Id,
 		'--output_file', $presentCsv,

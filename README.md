@@ -104,7 +104,9 @@ secondary portal through real portal-gun inputs after every restore. The
 deterministic `run-coop-lobby-portals.ps1` runner creates two local players in
 the co-op lobby, equips them, places a linked portal pair, restores fixed camera
 poses, saves a proof screenshot, runs patched/unpatched captures, and restores
-the user's original `fps_max` and `sv_cheats` values.
+the user's original `fps_max` and `sv_cheats` values. The lobby and intro3
+runners accept `-AlreadyForeground` when an external controller has already
+activated the verified game window, avoiding a second focus mechanism.
 
 For a synchronized CPU, GPU, disk, module-load, and frame-time trace, start
 Portal 2 from an elevated PowerShell and run:

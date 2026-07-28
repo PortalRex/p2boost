@@ -7,6 +7,7 @@ param(
     [switch]$SetupOnly,
     [switch]$CandidateFirst,
     [string]$GameRoot = 'D:\SteamLibrary\steamapps\common\Portal 2',
+    [switch]$AlreadyForeground,
     [switch]$KeepGameOpen
 )
 $ErrorActionPreference = 'Stop'
@@ -29,7 +30,8 @@ function Read-Cvar([string]$Name) {
     if (-not $match.Success) { throw "Could not read $Name from: $text" }
     return $match.Groups[1].Value
 }
-Add-Type -TypeDefinition @'
+if (-not $AlreadyForeground) {
+    Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
 public static class P2BoostLobbyForeground {
@@ -37,6 +39,7 @@ public static class P2BoostLobbyForeground {
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr window);
 }
 '@
+}
 
 $originalFpsMax = Read-Cvar 'fps_max'
 $originalCheats = Read-Cvar 'sv_cheats'
@@ -89,8 +92,10 @@ try {
     # Screenshot encoding is deferred until a rendered frame. Ensure the game
     # is restored first; otherwise Source leaves a zero-byte JPEG while
     # minimized and the proof wait can never succeed.
-    [P2BoostLobbyForeground]::ShowWindow($process.MainWindowHandle, 9) | Out-Null
-    [P2BoostLobbyForeground]::SetForegroundWindow($process.MainWindowHandle) | Out-Null
+    if (-not $AlreadyForeground) {
+        [P2BoostLobbyForeground]::ShowWindow($process.MainWindowHandle, 9) | Out-Null
+        [P2BoostLobbyForeground]::SetForegroundWindow($process.MainWindowHandle) | Out-Null
+    }
     Start-Sleep -Milliseconds 500
     Invoke-Game @(
         'cmd1 setpos 6192 3850 -480', 'cmd1 setang 0 90 0',
@@ -118,8 +123,10 @@ try {
         Write-Host "Lobby portal scene ready: pid=$($process.Id) proof=$prefix-proof.jpg"
         return
     }
-    [P2BoostLobbyForeground]::ShowWindow($process.MainWindowHandle, 9) | Out-Null
-    [P2BoostLobbyForeground]::SetForegroundWindow($process.MainWindowHandle) | Out-Null
+    if (-not $AlreadyForeground) {
+        [P2BoostLobbyForeground]::ShowWindow($process.MainWindowHandle, 9) | Out-Null
+        [P2BoostLobbyForeground]::SetForegroundWindow($process.MainWindowHandle) | Out-Null
+    }
     Start-Sleep -Milliseconds 500
     $runs = @(
         [pscustomobject]@{ Name = 'unpatched'; Enabled = 0 },

@@ -335,6 +335,14 @@ the player/portal visibility builders. Parallelizing those calls without a
 per-view engine-state rewrite would change or race visibility, so no unsafe
 threading hook is included.
 
+Static analysis of the actual D3D9 device constructor also rejects a generic
+driver-threading flag as an optimization. Portal 2 creates the device with
+behavior flags `0x42` or `0x52` on the hardware path and `0x22` on fallback:
+`D3DCREATE_FPU_PRESERVE`, one vertex-processing mode, and optional pure-device
+support. `D3DCREATE_MULTITHREADED` is absent because the queued material worker
+already owns ordered device submission. That flag would add runtime locking;
+it would not parallelize the measured draw or `Present` stalls.
+
 A subsequent uncapped production run repeated the grounded Laser Relays route
 with the elevator, both portal shots, and a linked portal interior on screen.
 It averaged 873.31 FPS with a 1.0699 ms median, but cold portal activation
@@ -350,3 +358,21 @@ The identical warm fizzle-and-reopen sequence averaged 940.09 FPS, measured a
 event is a native-driver submission/presentation cost. It is not reported as
 fixed, and p2boost does not hide it by pre-rendering a dummy portal or moving
 the same wait into loading.
+
+Static inspection found no normal-path managed-resource purge to remove.
+`EvictManagedResources` is dispatched only as allocation recovery after
+`CreateTexture` reports D3D or system out-of-memory, and the successful test
+loads do not take that branch.
+
+The installed shared-core build then received a fresh-process intro3 playback.
+At the successful portal event it reproduced 57.9831 and 61.9770 ms queued
+render frames followed by a 22.2276 ms wait-bearing frame. Portal CPU work was
+only 0.1621--0.3851 ms. This is a regression confirmation of the existing
+driver-first-use attribution, not a claimed improvement.
+
+A five-second linked-portal split-screen smoke A/B ran patched-first in a fresh
+process. Patched measured 556.13 FPS average, 291.94 FPS 1% low, 3.4254 ms p99,
+and 5.3270 ms maximum. Unpatched measured 403.42 FPS average, 243.24 FPS 1% low,
+4.1111 ms p99, and 5.7950 ms maximum. The short run shows a 37.9% throughput
+increase and no frame above 8.3 ms in either variant; its 20.0% 1%-low gain is
+supporting smoke evidence rather than the unresolved 35% acceptance claim.
