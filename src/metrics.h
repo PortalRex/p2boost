@@ -176,6 +176,8 @@ namespace p2boost {
 		void record_world_surface( double milliseconds, unsigned int flags ) noexcept;
 		void record_pvs_decompress(
 			double milliseconds, std::uintptr_t model, int cluster, int type, size_t bytes, std::uint64_t hash ) noexcept;
+		void record_renderable_list( double milliseconds ) noexcept;
+		void record_renderable_filter( bool occlusion, double milliseconds, int input, int output, unsigned int eligible = 0 ) noexcept;
 		void record_portal_mesh( double milliseconds, unsigned int portals ) noexcept;
 		void record_portal_movement_spatial( double milliseconds ) noexcept;
 		void record_portal_laser( double milliseconds ) noexcept;
@@ -218,27 +220,40 @@ namespace p2boost {
 			double					m_world_surface_ms{ };
 			unsigned int			m_world_surface_count{ };
 			unsigned int			m_world_surface_flags{ };
-			double					m_pvs_decompress_ms{ };
-			unsigned int			m_pvs_decompress_count{ };
-			unsigned int			m_pvs_same_input_count{ };
-			unsigned int			m_pvs_same_output_count{ };
-			double					m_portal_mesh_ms{ };
-			unsigned int			m_portal_mesh_count{ };
-			unsigned int			m_portal_mesh_portals{ };
-			double					m_portal_movement_spatial_ms{ };
-			unsigned int			m_portal_movement_spatial_count{ };
-			double					m_portal_laser_ms{ };
-			unsigned int			m_portal_laser_count{ };
-			double					m_animation_events_ms{ };
-			unsigned int			m_animation_events_count{ };
-			double					m_sound_lookup_ms{ };
-			unsigned int			m_sound_lookup_count{ };
-			double					m_read_ubit_var_ms{ };
-			unsigned int			m_read_ubit_var_count{ };
-			int						m_reacquire_reason{ };
-			bool					m_simulating{ };
-			bool					m_focused{ };
-			bool					m_coop{ };
+#ifdef P2BOOST_RESEARCH_VISIBILITY_METRICS
+			double		 m_pvs_decompress_ms{ };
+			unsigned int m_pvs_decompress_count{ };
+			unsigned int m_pvs_same_input_count{ };
+			unsigned int m_pvs_same_output_count{ };
+			double		 m_renderable_list_ms{ };
+			unsigned int m_renderable_list_count{ };
+			double		 m_renderable_view_filter_ms{ };
+			unsigned int m_renderable_view_filter_count{ };
+			unsigned int m_renderable_view_filter_input{ };
+			unsigned int m_renderable_view_filter_output{ };
+			double		 m_renderable_occlusion_filter_ms{ };
+			unsigned int m_renderable_occlusion_filter_count{ };
+			unsigned int m_renderable_occlusion_filter_input{ };
+			unsigned int m_renderable_occlusion_filter_output{ };
+			unsigned int m_renderable_occlusion_filter_eligible{ };
+#endif
+			double		 m_portal_mesh_ms{ };
+			unsigned int m_portal_mesh_count{ };
+			unsigned int m_portal_mesh_portals{ };
+			double		 m_portal_movement_spatial_ms{ };
+			unsigned int m_portal_movement_spatial_count{ };
+			double		 m_portal_laser_ms{ };
+			unsigned int m_portal_laser_count{ };
+			double		 m_animation_events_ms{ };
+			unsigned int m_animation_events_count{ };
+			double		 m_sound_lookup_ms{ };
+			unsigned int m_sound_lookup_count{ };
+			double		 m_read_ubit_var_ms{ };
+			unsigned int m_read_ubit_var_count{ };
+			int			 m_reacquire_reason{ };
+			bool		 m_simulating{ };
+			bool		 m_focused{ };
+			bool		 m_coop{ };
 		};
 
 		Qpc::tick_t					   m_last_qpc{ };
@@ -250,6 +265,7 @@ namespace p2boost {
 		std::atomic< bool >			   m_simulating{ };
 		bool						   m_coop{ };
 
+#ifdef P2BOOST_RESEARCH_VISIBILITY_METRICS
 		// Research-only exact inputs observed since the previous frame marker.
 		struct PvsObservation {
 			std::uintptr_t m_model{ };
@@ -261,6 +277,7 @@ namespace p2boost {
 		static constexpr size_t								   pvs_observation_capacity{ 16 };
 		std::array< PvsObservation, pvs_observation_capacity > m_pvs_observations{ };
 		size_t												   m_pvs_observation_count{ };
+#endif
 
 		// pending events are consumed by the next frame.
 		double					m_pending_reacquire_ms{ };
@@ -277,24 +294,37 @@ namespace p2boost {
 		double					m_pending_world_surface_ms{ };
 		unsigned int			m_pending_world_surface_count{ };
 		unsigned int			m_pending_world_surface_flags{ };
-		double					m_pending_pvs_decompress_ms{ };
-		unsigned int			m_pending_pvs_decompress_count{ };
-		unsigned int			m_pending_pvs_same_input_count{ };
-		unsigned int			m_pending_pvs_same_output_count{ };
-		double					m_pending_portal_mesh_ms{ };
-		unsigned int			m_pending_portal_mesh_count{ };
-		unsigned int			m_pending_portal_mesh_portals{ };
-		double					m_pending_portal_movement_spatial_ms{ };
-		unsigned int			m_pending_portal_movement_spatial_count{ };
-		double					m_pending_portal_laser_ms{ };
-		unsigned int			m_pending_portal_laser_count{ };
-		double					m_pending_animation_events_ms{ };
-		unsigned int			m_pending_animation_events_count{ };
-		double					m_pending_sound_lookup_ms{ };
-		unsigned int			m_pending_sound_lookup_count{ };
-		double					m_pending_read_ubit_var_ms{ };
-		unsigned int			m_pending_read_ubit_var_count{ };
-		int						m_pending_reacquire_reason{ };
+#ifdef P2BOOST_RESEARCH_VISIBILITY_METRICS
+		double		 m_pending_pvs_decompress_ms{ };
+		unsigned int m_pending_pvs_decompress_count{ };
+		unsigned int m_pending_pvs_same_input_count{ };
+		unsigned int m_pending_pvs_same_output_count{ };
+		double		 m_pending_renderable_list_ms{ };
+		unsigned int m_pending_renderable_list_count{ };
+		double		 m_pending_renderable_view_filter_ms{ };
+		unsigned int m_pending_renderable_view_filter_count{ };
+		unsigned int m_pending_renderable_view_filter_input{ };
+		unsigned int m_pending_renderable_view_filter_output{ };
+		double		 m_pending_renderable_occlusion_filter_ms{ };
+		unsigned int m_pending_renderable_occlusion_filter_count{ };
+		unsigned int m_pending_renderable_occlusion_filter_input{ };
+		unsigned int m_pending_renderable_occlusion_filter_output{ };
+		unsigned int m_pending_renderable_occlusion_filter_eligible{ };
+#endif
+		double		 m_pending_portal_mesh_ms{ };
+		unsigned int m_pending_portal_mesh_count{ };
+		unsigned int m_pending_portal_mesh_portals{ };
+		double		 m_pending_portal_movement_spatial_ms{ };
+		unsigned int m_pending_portal_movement_spatial_count{ };
+		double		 m_pending_portal_laser_ms{ };
+		unsigned int m_pending_portal_laser_count{ };
+		double		 m_pending_animation_events_ms{ };
+		unsigned int m_pending_animation_events_count{ };
+		double		 m_pending_sound_lookup_ms{ };
+		unsigned int m_pending_sound_lookup_count{ };
+		double		 m_pending_read_ubit_var_ms{ };
+		unsigned int m_pending_read_ubit_var_count{ };
+		int			 m_pending_reacquire_reason{ };
 
 		// worker samples arrive from the material render thread.
 		mutable std::mutex							m_render_worker_mutex;

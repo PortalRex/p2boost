@@ -379,8 +379,34 @@ supporting smoke evidence rather than the unresolved 35% acceptance claim.
 
 The next co-op hypothesis was duplicate compressed-PVS expansion for the two
 nearby players. A research build recorded decompressor time, exact input keys,
-and output hashes. It observed zero calls in 877 steady linked-portal frames
-and zero calls in 44,509 markers spanning a traced lobby reload, two-player
-startup, linked-portal placement, and camera relocation. The local renderer
-does not use that decompressor, so no PVS cache was promoted to production.
-This is a rejected optimization, not a zero-cost estimate.
+and output hashes. Initial zero-call captures were invalid because the
+research definition did not propagate to the DLL startup translation unit;
+the build wiring and component isolation were corrected before retesting.
+
+The valid linked-portal transition recorded 34,705 calls costing 12.0914 ms
+across 3,210 active frames. Of those, 26,147 repeated an exact key in the same
+frame and produced identical bytes. A perfect cache could save at most about
+0.0028 ms per active frame, so no PVS cache was promoted to production.
+
+The grounded Laser Relays renderable-list trace recorded 20,341 simulating
+frames. List construction occupied 10.55% of sampled frame time, including
+2.54% in view filtering and 2.81% in occlusion filtering. The occlusion stage
+received 19,155,694 candidates; 74.5% were genuinely eligible for the
+view-dependent test, although none were removed on that route. Consequently,
+the loop is not an exact no-op that can be skipped, and its shared query state
+precludes safe generic parallel evaluation.
+
+The production rebuild with all visibility research storage compiled out was
+then installed and tested in both modes. A patched-first five-second linked-
+portal lobby A/B measured 582.70 versus 420.57 average FPS and 295.83 versus
+239.46 FPS 1% low. Neither variant produced a frame above 8.3 ms. The 38.6%
+throughput and 23.5% 1%-low improvements confirm the existing patch remained
+active; the short run still does not satisfy the original 35% 1%-low gate.
+
+A fresh-process playback of the exact 22-second intro3 demo completed through
+the successful portal placement. Excluding the separate 1,122 ms demo/map
+startup boundary, the cold portal sequence still contained 52.4673, 58.0249,
+and 22.4148 ms render-worker frames. Portal CPU work was only
+0.1517--0.5268 ms. The research refactor introduced no production regression,
+but the native-driver first-use gate remains unresolved and is not claimed as
+fixed.

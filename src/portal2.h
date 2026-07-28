@@ -66,6 +66,12 @@ namespace p2boost::portal2 {
 		// split-screen views repeat identical cluster visibility requests.
 		constexpr auto pvs_decompress = "55 8B EC 8B 55 08 8B 82 34 02 00 00 56 8B 75 0C 3B F0 0F 8F ? ? ? ? 85 F6";
 
+		// Client renderable-list construction and its two stable compaction
+		// stages. Research builds time them without changing list order.
+		constexpr auto renderable_list_build	   = "55 8B EC B8 44 A0 00 00 E8 ? ? ? ? A1 ? ? ? ? 83 78 30 00 53 56 57 8B F9";
+		constexpr auto renderable_view_filter	   = "55 8B EC A1 ? ? ? ? 81 EC 08 04 00 00 83 78 30 00 74 10 8B 0D ? ? ? ? 83 79 30 00";
+		constexpr auto renderable_occlusion_filter = "55 8B EC 83 EC 08 F6 05 ? ? ? ? 01 75 16 83 0D ? ? ? ? 01 68 ? ? ? ? B9 ? ? ? ? E8";
+
 		// CPortalGameMovement virtual spatial query sampled in Sphere Peek.
 		constexpr auto portal_movement_spatial =
 			"53 8B DC 83 EC 08 83 E4 F0 83 C4 04 55 8B 6B 04 89 6C 24 04 8B EC 83 EC 58 56 8B F1 8B 8E 80 07 00 00";

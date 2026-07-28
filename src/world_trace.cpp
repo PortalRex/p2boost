@@ -35,7 +35,7 @@ namespace p2boost {
 	}
 
 	bool WorldTrace::install( Metrics* metrics ) {
-#ifndef P2BOOST_RESEARCH_WORLD_TRACE
+#ifndef P2BOOST_RESEARCH_VISIBILITY_ANY
 		(void)metrics;
 		return true;
 #else
@@ -45,8 +45,7 @@ namespace p2boost {
 		const Address engine{ GetModuleHandleW( L"engine.dll" ) };
 		const Address match = pattern::find_unique( engine, portal2::signature::world_surface );
 		const Address call	= match.add( portal2::xref::world_surface_call );
-		const Address pvs	= pattern::find_unique( engine, portal2::signature::pvs_decompress );
-		if( !engine || !match || call.at< std::uint8_t >( ) != 0xe8 || !pvs )
+		if( !engine || !match || call.at< std::uint8_t >( ) != 0xe8 )
 			return false;
 
 		const Address original{ call.rel32( 1 ) };
@@ -59,6 +58,13 @@ namespace p2boost {
 			return false;
 		}
 
+#if defined( P2BOOST_RESEARCH_WORLD_TRACE ) || defined( P2BOOST_RESEARCH_PVS_TRACE )
+		const Address pvs = pattern::find_unique( engine, portal2::signature::pvs_decompress );
+		if( !pvs ) {
+			remove( );
+			return false;
+		}
+
 		// Six displaced bytes end on an instruction boundary:
 		// push ebp; mov ebp,esp; mov edx,[ebp+8].
 		const std::vector< std::uint8_t > prologue{ 0x55, 0x8b, 0xec, 0x8b, 0x55, 0x08 };
@@ -67,16 +73,56 @@ namespace p2boost {
 			return false;
 		}
 		m_original_pvs = reinterpret_cast< DecompressPvs_t >( m_pvs_decompress.previous( ) );
+#endif
+
+#if defined( P2BOOST_RESEARCH_WORLD_TRACE ) || defined( P2BOOST_RESEARCH_RENDERABLE_TRACE )
+		const Address client{ GetModuleHandleW( L"client.dll" ) };
+		const Address renderable_list  = pattern::find_unique( client, portal2::signature::renderable_list_build );
+		const Address view_filter	   = pattern::find_unique( client, portal2::signature::renderable_view_filter );
+		const Address occlusion_filter = pattern::find_unique( client, portal2::signature::renderable_occlusion_filter );
+		if( !client || !renderable_list || !view_filter || !occlusion_filter ) {
+			remove( );
+			return false;
+		}
+
+		// The outer builder's first eight bytes stop before its relative
+		// __alloca_probe call, so its trampoline requires no relocation.
+		const std::vector< std::uint8_t > renderable_list_prologue{ 0x55, 0x8b, 0xec, 0xb8, 0x44, 0xa0, 0x00, 0x00 };
+		const auto*						  view_filter_bytes = view_filter.as< const std::uint8_t* >( );
+		const std::vector< std::uint8_t > view_filter_prologue{ view_filter_bytes, view_filter_bytes + 8 };
+		const std::vector< std::uint8_t > occlusion_filter_prologue{ 0x55, 0x8b, 0xec, 0x83, 0xec, 0x08 };
+		if( !m_renderable_list.install( renderable_list.as< void* >( ),
+				renderable_list_prologue,
+				reinterpret_cast< void* >( &BuildRenderableList ) ) ||
+			!m_renderable_view_filter.install( view_filter.as< void* >( ),
+				view_filter_prologue,
+				reinterpret_cast< void* >( &FilterRenderablesByView ) ) ||
+			!m_renderable_occlusion_filter.install( occlusion_filter.as< void* >( ),
+				occlusion_filter_prologue,
+				reinterpret_cast< void* >( &FilterRenderablesByOcclusion ) ) ) {
+			remove( );
+			return false;
+		}
+		m_original_renderable_list			   = reinterpret_cast< BuildRenderableList_t >( m_renderable_list.previous( ) );
+		m_original_renderable_view_filter	   = reinterpret_cast< FilterRenderables_t >( m_renderable_view_filter.previous( ) );
+		m_original_renderable_occlusion_filter = reinterpret_cast< FilterRenderables_t >( m_renderable_occlusion_filter.previous( ) );
+#endif
 		return true;
 #endif
 	}
 
 	void WorldTrace::remove( ) {
+		m_renderable_occlusion_filter.remove( );
+		m_renderable_view_filter.remove( );
+		m_renderable_list.remove( );
 		m_pvs_decompress.remove( );
 		m_call.remove( );
-		m_original_pvs = nullptr;
-		m_original	   = nullptr;
-		m_metrics	   = nullptr;
+		m_original_renderable_occlusion_filter = nullptr;
+		m_original_renderable_view_filter	   = nullptr;
+		m_original_renderable_list			   = nullptr;
+		m_original_pvs						   = nullptr;
+		m_original							   = nullptr;
+		m_metrics							   = nullptr;
 		if( m_instance == this )
 			m_instance = nullptr;
 	}
@@ -125,6 +171,59 @@ namespace p2boost {
 			type,
 			output_size,
 			hash_bytes( output, output_size ) );
+	}
+
+	void __fastcall WorldTrace::BuildRenderableList( void* self, void*, int* view ) {
+		WorldTrace* instance = m_instance;
+		if( !instance || !instance->m_original_renderable_list )
+			return;
+		if( !instance->m_metrics || !instance->m_metrics->tracing( ) ) {
+			instance->m_original_renderable_list( self, view );
+			return;
+		}
+
+		Stopwatch timer;
+		instance->m_original_renderable_list( self, view );
+		instance->m_metrics->record_renderable_list( timer.elapsed_ms( ) );
+	}
+
+	int __fastcall WorldTrace::FilterRenderablesByView(
+		void* self, void*, int count, std::uintptr_t renderables, std::uintptr_t metadata ) {
+		WorldTrace* instance = m_instance;
+		if( !instance || !instance->m_original_renderable_view_filter )
+			return count;
+		if( !instance->m_metrics || !instance->m_metrics->tracing( ) )
+			return instance->m_original_renderable_view_filter( self, count, renderables, metadata );
+
+		Stopwatch timer;
+		const int result = instance->m_original_renderable_view_filter( self, count, renderables, metadata );
+		instance->m_metrics->record_renderable_filter( false, timer.elapsed_ms( ), count, result );
+		return result;
+	}
+
+	int __fastcall WorldTrace::FilterRenderablesByOcclusion(
+		void* self, void*, int count, std::uintptr_t renderables, std::uintptr_t metadata ) {
+		WorldTrace* instance = m_instance;
+		if( !instance || !instance->m_original_renderable_occlusion_filter )
+			return count;
+		if( !instance->m_metrics || !instance->m_metrics->tracing( ) )
+			return instance->m_original_renderable_occlusion_filter( self, count, renderables, metadata );
+
+		// Metadata records are 28 bytes; bit zero of the final byte gates the
+		// engine's expensive occlusion test for that candidate.
+		unsigned int eligible = 0;
+		if( count > 0 && metadata ) {
+			const auto* entries = reinterpret_cast< const std::uint8_t* >( metadata );
+			for( int index = 0; index < count; ++index ) {
+				if( ( entries[ static_cast< size_t >( index ) * 28 + 27 ] & 1 ) != 0 )
+					++eligible;
+			}
+		}
+
+		Stopwatch timer;
+		const int result = instance->m_original_renderable_occlusion_filter( self, count, renderables, metadata );
+		instance->m_metrics->record_renderable_filter( true, timer.elapsed_ms( ), count, result, eligible );
+		return result;
 	}
 
 }

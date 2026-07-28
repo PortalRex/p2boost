@@ -432,20 +432,40 @@ output buffer. The wrapper at `0x1015a710` instead returns the engine's shared
 
 A research-only entry detour timed the real decompressor and hashed every
 completed output. It also compared exact `(model, cluster, type, byte_count)`
-keys within each rendered frame. The fixed two-camera linked-portal lobby
-produced zero calls during 877 traced steady frames. A second capture enabled
-the probe before a local co-op map reload, retained it through server startup,
-placed both linked portals, and relocated both cameras across the lobby. It
-again produced zero calls across 44,509 recorded frame markers.
+keys within each rendered frame. Two initial zero-call captures were invalid:
+the CMake definition reached the core library but not `plugin.cpp`, so startup
+never installed the research hooks. The definition is now propagated to the
+DLL target, and world, PVS, and renderable probes have independent switches.
 
-This rules the routine out as either steady-state or transition work in the
-local split-screen render path. That path uses the live BSP surface traversal
-and its shared generation state described below. The decompressor belongs to
-a separate PVS consumer such as transmission or an explicit public PVS query;
-caching it would not improve the reported SP/local-co-op hitches and could
-alter network visibility. No cache is shipped. The probe remains behind
-`P2BOOST_RESEARCH_WORLD_TRACE` so this conclusion can be reproduced without
-adding production hooks.
+The corrected linked-portal co-op transition recorded 34,705 decompressions in
+3,210 active frames. They consumed 12.0914 ms in total, or about 0.0038 ms per
+active frame. There were 26,147 exact-input repeats (75.3%), and every repeated
+output hash matched. Even a perfect zero-overhead cache could therefore save
+only about 9.1 ms over the whole capture, or 0.0028 ms per active frame. That
+is not a material optimization and does not justify copying shared PVS buffers
+or adding cache invalidation to a network-sensitive path. No cache is shipped.
+
+### Client renderable-list audit
+
+ETW hot addresses were resolved to the outer client renderable-list builder
+and its view/occlusion compaction stages. Disassembly of their caller proved
+that both filters receive the list owner in `ECX`; the initial Ghidra prototype
+omitted this implicit `__thiscall` argument. The research hook now preserves
+that ABI, and map-transition validation catches regressions before capture.
+
+Across 20,341 simulating Laser Relays frames, the outer builder ran 44,129
+times and consumed 2,594.513 ms, including nested probes, or 10.55% of sampled
+frame time. View filtering consumed 624.775 ms (2.54% of frame time), and
+occlusion filtering consumed 691.654 ms (2.81%). The latter inspected
+19,155,694 candidates; 14,277,398 carried the real occlusion-eligible flag,
+but none happened to be removed on this route.
+
+The zero removals do not make the loop redundant: 74.5% of its inputs reach
+the view-dependent occlusion test, whose result can change with query state,
+camera, and scene. Skipping it globally could increase hidden rendering, and
+parallel evaluation would race shared query/view state. The outer builder's
+remaining stages likewise construct ordered, reference-counted lists. No
+unsafe bypass, cross-view cache, or speculative worker is shipped.
 
 One later queued command was separately resolved with a fresh Ghidra project to
 `valve_avi.dll+0x3f90`. It performs a real Bink frame decode and updates the

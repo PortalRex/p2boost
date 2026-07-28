@@ -55,8 +55,12 @@ namespace p2boost {
 #ifdef P2BOOST_RESEARCH_WORLD_TRACE
 			if( m_verification.m_supported && m_verification.m_native_d3d9 && !m_activation_trace.install( &m_metrics ) )
 				m_verification.m_errors.emplace_back( "activation research signature mismatch" );
+#endif
+#ifdef P2BOOST_RESEARCH_VISIBILITY_ANY
 			if( m_verification.m_supported && m_verification.m_native_d3d9 && !m_world_trace.install( &m_metrics ) )
 				m_verification.m_errors.emplace_back( "world-surface research callsite signature mismatch" );
+#endif
+#ifdef P2BOOST_RESEARCH_WORLD_TRACE
 			if( m_verification.m_supported && m_verification.m_native_d3d9 && !m_server_trace.install( &m_metrics ) )
 				m_verification.m_errors.emplace_back( "server spatial-query research signature mismatch" );
 #endif

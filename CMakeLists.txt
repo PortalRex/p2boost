@@ -3,6 +3,9 @@ project(p2boost VERSION 0.5.0 LANGUAGES CXX)
 
 option(P2BOOST_RESEARCH_DRAW_TRACE "Instrument native D3D9 draw calls for research captures" OFF)
 option(P2BOOST_RESEARCH_WORLD_TRACE "Instrument BSP world-surface construction for research captures" OFF)
+option(P2BOOST_RESEARCH_VISIBILITY_TRACE "Instrument only engine/client visibility construction" OFF)
+option(P2BOOST_RESEARCH_PVS_TRACE "Instrument compressed PVS expansion" OFF)
+option(P2BOOST_RESEARCH_RENDERABLE_TRACE "Instrument client renderable-list construction" OFF)
 
 if(NOT WIN32)
   message(FATAL_ERROR "p2boost currently targets Portal 2 for Windows")
@@ -37,10 +40,25 @@ target_include_directories(p2boost_core PUBLIC src)
 target_compile_definitions(p2boost_core PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_compile_options(p2boost_core PRIVATE /W4 /WX /permissive- /Zc:__cplusplus /guard:cf)
 if(P2BOOST_RESEARCH_DRAW_TRACE)
-  target_compile_definitions(p2boost_core PRIVATE P2BOOST_RESEARCH_DRAW_TRACE=1)
+  target_compile_definitions(p2boost_core PUBLIC P2BOOST_RESEARCH_DRAW_TRACE=1)
 endif()
 if(P2BOOST_RESEARCH_WORLD_TRACE)
-  target_compile_definitions(p2boost_core PRIVATE P2BOOST_RESEARCH_WORLD_TRACE=1)
+  # Plugin startup is compiled in the consuming DLL target and must see this
+  # flag so it actually installs the research-only core hooks.
+  target_compile_definitions(p2boost_core PUBLIC P2BOOST_RESEARCH_WORLD_TRACE=1
+    P2BOOST_RESEARCH_VISIBILITY_ANY=1 P2BOOST_RESEARCH_VISIBILITY_METRICS=1)
+endif()
+if(P2BOOST_RESEARCH_VISIBILITY_TRACE)
+  target_compile_definitions(p2boost_core PUBLIC P2BOOST_RESEARCH_VISIBILITY_TRACE=1
+    P2BOOST_RESEARCH_VISIBILITY_ANY=1 P2BOOST_RESEARCH_VISIBILITY_METRICS=1)
+endif()
+if(P2BOOST_RESEARCH_PVS_TRACE)
+  target_compile_definitions(p2boost_core PUBLIC P2BOOST_RESEARCH_PVS_TRACE=1
+    P2BOOST_RESEARCH_VISIBILITY_ANY=1 P2BOOST_RESEARCH_VISIBILITY_METRICS=1)
+endif()
+if(P2BOOST_RESEARCH_RENDERABLE_TRACE)
+  target_compile_definitions(p2boost_core PUBLIC P2BOOST_RESEARCH_RENDERABLE_TRACE=1
+    P2BOOST_RESEARCH_VISIBILITY_ANY=1 P2BOOST_RESEARCH_VISIBILITY_METRICS=1)
 endif()
 
 add_library(p2boost SHARED

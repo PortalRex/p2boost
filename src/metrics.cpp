@@ -81,6 +81,14 @@ namespace p2boost {
 
 	void Metrics::record_pvs_decompress(
 		double milliseconds, std::uintptr_t model, int cluster, int type, size_t bytes, std::uint64_t hash ) noexcept {
+#ifndef P2BOOST_RESEARCH_VISIBILITY_METRICS
+		(void)milliseconds;
+		(void)model;
+		(void)cluster;
+		(void)type;
+		(void)bytes;
+		(void)hash;
+#else
 		if( !tracing( ) )
 			return;
 
@@ -101,6 +109,46 @@ namespace p2boost {
 
 		if( m_pvs_observation_count < m_pvs_observations.size( ) )
 			m_pvs_observations[ m_pvs_observation_count++ ] = { model, cluster, type, bytes, hash };
+#endif
+	}
+
+	void Metrics::record_renderable_list( double milliseconds ) noexcept {
+#ifndef P2BOOST_RESEARCH_VISIBILITY_METRICS
+		(void)milliseconds;
+#else
+		if( !tracing( ) )
+			return;
+		m_pending_renderable_list_ms += milliseconds;
+		++m_pending_renderable_list_count;
+#endif
+	}
+
+	void Metrics::record_renderable_filter( bool occlusion, double milliseconds, int input, int output, unsigned int eligible ) noexcept {
+#ifndef P2BOOST_RESEARCH_VISIBILITY_METRICS
+		(void)occlusion;
+		(void)milliseconds;
+		(void)input;
+		(void)output;
+		(void)eligible;
+#else
+		if( !tracing( ) )
+			return;
+
+		const unsigned int safe_input  = input > 0 ? static_cast< unsigned int >( input ) : 0;
+		const unsigned int safe_output = output > 0 ? static_cast< unsigned int >( output ) : 0;
+		if( occlusion ) {
+			m_pending_renderable_occlusion_filter_ms += milliseconds;
+			++m_pending_renderable_occlusion_filter_count;
+			m_pending_renderable_occlusion_filter_input += safe_input;
+			m_pending_renderable_occlusion_filter_output += safe_output;
+			m_pending_renderable_occlusion_filter_eligible += eligible;
+		} else {
+			m_pending_renderable_view_filter_ms += milliseconds;
+			++m_pending_renderable_view_filter_count;
+			m_pending_renderable_view_filter_input += safe_input;
+			m_pending_renderable_view_filter_output += safe_output;
+		}
+#endif
 	}
 
 	void Metrics::record_portal_mesh( double milliseconds, unsigned int portals ) noexcept {
@@ -214,10 +262,23 @@ namespace p2boost {
 			m_pending_world_surface_ms,
 			m_pending_world_surface_count,
 			m_pending_world_surface_flags,
+#ifdef P2BOOST_RESEARCH_VISIBILITY_METRICS
 			m_pending_pvs_decompress_ms,
 			m_pending_pvs_decompress_count,
 			m_pending_pvs_same_input_count,
 			m_pending_pvs_same_output_count,
+			m_pending_renderable_list_ms,
+			m_pending_renderable_list_count,
+			m_pending_renderable_view_filter_ms,
+			m_pending_renderable_view_filter_count,
+			m_pending_renderable_view_filter_input,
+			m_pending_renderable_view_filter_output,
+			m_pending_renderable_occlusion_filter_ms,
+			m_pending_renderable_occlusion_filter_count,
+			m_pending_renderable_occlusion_filter_input,
+			m_pending_renderable_occlusion_filter_output,
+			m_pending_renderable_occlusion_filter_eligible,
+#endif
 			m_pending_portal_mesh_ms,
 			m_pending_portal_mesh_count,
 			m_pending_portal_mesh_portals,
@@ -240,21 +301,34 @@ namespace p2boost {
 		m_pending_reacquire_begin_qpc = 0;
 		m_pending_reacquire_end_qpc	  = 0;
 		m_pending_reacquire_stages_ms.fill( 0.0 );
-		m_pending_portal_render_ms				= 0.0;
-		m_pending_portal_render_count			= 0;
-		m_pending_shadow_update_ms				= 0.0;
-		m_pending_shadow_update_count			= 0;
-		m_pending_shadow_same_projection_count	= 0;
-		m_pending_shadow_same_full_count		= 0;
-		m_pending_shadow_skipped_count			= 0;
-		m_pending_world_surface_ms				= 0.0;
-		m_pending_world_surface_count			= 0;
-		m_pending_world_surface_flags			= 0;
-		m_pending_pvs_decompress_ms				= 0.0;
-		m_pending_pvs_decompress_count			= 0;
-		m_pending_pvs_same_input_count			= 0;
-		m_pending_pvs_same_output_count			= 0;
-		m_pvs_observation_count					= 0;
+		m_pending_portal_render_ms			   = 0.0;
+		m_pending_portal_render_count		   = 0;
+		m_pending_shadow_update_ms			   = 0.0;
+		m_pending_shadow_update_count		   = 0;
+		m_pending_shadow_same_projection_count = 0;
+		m_pending_shadow_same_full_count	   = 0;
+		m_pending_shadow_skipped_count		   = 0;
+		m_pending_world_surface_ms			   = 0.0;
+		m_pending_world_surface_count		   = 0;
+		m_pending_world_surface_flags		   = 0;
+#ifdef P2BOOST_RESEARCH_VISIBILITY_METRICS
+		m_pending_pvs_decompress_ms					   = 0.0;
+		m_pending_pvs_decompress_count				   = 0;
+		m_pending_pvs_same_input_count				   = 0;
+		m_pending_pvs_same_output_count				   = 0;
+		m_pvs_observation_count						   = 0;
+		m_pending_renderable_list_ms				   = 0.0;
+		m_pending_renderable_list_count				   = 0;
+		m_pending_renderable_view_filter_ms			   = 0.0;
+		m_pending_renderable_view_filter_count		   = 0;
+		m_pending_renderable_view_filter_input		   = 0;
+		m_pending_renderable_view_filter_output		   = 0;
+		m_pending_renderable_occlusion_filter_ms	   = 0.0;
+		m_pending_renderable_occlusion_filter_count	   = 0;
+		m_pending_renderable_occlusion_filter_input	   = 0;
+		m_pending_renderable_occlusion_filter_output   = 0;
+		m_pending_renderable_occlusion_filter_eligible = 0;
+#endif
 		m_pending_portal_mesh_ms				= 0.0;
 		m_pending_portal_mesh_count				= 0;
 		m_pending_portal_mesh_portals			= 0;
@@ -350,8 +424,15 @@ namespace p2boost {
 				  "same_projection_count,shadow_same_full_count,shadow_skipped_count,render_worker_"
 				  "begin_qpc,render_worker_end_qpc,render_worker_ms,render_worker_cycles,render_worker_"
 				  "count,render_worker_queued_calls,render_worker_parameter_bytes,render_worker_vertex_"
-				  "bytes,render_worker_index_bytes,world_surface_ms,world_surface_count,world_surface_flags,pvs_decompress_ms,"
-				  "pvs_decompress_count,pvs_same_input_count,pvs_same_output_count,portal_mesh_ms,"
+				  "bytes,render_worker_index_bytes,world_surface_ms,world_surface_count,world_surface_flags,";
+#ifdef P2BOOST_RESEARCH_VISIBILITY_METRICS
+		output << "pvs_decompress_ms,"
+				  "pvs_decompress_count,pvs_same_input_count,pvs_same_output_count,renderable_list_ms,renderable_list_count,"
+				  "renderable_view_filter_ms,renderable_view_filter_count,renderable_view_filter_input,renderable_view_filter_output,"
+				  "renderable_occlusion_filter_ms,renderable_occlusion_filter_count,renderable_occlusion_filter_input,"
+				  "renderable_occlusion_filter_output,renderable_occlusion_filter_eligible,";
+#endif
+		output << "portal_mesh_ms,"
 				  "portal_mesh_count,portal_mesh_portals,portal_movement_spatial_ms,portal_movement_spatial_count,"
 				  "portal_laser_ms,portal_laser_count,"
 				  "animation_events_ms,animation_events_count,sound_lookup_ms,sound_lookup_count,read_ubit_var_ms,"
@@ -370,15 +451,22 @@ namespace p2boost {
 				   << ',' << sample.m_render_worker_ms << ',' << sample.m_render_worker_cycles << ',' << sample.m_render_worker_count << ','
 				   << sample.m_render_worker_queued_calls << ',' << sample.m_render_worker_parameter_bytes << ','
 				   << sample.m_render_worker_vertex_bytes << ',' << sample.m_render_worker_index_bytes << ',' << sample.m_world_surface_ms
-				   << ',' << sample.m_world_surface_count << ",0x" << std::hex << sample.m_world_surface_flags << std::dec << ','
-				   << sample.m_pvs_decompress_ms << ',' << sample.m_pvs_decompress_count << ',' << sample.m_pvs_same_input_count << ','
-				   << sample.m_pvs_same_output_count << ',' << sample.m_portal_mesh_ms << ',' << sample.m_portal_mesh_count << ','
-				   << sample.m_portal_mesh_portals << ',' << sample.m_portal_movement_spatial_ms << ','
-				   << sample.m_portal_movement_spatial_count << ',' << sample.m_portal_laser_ms << ',' << sample.m_portal_laser_count << ','
-				   << sample.m_animation_events_ms << ',' << sample.m_animation_events_count << ',' << sample.m_sound_lookup_ms << ','
-				   << sample.m_sound_lookup_count << ',' << sample.m_read_ubit_var_ms << ',' << sample.m_read_ubit_var_count << ','
-				   << sample.m_reacquire_reason << ',' << ( sample.m_simulating ? 1 : 0 ) << ',' << ( sample.m_focused ? 1 : 0 ) << ','
-				   << ( sample.m_coop ? 1 : 0 ) << '\n';
+				   << ',' << sample.m_world_surface_count << ",0x" << std::hex << sample.m_world_surface_flags << std::dec << ',';
+#ifdef P2BOOST_RESEARCH_VISIBILITY_METRICS
+			output << sample.m_pvs_decompress_ms << ',' << sample.m_pvs_decompress_count << ',' << sample.m_pvs_same_input_count << ','
+				   << sample.m_pvs_same_output_count << ',' << sample.m_renderable_list_ms << ',' << sample.m_renderable_list_count << ','
+				   << sample.m_renderable_view_filter_ms << ',' << sample.m_renderable_view_filter_count << ','
+				   << sample.m_renderable_view_filter_input << ',' << sample.m_renderable_view_filter_output << ','
+				   << sample.m_renderable_occlusion_filter_ms << ',' << sample.m_renderable_occlusion_filter_count << ','
+				   << sample.m_renderable_occlusion_filter_input << ',' << sample.m_renderable_occlusion_filter_output << ','
+				   << sample.m_renderable_occlusion_filter_eligible << ',';
+#endif
+			output << sample.m_portal_mesh_ms << ',' << sample.m_portal_mesh_count << ',' << sample.m_portal_mesh_portals << ','
+				   << sample.m_portal_movement_spatial_ms << ',' << sample.m_portal_movement_spatial_count << ','
+				   << sample.m_portal_laser_ms << ',' << sample.m_portal_laser_count << ',' << sample.m_animation_events_ms << ','
+				   << sample.m_animation_events_count << ',' << sample.m_sound_lookup_ms << ',' << sample.m_sound_lookup_count << ','
+				   << sample.m_read_ubit_var_ms << ',' << sample.m_read_ubit_var_count << ',' << sample.m_reacquire_reason << ','
+				   << ( sample.m_simulating ? 1 : 0 ) << ',' << ( sample.m_focused ? 1 : 0 ) << ',' << ( sample.m_coop ? 1 : 0 ) << '\n';
 		}
 		const bool frame_output_good = output.good( );
 		output.close( );

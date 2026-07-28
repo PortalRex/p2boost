@@ -4,6 +4,7 @@ param(
     [ValidateSet(360, 500, 999)][int]$FpsMax = 999,
     [string]$RconPassword = 'p2boostlab',
     [string]$GameRoot = 'D:\SteamLibrary\steamapps\common\Portal 2',
+    [switch]$AlreadyForeground,
     [switch]$KeepGameOpen
 )
 
@@ -92,7 +93,9 @@ try {
     ) | Out-Null
 
     Remove-Item $presentCsv, $metricsCsv, $workersCsv -Force -ErrorAction SilentlyContinue
-    & $focusGame -ProcessId $game.Id
+    if (-not $AlreadyForeground) {
+        & $focusGame -ProcessId $game.Id
+    }
 
     # Queue collision-bound gameplay before capture so RCON work cannot become
     # a false main-thread hitch. This rides the lift, enters the expensive room,
