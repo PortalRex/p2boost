@@ -388,6 +388,16 @@ created the relevant D3D objects before the portal event. The remaining cold
 cost is native-driver promotion/translation triggered by use of those objects,
 not a dormant Source compile queue that can safely be executed earlier.
 
+A stronger managed-resource experiment temporarily raised each completed
+texture's priority around `PreLoad()`, then restored the exact old priority.
+The cold portal still produced a 37.4421 ms submission, 30.6927 ms follow-up,
+57.3335 ms wait, and 21.6415 ms tail. A separate non-drawing experiment bound
+each completed managed texture, called `ValidateDevice`, and restored the
+previous binding. It created a new cluster of 15--26 ms loading frames while
+the portal still produced 53.0841 ms and 59.1647 ms frames. Both prototypes
+were removed completely: neither performs driver translation early enough,
+and the latter merely moves synchronous work into another visible interval.
+
 A cold-process control repeated the complete demo with the engine default
 `r_portal_use_pvs_optimization 1`, restoring the user's `0` value afterward.
 The successful portal still produced a 52.7052 ms draw-submission frame followed
@@ -615,3 +625,25 @@ Portal file traffic was the active demo write. This leaves no single large
 semantics-preserving operation to remove: the remaining dominant paths submit
 real draws or build camera-dependent visibility. Further patches require proof
 of equivalent state or duplicated output before any work is skipped.
+
+## Existing multicore paths
+
+A production runtime inventory found that Portal 2 already enables its queued
+material-system selection, threaded particles, queued ropes, and parallel
+server entity packing. Enabling the remaining PC-disabled
+`cl_threaded_bone_setup` path was tested in fresh processes on the grounded
+split-screen lobby route. The stock path measured 517.55 FPS, a 1.8558 ms
+median, 3.0708 ms p99, and 325.65 FPS 1% low. Parallel bone setup measured
+500.40 FPS, a 1.8926 ms median, 3.2055 ms p99, and 311.96 FPS 1% low.
+Dispatch and synchronization overhead exceed the small bone workload at these
+frame times, so p2boost does not enable or conceal that cvar.
+
+The current user profile sets `r_paintblob_max_number_of_threads 1` while the
+engine default is `4`. This was kept separate from engine-patch results as
+required. On the five-second co-op paint playback, one worker measured
+978.08 FPS with a 2.1427 ms p99; four workers measured 976.15 FPS with a
+2.1337 ms p99. That interval provides no material throughput benefit from the
+additional paint workers, so the user value is neither changed nor blamed for
+the remaining hitches. These results also show why adding threads generically
+is not a correction: Portal 2's dominant renderer and driver paths are already
+concurrent, and short jobs can become slower when split.

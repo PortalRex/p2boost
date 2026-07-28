@@ -154,6 +154,7 @@ Start the game with `+ss_map mp_coop_lobby_2` before a combined run, then use:
 .\scripts\run-live-gameplay.ps1 -Scenario Both -FpsMax 360
 .\scripts\run-live-gameplay.ps1 -Scenario Both -FpsMax 999
 .\scripts\run-live-gameplay.ps1 -Scenario Both -FpsMax 360 -CandidateFirst
+.\scripts\run-live-gameplay.ps1 -Scenario Coop -DurationSeconds 10 -PatchedOnly
 ```
 
 The runner restores `fps_max`, `sv_cheats`, all held inputs, tracing, and the

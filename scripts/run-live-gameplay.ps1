@@ -1,9 +1,10 @@
 param(
     [ValidateSet('Both', 'SinglePlayer', 'Coop')][string]$Scenario = 'Both',
     [string]$OutputDirectory = 'artifacts\benchmarks\live-gameplay',
-    [ValidateRange(24, 30)][int]$DurationSeconds = 24,
+    [ValidateRange(10, 30)][int]$DurationSeconds = 24,
     [ValidateSet(360, 500, 999)][int]$FpsMax = 999,
     [switch]$CandidateFirst,
+    [switch]$PatchedOnly,
     [int]$ProcessId = 0,
     [string]$RconPassword = 'p2boostlab',
     [string]$GameRoot = 'D:\SteamLibrary\steamapps\common\Portal 2',
@@ -255,6 +256,11 @@ function Measure-Scene(
 }
 
 function Measure-Comparison([string]$Name, [scriptblock]$Setup, [scriptblock]$Actions) {
+    if ($PatchedOnly) {
+        Measure-Scene $Name 'patched' $true $Setup $Actions
+        return
+    }
+
     # Reverse-order runs expose cold-driver bias instead of silently crediting
     # whichever variant happens to run second in the same game process.
     $runs = @(
