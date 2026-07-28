@@ -240,6 +240,13 @@ each focus resource reacquisition produced an uncached rebuild before hits
 resumed. The cache occupies storage only for observed projected-light handles;
 it does not reserve the engine's full 16-bit handle space.
 
+The preserved cleanup at client preferred address `0x100f5640` was resolved
+and timed separately. It searches the manager's two dirty-shadow trees and
+clears the renderable flag only when the handle is actually present. On
+byte-identical cache hits it costs 0.0002 ms median and 0.0004 ms p99.
+Eliding it cannot improve the remaining co-op tail and could leave a renderable
+incorrectly dirty, so the exact engine cleanup remains mandatory.
+
 `client.dll` RVA `0x1ee590` is the profiled
 `CViewRender::ViewDrawScene_PortalStencil` routine. Both verified callers (RVAs
 `0x285c91` and `0x2c57db`) are traced. With local split-screen and two active

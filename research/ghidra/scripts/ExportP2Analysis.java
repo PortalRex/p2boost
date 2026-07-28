@@ -368,6 +368,10 @@ public class ExportP2Analysis extends GhidraScript {
                 "CClientShadowMgr::UpdateProjectedTextureInternal", 2);
             addFunctionsReferencingString(targets,
                 "CClientShadowMgr::UpdateProjectedTexture can only be used with flashlights!\n", 2);
+            // The cached projected-texture path still performs this exact
+            // dirty-list removal. Resolve its membership checks before
+            // deciding whether the cleanup itself can be elided.
+            addFunctionAndCallers(targets, 0x100f5640L, 2);
             // Portal mesh construction is a potential state-cache candidate.
             // Export three caller levels and the VProf string owner before
             // instrumenting inputs or output lifetimes in the runtime build.

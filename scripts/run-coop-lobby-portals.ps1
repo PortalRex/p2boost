@@ -5,6 +5,7 @@ param(
     [int]$ProcessId = 0,
     [string]$RconPassword = 'p2boostlab',
     [switch]$SetupOnly,
+    [switch]$CandidateFirst,
     [string]$GameRoot = 'D:\SteamLibrary\steamapps\common\Portal 2',
     [switch]$KeepGameOpen
 )
@@ -120,10 +121,17 @@ try {
     [P2BoostLobbyForeground]::ShowWindow($process.MainWindowHandle, 9) | Out-Null
     [P2BoostLobbyForeground]::SetForegroundWindow($process.MainWindowHandle) | Out-Null
     Start-Sleep -Milliseconds 500
-    Invoke-Game @('p2boost_enable 0') | Out-Null
-    & $capture -Output "$prefix-unpatched.csv" -DurationSeconds $DurationSeconds
-    Invoke-Game @('p2boost_enable 1') | Out-Null
-    & $capture -Output "$prefix-patched.csv" -DurationSeconds $DurationSeconds
+    $runs = @(
+        [pscustomobject]@{ Name = 'unpatched'; Enabled = 0 },
+        [pscustomobject]@{ Name = 'patched'; Enabled = 1 }
+    )
+    if ($CandidateFirst) {
+        [array]::Reverse($runs)
+    }
+    foreach ($run in $runs) {
+        Invoke-Game @("p2boost_enable $($run.Enabled)") | Out-Null
+        & $capture -Output "$prefix-$($run.Name).csv" -DurationSeconds $DurationSeconds
+    }
 
     Invoke-Game @('p2boost_trace 1') | Out-Null
     Start-Sleep -Seconds 2

@@ -14,6 +14,11 @@ using System.Runtime.InteropServices;
 public static class P2BoostFocusActions {
     [DllImport("user32.dll")] public static extern bool ShowWindowAsync(IntPtr window, int command);
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr window);
+    [DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr window);
+    [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
+    [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
+    [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint first, uint second, bool attach);
 }
 '@
 $focusSink = $null
@@ -30,6 +35,58 @@ function Get-Game {
     if ($process.MainWindowHandle -eq [IntPtr]::Zero) { throw 'Portal 2 has no top-level window.' }
     return $process
 }
+
+function Set-VerifiedForeground(
+    [IntPtr]$Window,
+    [IntPtr]$DisallowedWindow = [IntPtr]::Zero
+) {
+    # A hidden PowerShell helper is not automatically allowed to steal focus
+    # back from its own sink window. Join the input queues only for the focus
+    # operation, then prove that Windows accepted the transition.
+    $ignoredProcess = 0
+    $targetThread = [P2BoostFocusActions]::GetWindowThreadProcessId(
+        $Window, [ref]$ignoredProcess)
+    $currentThread = [P2BoostFocusActions]::GetCurrentThreadId()
+    $foreground = [P2BoostFocusActions]::GetForegroundWindow()
+    $foregroundThread = if ($foreground -ne [IntPtr]::Zero) {
+        [P2BoostFocusActions]::GetWindowThreadProcessId(
+            $foreground, [ref]$ignoredProcess)
+    } else {
+        0
+    }
+
+    $attachedTarget = $targetThread -ne 0 -and $targetThread -ne $currentThread -and
+        [P2BoostFocusActions]::AttachThreadInput($currentThread, $targetThread, $true)
+    $attachedForeground = $foregroundThread -ne 0 -and
+        $foregroundThread -ne $currentThread -and $foregroundThread -ne $targetThread -and
+        [P2BoostFocusActions]::AttachThreadInput($currentThread, $foregroundThread, $true)
+    try {
+        [P2BoostFocusActions]::ShowWindowAsync($Window, 9) | Out-Null
+        [P2BoostFocusActions]::BringWindowToTop($Window) | Out-Null
+        [P2BoostFocusActions]::SetForegroundWindow($Window) | Out-Null
+    } finally {
+        if ($attachedForeground) {
+            [P2BoostFocusActions]::AttachThreadInput(
+                $currentThread, $foregroundThread, $false) | Out-Null
+        }
+        if ($attachedTarget) {
+            [P2BoostFocusActions]::AttachThreadInput(
+                $currentThread, $targetThread, $false) | Out-Null
+        }
+    }
+
+    $deadline = (Get-Date).AddSeconds(1)
+    do {
+        $actual = [P2BoostFocusActions]::GetForegroundWindow()
+        if ($actual -eq $Window -or
+            ($DisallowedWindow -ne [IntPtr]::Zero -and $actual -ne $DisallowedWindow)) {
+            return
+        }
+        Start-Sleep -Milliseconds 20
+    } until ((Get-Date) -ge $deadline)
+    throw "Windows did not foreground window $Window."
+}
+
 function Invoke-Game([string[]]$Commands) {
     for ($attempt = 1; $attempt -le 3; ++$attempt) {
         try {
@@ -86,11 +143,13 @@ try {
         if ($FocusMode -eq 'Minimize') {
             [P2BoostFocusActions]::ShowWindowAsync($window, 6) | Out-Null
         } else {
-            [P2BoostFocusActions]::SetForegroundWindow($focusSink.Handle) | Out-Null
+            # Windows may activate the helper's host rather than its hidden
+            # sink. Either is a valid focus-loss event as long as Portal 2 is
+            # no longer foreground.
+            Set-VerifiedForeground $focusSink.Handle $window
         }
         Start-Sleep -Milliseconds 250
-        if ($FocusMode -eq 'Minimize') { [P2BoostFocusActions]::ShowWindowAsync($window, 9) | Out-Null }
-        [P2BoostFocusActions]::SetForegroundWindow($window) | Out-Null
+        Set-VerifiedForeground $window
         $restoreQpc = [Diagnostics.Stopwatch]::GetTimestamp()
 
 		# wait_for is expressed in 60 Hz session ticks. The second shot is the

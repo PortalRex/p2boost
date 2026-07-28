@@ -125,10 +125,11 @@ namespace p2boost {
 
 		// preserve dirty-list cleanup while omitting only the identical rebuild.
 		if( instance->m_enabled.load( std::memory_order_relaxed ) && same ) {
+			const Stopwatch timer{ tracing };
 			instance->m_remove_dirty( self, handle );
 			instance->m_skips.fetch_add( 1, std::memory_order_relaxed );
 			if( tracing )
-				instance->m_metrics->record_shadow_update( 0.0, true, true, true );
+				instance->m_metrics->record_shadow_update( timer.elapsed_ms( ), true, true, true );
 			return;
 		}
 

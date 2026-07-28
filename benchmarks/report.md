@@ -281,3 +281,42 @@ fresh file-mode trace. `analyze-etw.ps1` rejects an ETL that contains no Portal
 - 100 map/focus cycles and lossless visual/state equivalence: **not yet completed**.
 
 No release should claim the full original acceptance plan is complete.
+
+## Current-build audit (2026-07-28)
+
+The current production source was rebuilt and installed before repeating the
+full 24-second grounded Laser Relays route at `fps_max 360`. The route rode the
+elevator, crossed the main room, and fired both portal colors. Steady output
+averaged 358.48 FPS with a 2.7758 ms median, but the cold connected-portal
+interval produced 21.9744, 32.1475, and 24.2058 ms CPU-busy frames while GPU
+busy remained 0.54--0.74 ms. The p99/median ratio was 1.4417. This is a failed
+current-build portal/pacing gate and matches the separately traced native-D3D9
+first-use submission path.
+
+The focus helper previously trusted an unchecked foreground request. Windows
+could reject that request and leave PresentMon with only the frames before the
+first alt-tab. The helper now joins the relevant input queues temporarily and
+verifies every focus-away/restore transition. Five valid current-build
+fullscreen cycles measured a 2.4042 ms median post-portal maximum, 2.8383 ms
+worst frame, and zero cycles above 8.3 ms.
+
+Clean-profile co-op tests temporarily used Portal 2's default
+`r_portal_use_pvs_optimization 1`; the stored user value remained untouched.
+A moving ten-second pair initially appeared to clear the 35% 1%-low gate when
+unpatched ran first, but reversing the order reversed the result because the
+second map load inherited warm native-driver state. That pair is rejected as
+an acceptance claim.
+
+The fixed two-camera lobby harness avoids the map reload between variants and
+now supports both orders. With patched first, both linked portal interiors
+visible, and identical driver state, patched measured 607.94 FPS average,
+418.10 FPS 1% low, and 2.3918 ms p99; unpatched measured 436.34 FPS,
+322.39 FPS 1% low, and 3.1018 ms p99. Average throughput improved 39.3% and
+1% low improved 29.7%. A normal-order repeat measured 561.61 versus
+430.31 FPS and 387.04 versus 319.63 FPS 1% low. These are material co-op wins,
+but neither order proves the requested 35% 1%-low gate.
+
+Trace timing of the cached projected-light path shows its mandatory two-tree
+dirty-list cleanup costs 0.0002 ms median and 0.0004 ms p99. Removing it could
+leave renderables incorrectly marked dirty and cannot materially improve the
+remaining tail, so the cleanup stays.
