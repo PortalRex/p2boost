@@ -2,7 +2,9 @@ param(
     [Parameter(Mandatory)][string[]]$Command,
     [string]$Password = 'p2boostlab',
     [int]$ProcessId = 0,
-    [ValidateRange(1,30)][int]$ResponseTimeoutSeconds = 5
+    # Wide research CSV dumps can legitimately take longer than ordinary
+    # console commands; keep the default short while permitting that caller.
+    [ValidateRange(1,60)][int]$ResponseTimeoutSeconds = 5
 )
 $ErrorActionPreference = 'Stop'
 $process = if ($ProcessId) { Get-Process -Id $ProcessId -ErrorAction Stop } else {

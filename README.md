@@ -157,6 +157,8 @@ DLL from leaking into the next run. Research captures may add
 `-SampleMainThread` for one-millisecond main-thread instruction samples or
 `-SampleAdaptive` for coarse process-wide worker attribution. The modes are
 mutually exclusive and use the same QPC clock as PresentMon and p2boost.
+Every intro3 run also stores an x86 `-modules.csv` snapshot so absolute stack
+addresses can be reduced to stable DLL RVAs after the game closes.
 
 `run-live-gameplay.ps1` is the primary short performance check. It records
 matched single-player Laser Relays and two-player lobby runs while genuine

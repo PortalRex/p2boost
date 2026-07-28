@@ -272,7 +272,9 @@ public class ExportP2Analysis extends GhidraScript {
             long[] driverSerializationTargets = {
                 // Correlated co-op paint stack samples enter these shader API paths
                 // before blocking in the native D3D9 driver.
-                0x1000aa11L, 0x1000b28cL, 0x1001ee55L, 0x1001ee77L
+                0x1000aa11L, 0x1000b28cL, 0x1001ee55L, 0x1001ee77L,
+                // Exact cold intro3 portal draw: state commit and mesh dispatch.
+                0x1001ec6bL, 0x100096a3L, 0x10009f93L, 0x10009fd2L
             };
             for (long address : driverSerializationTargets) addFunctionAndCallers(targets, address, 3);
             addFunctionsReferencingString(targets, "CMeshMgr::DiscardVertexBuffers", 2);
@@ -331,6 +333,10 @@ public class ExportP2Analysis extends GhidraScript {
             for (long address : queuedCommandTypes) addFunctionAndCallers(targets, address, 3);
             addFunctionAndCallers(targets, 0x1003ac67L, 3);
             addFunctionAndCallers(targets, 0x1003b514L, 3);
+            // Exact cold intro3 portal call chain below the standard shader.
+            addFunctionAndCallers(targets, 0x10003f02L, 3);
+            addFunctionAndCallers(targets, 0x10023439L, 3);
+            addFunctionAndCallers(targets, 0x10024cf1L, 3);
             addFunctionsReferencingString(targets, "mat_bufferprimitives", 2);
             // PortalGun cold/warm captures prove that the long first portal
             // frame is device-local first use. Resolve Source's existing
@@ -359,7 +365,9 @@ public class ExportP2Analysis extends GhidraScript {
                 0x1004aeb3L, 0x1000c7f6L, 0x1004a5c5L,
                 0x10044509L, 0x100445c7L, 0x1001a5b5L,
                 0x1001723cL, 0x1003feeeL, 0x10040059L,
-                0x10038ff4L
+                0x10038ff4L,
+                // Exact cold intro3 portal shader leaves from the ASLR map.
+                0x10027fefL
             };
             for (long address : driverSerializationCallers)
                 addFunctionAndCallers(targets, address, 3);

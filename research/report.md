@@ -447,6 +447,32 @@ by a 57.8891 ms synchronization frame. Portal CPU work remained 0.2088--0.2496
 ms. The user's broader-PVS configuration therefore is not the cause of this
 first-portal stall and remains untouched.
 
+An x86 module snapshot was then added beside every intro3 draw trace so ASLR
+return addresses remain reproducible after Portal 2 exits. A 64-bit host
+enumeration cannot see the full WOW64 module list, so the runner uses
+`p2profile --modules` and its Toolhelp32 snapshot instead.
+
+The fresh mapped capture reproduced 64.8056, 58.7467, and 29.9648 ms portal
+frames. Their queued workers measured 63.7992, 58.5858, and 29.8462 ms. The
+first worker spent 29.5717 ms in native draws and 10.1698 ms in raw Present,
+but its five first-resource/shader-pair draws totaled only 0.2346 ms. Its
+slowest 6.3841 ms draw used an already-seen managed 128x128 A8R8G8B8 texture
+and an already-seen shader pair.
+
+The exact call chain resolves to `shaderapidx9.dll+0xb28c/+0x1ee55`,
+`materialsystem.dll+0x3ac67`, `stdshader_dx9.dll+0x4aeb3/+0x27fef/+0x4a5c5`,
+then back through the material and ShaderAPI mesh dispatch. Ghidra places
+`stdshader_dx9.dll+0x27fef` immediately after the final texture-binding helper
+inside the built-in `PortalStaticOverlay` shader. Its static branch selects
+`portalstaticoverlay_vs20`; the dynamic branch binds the real overlay inputs
+and issues the ordinary mesh draw.
+
+This rules out a missed client simulation job, filesystem stream, redundant
+resource creation, or separately dispatchable shader compiler. Skipping or
+memoizing that mesh submission would change the visible portal overlay, while
+executing it during loading would be dummy drawing that merely moves the
+driver work. No production hook is added for this path.
+
 ### Local split-screen PVS decompression audit
 
 The engine export now names the compressed-visibility path around preferred

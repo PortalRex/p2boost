@@ -68,14 +68,27 @@ $presentCsv = Join-Path $output "portalgun-$slug.csv"
 $metricsCsv = Join-Path $output "portalgun-$slug-metrics.csv"
 $workersCsv = Join-Path $output "portalgun-$slug-render-workers.csv"
 $playbackLog = Join-Path $output "portalgun-$slug-playback.txt"
+$modulesCsv = Join-Path $output "portalgun-$slug-modules.csv"
 $sampleKind = if($SampleAdaptive) { 'adaptive' } else { 'main-thread' }
 $sampleCsv = Join-Path $output "portalgun-$slug-$sampleKind.csv"
 $capture = $null
 $sampleCapture = $null
 
-Remove-Item $presentCsv, $metricsCsv, $workersCsv, $playbackLog, $sampleCsv -Force -ErrorAction SilentlyContinue
+Remove-Item $presentCsv, $metricsCsv, $workersCsv, $playbackLog, $modulesCsv, $sampleCsv -Force -ErrorAction SilentlyContinue
 
 try {
+	# Preserve the 32-bit ASLR layout so every captured return address can be
+	# reduced to a stable module RVA after the benchmark process has exited.
+	# A 64-bit PowerShell process sees only the WOW64 host modules here, so use
+	# the bundled x86 profiler's Toolhelp snapshot.
+	if(-not (Test-Path -LiteralPath $profiler)) {
+		throw "p2profile.exe is missing: $profiler"
+	}
+	& $profiler $game.Id --modules | Set-Content -LiteralPath $modulesCsv
+	if($LASTEXITCODE -ne 0 -or (Get-Item -LiteralPath $modulesCsv).Length -eq 0) {
+		throw 'p2profile did not produce a valid module map.'
+	}
+
 	# Trace before loading the demo so the first portal-resource transition is
 	# present even when it occurs immediately after intro3 becomes playable.
 	Invoke-Game @(

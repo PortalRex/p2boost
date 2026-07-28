@@ -426,3 +426,15 @@ found zero changes. This confirms that the shipped full-state key is neither
 missing changing state nor silently inactive. Average and median gains are
 repeatable in both orders; the five-second reverse-order 1%-low gain is only
 13.2%, so the 35% 1%-low acceptance gate remains **not met**.
+
+A subsequent fresh-process intro3 draw trace stored the exact x86 ASLR module
+map with the capture. The portal sequence measured 64.8056, 58.7467, and
+29.9648 ms presented frames. The first queued worker spent 29.5717 ms in
+native indexed draws and 10.1698 ms in Present. Only 0.2346 ms came from all
+first-seen resources and shader pairs in that worker.
+
+The slowest draw resolves through the shipped `PortalStaticOverlay` standard
+shader and the normal MaterialSystem/ShaderAPI mesh path. It uses an
+already-seen pipeline and managed texture, so asynchronous Source allocation
+or shader creation is not available to overlap. The remaining gate is still
+**not met**; p2boost does not remove the overlay or render it during loading.
