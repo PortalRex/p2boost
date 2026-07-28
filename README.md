@@ -188,9 +188,12 @@ silently leave the artifact directory empty.
 
 `p2profile.exe` is a research-only x86 user-mode sampler for systems where
 kernel ETW collection is unavailable without elevation. Its default mode
-records low-overhead main-thread instruction pointers. Explicit `--stack` mode
-walks call stacks and is intrusive enough to invalidate timing measurements;
-it is only for call-path research. The profiler is never loaded into the game.
+records low-overhead main-thread instruction pointers. `--thread <tid>` targets
+one known worker, while `--adaptive` watches process-wide thread CPU deltas and
+samples only the thread that most recently consumed CPU. Explicit `--stack`
+mode walks call stacks and is intrusive enough to invalidate timing
+measurements; it is only for call-path research. The profiler is never loaded
+into the game.
 
 Every push and pull request is built, tested, packaged, and uploaded by GitHub
 Actions. Pushes to the default branch also update the rolling `nightly`

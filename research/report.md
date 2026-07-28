@@ -348,6 +348,46 @@ removed completely. D3D9 exposes no pipeline-precompile object; deleting the
 fence merely transfers the backlog to Present. These rejected approaches do
 not ship.
 
+An adaptive x86 sampler was added for hosts where kernel ETW profiling is not
+elevated. It queries process-wide thread CPU deltas without suspending every
+thread, then samples only the thread that most recently ran. Across the cold
+portal event it found a sustained `nvd3dum.dll` worker burst alongside the
+expected studio-render, material-system, ShaderAPI, and D3D9 submissions. No
+single Portal gameplay routine or Source per-model loop dominated the event.
+The public Alien Swarm client confirms that this engine generation already
+groups PC model types into one `DrawModelArray` submission; the recovered
+`studiorender.dll+0x4e710` callback is that real batched draw path.
+
+A cold and immediately repeated playback in one unchanged Portal 2 process
+then isolated device-local first use. The cold successful portal produced a
+64.1448 ms CPU-submission frame followed by a 58.2072 ms wait. The identical
+second playback's portal event was 6.0163 ms and had no following 50 ms wait.
+Median frame time remained about 1.016 ms and p99 about 1.49 ms in both runs.
+The removable cost is therefore cached within the live D3D9 device, but is not
+persisted by the runtime or driver across processes. A general correction must
+populate the real material/model device state inside an existing loading
+transition; fence removal, advisory managed-resource preload, and quality
+reductions cannot do so.
+
+The apparent shipped warm-up controls were resolved before considering a
+replacement. `mat_forcemanagedtextureintohardware` is registered with default
+value `1`, but its `materialsystem.dll` ConVar object has only constructor and
+destructor code references. No renderer path reads it. The corresponding
+`mat_remoteshadercompile` object in `shaderapidx9.dll` is likewise only
+registered and destroyed. `mat_shadercount` is a diagnostic command whose
+complete callback prints the two creation counters and resets them;
+`mat_spewvertexandpixelshaders` only walks the existing shader collection.
+The headless exporter now recovers raw MSVC descriptor pointers when Ghidra
+does not create an xref, so these negative results are reproducible.
+
+The slowest 66.4278 ms portal worker independently recorded zero texture,
+vertex-shader, and pixel-shader creations. Its 535 real draws consumed
+35.7085 ms; twelve first-resource draws consumed 23.0804 ms, while the five
+first shader-pair draws consumed only 0.8855 ms. Therefore Source has already
+created the relevant D3D objects before the portal event. The remaining cold
+cost is native-driver promotion/translation triggered by use of those objects,
+not a dormant Source compile queue that can safely be executed earlier.
+
 A cold-process control repeated the complete demo with the engine default
 `r_portal_use_pvs_optimization 1`, restoring the user's `0` value afterward.
 The successful portal still produced a 52.7052 ms draw-submission frame followed

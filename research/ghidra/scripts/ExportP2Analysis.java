@@ -34,7 +34,9 @@ public class ExportP2Analysis extends GhidraScript {
     private static final String[] TERMS = {
         "portal", "present", "reset", "device lost", "focus", "alt-tab",
         "framerate", "fps_max", "frametime", "render target", "visibility",
-        "pvs", "split screen", "splitscreen", "co-op", "coop", "video", "avi"
+        "pvs", "split screen", "splitscreen", "co-op", "coop", "video", "avi",
+        "managed texture", "managedtexture", "shader compile", "shadercompile",
+        "shader count", "shadercount", "cacheusedmaterials", "preload"
     };
 
     // A target may first be discovered with no caller depth and later with a
@@ -88,6 +90,33 @@ public class ExportP2Analysis extends GhidraScript {
             Data item = data.next();
             if (!item.hasStringValue() || !value.equals(String.valueOf(item.getValue()))) continue;
             addFunctionsReferencingAddress(targets, item.getAddress(), depth, 2, new HashSet<Address>());
+            addFunctionsReferencingPointerStorage(targets, item.getAddress(), depth);
+        }
+    }
+
+    private void addFunctionsReferencingPointerStorage(Set<Function> targets, Address address,
+                                                        int depth) {
+        // MSVC's static ConVar descriptors often contain a raw image-base
+        // pointer which Ghidra does not turn into a reference. Find that
+        // pointer value explicitly, then follow code references to its slot.
+        long value = address.getOffset();
+        byte[] bytes = {
+            (byte)(value & 0xff),
+            (byte)((value >>> 8) & 0xff),
+            (byte)((value >>> 16) & 0xff),
+            (byte)((value >>> 24) & 0xff)
+        };
+        Address cursor = currentProgram.getMinAddress();
+        while (cursor != null) {
+            Address storage = currentProgram.getMemory().findBytes(
+                cursor, bytes, null, true, monitor);
+            if (storage == null) break;
+            Function owner = containingFunction(storage);
+            if (owner != null)
+                addFunctionAndCallers(targets, owner.getEntryPoint().getOffset(), depth);
+            addFunctionsReferencingAddress(targets, storage, depth, 2,
+                                            new HashSet<Address>());
+            cursor = storage.next();
         }
     }
 
@@ -103,6 +132,11 @@ public class ExportP2Analysis extends GhidraScript {
                                                 indirections - 1, visited);
             }
         }
+    }
+
+    private void addFunctionsReferencingGlobal(Set<Function> targets, long address, int depth) {
+        Address global = currentProgram.getAddressFactory().getDefaultAddressSpace().getAddress(address);
+        addFunctionsReferencingAddress(targets, global, depth, 2, new HashSet<Address>());
     }
 
     @Override
@@ -206,6 +240,16 @@ public class ExportP2Analysis extends GhidraScript {
             addFunctionsReferencingString(targets, "CMeshMgr::DiscardVertexBuffers", 2);
             addFunctionsReferencingString(targets, "TexGroup_global_Dynamic_Verts", 2);
             addFunctionsReferencingString(targets, "TexGroup_global_Dynamic_Indices", 2);
+            // D3D9 has no public pipeline cache. These owners determine
+            // whether the shipped shader API has a real compile/populate path
+            // that can safely run during the existing load transition.
+            addFunctionsReferencingString(targets, "mat_remoteshadercompile", 4);
+            addFunctionsReferencingGlobal(targets, 0x100daca0L, 4);
+            addFunctionsReferencingString(targets, "mat_shadercount", 4);
+            addFunctionsReferencingString(targets,
+                "mat_spewvertexandpixelshaders", 4);
+            addFunctionAndCallers(targets, 0x1002a220L, 2);
+            addFunctionAndCallers(targets, 0x1002b490L, 2);
         }
         if (base.equalsIgnoreCase("materialsystem.dll")) {
             addFunctionAndCallers(targets, 0x10011230L, 2);
@@ -250,6 +294,12 @@ public class ExportP2Analysis extends GhidraScript {
             addFunctionAndCallers(targets, 0x1003ac67L, 3);
             addFunctionAndCallers(targets, 0x1003b514L, 3);
             addFunctionsReferencingString(targets, "mat_bufferprimitives", 2);
+            // PortalGun cold/warm captures prove that the long first portal
+            // frame is device-local first use. Resolve Source's existing
+            // managed-texture population path before adding any new draw work.
+            addFunctionsReferencingString(targets,
+                "mat_forcemanagedtextureintohardware", 4);
+            addFunctionsReferencingGlobal(targets, 0x1010b820L, 4);
             addFunctionsReferencingString(targets,
                 "%d calls queued for %d bytes in parameters and overhead, %d bytes verts, %d bytes indices, %d bytes other\n", 2);
         }
