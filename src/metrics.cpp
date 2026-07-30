@@ -490,20 +490,31 @@ namespace p2boost {
 			   "first_geometry_draw_count,first_geometry_draw_ms,first_draw_submission_count,first_draw_submission_ms,"
 			   "first_texture_count,first_vertex_buffer_count,"
 			   "first_index_buffer_count,index_buffer_lock_count,index_buffer_lock_ms,max_index_buffer_lock_ms,"
-			   "vertex_buffer_lock_count,vertex_buffer_lock_ms,max_vertex_buffer_lock_ms,occlusion_query_"
+			   "vertex_buffer_lock_count,vertex_buffer_lock_ms,max_vertex_buffer_lock_ms,"
+			   "native_vertex_buffer_lock_count,native_vertex_buffer_lock_bytes,native_vertex_buffer_discard_count,"
+			   "native_vertex_buffer_no_overwrite_count,native_vertex_buffer_lock_flags,native_vertex_buffer_lock_ms,"
+			   "max_native_vertex_buffer_lock_ms,native_index_buffer_lock_count,native_index_buffer_lock_bytes,"
+			   "native_index_buffer_discard_count,native_index_buffer_no_overwrite_count,native_index_buffer_lock_flags,"
+			   "native_index_buffer_lock_ms,max_native_index_buffer_lock_ms,occlusion_query_"
 			   "create_count,occlusion_query_create_ms,max_occlusion_query_create_ms,occlusion_query_destroy_count,"
 			   "occlusion_query_destroy_ms,max_occlusion_query_destroy_ms,texture_create_count,texture_create_ms,"
 			   "max_texture_create_ms,vertex_shader_create_count,vertex_shader_create_ms,max_vertex_shader_create_ms,"
 			   "pixel_shader_create_count,pixel_shader_create_ms,max_pixel_shader_create_ms,max_draw_ms,max_"
 			   "draw_method,max_draw_primitive_type,max_draw_"
-			   "primitive_count,max_draw_vertex_count,max_draw_vertex_shader,max_draw_pixel_shader,max_"
+			   "primitive_count,max_draw_vertex_count,max_draw_argument_0,max_draw_argument_1,max_draw_argument_2,"
+			   "max_draw_argument_3,max_draw_argument_4,max_draw_argument_5,max_draw_vertex_shader,max_draw_pixel_shader,max_"
 			   "draw_vertex_shader_hash,max_draw_pixel_shader_hash,max_"
 			   "draw_texture_0,max_draw_texture_1,max_draw_texture_2,max_draw_texture_3,max_draw_first_"
 			   "vertex_shader,max_draw_first_pixel_shader,max_draw_first_pipeline,max_draw_first_state_"
 			   "pipeline,max_draw_first_submission,max_draw_first_texture_mask,max_draw_first_vertex_buffer_mask,max_draw_first_index_"
 			   "buffer,max_draw_render_state_hash,max_draw_vertex_declaration,max_draw_fvf,max_draw_vertex_"
 			   "buffer_0,max_draw_vertex_buffer_1,max_draw_vertex_buffer_2,max_draw_vertex_buffer_3,max_draw_"
-			   "index_buffer,max_draw_texture0_type,max_draw_texture0_format,max_draw_texture0_width,"
+			   "vertex_offset_0,max_draw_vertex_offset_1,max_draw_vertex_offset_2,max_draw_vertex_offset_3,max_draw_"
+			   "vertex_stride_0,max_draw_vertex_stride_1,max_draw_vertex_stride_2,max_draw_vertex_stride_3,max_draw_"
+			   "vertex_frequency_0,max_draw_vertex_frequency_1,max_draw_vertex_frequency_2,max_draw_vertex_frequency_3,max_draw_"
+			   "index_buffer,max_draw_vertex_buffer_size,max_draw_vertex_buffer_usage,max_draw_vertex_buffer_pool,max_draw_"
+			   "vertex_buffer_fvf,max_draw_index_buffer_size,max_draw_index_buffer_usage,max_draw_index_buffer_pool,max_draw_"
+			   "index_buffer_format,max_draw_texture0_type,max_draw_texture0_format,max_draw_texture0_width,"
 			   "max_draw_texture0_height,max_draw_texture0_usage,max_draw_texture0_pool,max_draw_"
 			   "texture0_levels,max_draw_texture0_hash,draw_stack_0,draw_stack_1,draw_stack_2,draw_"
 			   "stack_3,draw_stack_4,draw_stack_5,draw_stack_6,draw_stack_7,draw_stack_8,draw_stack_9,"
@@ -556,9 +567,19 @@ namespace p2boost {
 							  << sample.m_index_buffer_lock_count << ',' << Qpc::milliseconds( sample.m_index_buffer_lock_qpc ) << ','
 							  << Qpc::milliseconds( sample.m_max_index_buffer_lock_qpc ) << ',' << sample.m_vertex_buffer_lock_count << ','
 							  << Qpc::milliseconds( sample.m_vertex_buffer_lock_qpc ) << ','
-							  << Qpc::milliseconds( sample.m_max_vertex_buffer_lock_qpc ) << ',' << sample.m_occlusion_query_create_count
-							  << ',' << Qpc::milliseconds( sample.m_occlusion_query_create_qpc ) << ','
-							  << Qpc::milliseconds( sample.m_max_occlusion_query_create_qpc ) << ','
+							  << Qpc::milliseconds( sample.m_max_vertex_buffer_lock_qpc ) << ',' << sample.m_native_vertex_buffer_lock_count
+							  << ',' << sample.m_native_vertex_buffer_lock_bytes << ',' << sample.m_native_vertex_buffer_discard_count
+							  << ',' << sample.m_native_vertex_buffer_no_overwrite_count << ",0x" << std::hex
+							  << sample.m_native_vertex_buffer_lock_flags << std::dec << ','
+							  << Qpc::milliseconds( sample.m_native_vertex_buffer_lock_qpc ) << ','
+							  << Qpc::milliseconds( sample.m_max_native_vertex_buffer_lock_qpc ) << ','
+							  << sample.m_native_index_buffer_lock_count << ',' << sample.m_native_index_buffer_lock_bytes << ','
+							  << sample.m_native_index_buffer_discard_count << ',' << sample.m_native_index_buffer_no_overwrite_count
+							  << ",0x" << std::hex << sample.m_native_index_buffer_lock_flags << std::dec << ','
+							  << Qpc::milliseconds( sample.m_native_index_buffer_lock_qpc ) << ','
+							  << Qpc::milliseconds( sample.m_max_native_index_buffer_lock_qpc ) << ','
+							  << sample.m_occlusion_query_create_count << ',' << Qpc::milliseconds( sample.m_occlusion_query_create_qpc )
+							  << ',' << Qpc::milliseconds( sample.m_max_occlusion_query_create_qpc ) << ','
 							  << sample.m_occlusion_query_destroy_count << ',' << Qpc::milliseconds( sample.m_occlusion_query_destroy_qpc )
 							  << ',' << Qpc::milliseconds( sample.m_max_occlusion_query_destroy_qpc ) << ','
 							  << sample.m_texture_create_count << ',' << Qpc::milliseconds( sample.m_texture_create_qpc ) << ','
@@ -570,6 +591,8 @@ namespace p2boost {
 							  << Qpc::milliseconds( sample.m_max_draw_qpc ) << ',' << sample.m_max_draw_method << ','
 							  << sample.m_max_draw_primitive_type << ',' << sample.m_max_draw_primitive_count << ','
 							  << sample.m_max_draw_vertex_count;
+				for( const auto argument : sample.m_max_draw_arguments )
+					worker_output << ',' << argument;
 				worker_output << ",0x" << std::hex << sample.m_max_draw_vertex_shader << ",0x" << sample.m_max_draw_pixel_shader << ",0x"
 							  << sample.m_max_draw_vertex_shader_hash << ",0x" << sample.m_max_draw_pixel_shader_hash;
 				for( const auto texture : sample.m_max_draw_textures )
@@ -586,11 +609,22 @@ namespace p2boost {
 							  << sample.m_max_draw_fvf;
 				for( const auto buffer : sample.m_max_draw_vertex_buffers )
 					worker_output << ",0x" << buffer;
-				worker_output << ",0x" << sample.m_max_draw_index_buffer << std::dec << ',' << sample.m_max_draw_texture0_type << ",0x"
-							  << std::hex << sample.m_max_draw_texture0_format << std::dec << ',' << sample.m_max_draw_texture0_width << ','
-							  << sample.m_max_draw_texture0_height << ",0x" << std::hex << sample.m_max_draw_texture0_usage << std::dec
-							  << ',' << sample.m_max_draw_texture0_pool << ',' << sample.m_max_draw_texture0_levels << ",0x" << std::hex
-							  << sample.m_max_draw_texture0_hash << std::dec;
+				for( const auto offset : sample.m_max_draw_vertex_offsets )
+					worker_output << ',' << std::dec << offset;
+				for( const auto stride : sample.m_max_draw_vertex_strides )
+					worker_output << ',' << std::dec << stride;
+				for( const auto frequency : sample.m_max_draw_vertex_frequencies )
+					worker_output << ',' << std::dec << frequency;
+				worker_output << ",0x" << std::hex << sample.m_max_draw_index_buffer << std::dec << ','
+							  << sample.m_max_draw_vertex_buffer_size << ",0x" << std::hex << sample.m_max_draw_vertex_buffer_usage
+							  << std::dec << ',' << sample.m_max_draw_vertex_buffer_pool << ",0x" << std::hex
+							  << sample.m_max_draw_vertex_buffer_fvf << std::dec << ',' << sample.m_max_draw_index_buffer_size << ",0x"
+							  << std::hex << sample.m_max_draw_index_buffer_usage << std::dec << ',' << sample.m_max_draw_index_buffer_pool
+							  << ",0x" << std::hex << sample.m_max_draw_index_buffer_format << std::dec << ','
+							  << sample.m_max_draw_texture0_type << ",0x" << std::hex << sample.m_max_draw_texture0_format << std::dec
+							  << ',' << sample.m_max_draw_texture0_width << ',' << sample.m_max_draw_texture0_height << ",0x" << std::hex
+							  << sample.m_max_draw_texture0_usage << std::dec << ',' << sample.m_max_draw_texture0_pool << ','
+							  << sample.m_max_draw_texture0_levels << ",0x" << std::hex << sample.m_max_draw_texture0_hash << std::dec;
 				for( const auto address : sample.m_max_draw_stack )
 					worker_output << ",0x" << std::hex << address << std::dec;
 				worker_output << ',' << sample.m_driver_call_count;

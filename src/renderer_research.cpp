@@ -16,15 +16,17 @@
 namespace p2boost::renderer_research {
 	namespace {
 
-		constexpr std::size_t pointer_table_size		= 8192;
-		constexpr std::size_t pipeline_table_size		= 16384;
-		constexpr std::size_t render_state_count		= 256;
-		constexpr std::size_t texture_stage_count		= 8;
-		constexpr std::size_t texture_stage_state_count = 33;
-		constexpr std::size_t sampler_count				= 16;
-		constexpr std::size_t sampler_state_count		= 14;
+		constexpr std::size_t pointer_table_size		 = 8192;
+		constexpr std::size_t pipeline_table_size		 = 16384;
+		constexpr std::size_t draw_submission_table_size = 262144;
+		constexpr std::size_t render_state_count		 = 256;
+		constexpr std::size_t texture_stage_count		 = 8;
+		constexpr std::size_t texture_stage_state_count	 = 33;
+		constexpr std::size_t sampler_count				 = 16;
+		constexpr std::size_t sampler_state_count		 = 14;
 		static_assert( ( pointer_table_size & ( pointer_table_size - 1 ) ) == 0 );
 		static_assert( ( pipeline_table_size & ( pipeline_table_size - 1 ) ) == 0 );
+		static_assert( ( draw_submission_table_size & ( draw_submission_table_size - 1 ) ) == 0 );
 
 		thread_local std::uint32_t g_dynamic_light_table[ pointer_table_size ]{ };
 		thread_local std::uint32_t g_dynamic_surface_table[ pointer_table_size ]{ };
@@ -41,7 +43,7 @@ namespace p2boost::renderer_research {
 		alignas( 64 ) std::atomic_uint32_t g_state_pipeline_keys[ pipeline_table_size ]{ };
 		alignas( 64 ) std::atomic_uint32_t g_texture_keys[ pipeline_table_size ]{ };
 		alignas( 64 ) std::atomic_uint32_t g_geometry_keys[ pipeline_table_size ]{ };
-		alignas( 64 ) std::atomic_uint32_t g_draw_submission_keys[ pipeline_table_size ]{ };
+		alignas( 64 ) std::atomic_uint32_t g_draw_submission_keys[ draw_submission_table_size ]{ };
 
 		std::uint64_t hash_bytes( const std::uint8_t* bytes, std::size_t size ) noexcept {
 			// FNV-1a gives stable research identities without storing bytecode.
@@ -86,13 +88,14 @@ namespace p2boost::renderer_research {
 			return false;
 		}
 
-		bool insert_process_key( std::uint32_t key, std::atomic_uint32_t* table ) noexcept {
+		template < std::size_t capacity >
+		bool insert_process_key( std::uint32_t key, std::atomic_uint32_t ( &table )[ capacity ] ) noexcept {
 			// relaxed CAS is sufficient because entries only transition from zero.
 			if( !key ) {
 				return false;
 			}
-			std::size_t slot = ( key * 2654435761u ) & ( pipeline_table_size - 1 );
-			for( std::size_t probe = 0; probe < pipeline_table_size; ++probe ) {
+			std::size_t slot = ( key * 2654435761u ) & ( capacity - 1 );
+			for( std::size_t probe = 0; probe < capacity; ++probe ) {
 				auto current = table[ slot ].load( std::memory_order_relaxed );
 				if( current == key ) {
 					return false;
@@ -101,7 +104,7 @@ namespace p2boost::renderer_research {
 					table[ slot ].compare_exchange_strong( current, key, std::memory_order_relaxed, std::memory_order_relaxed ) ) {
 					return true;
 				}
-				slot = ( slot + 1 ) & ( pipeline_table_size - 1 );
+				slot = ( slot + 1 ) & ( capacity - 1 );
 			}
 			return false;
 		}
@@ -179,8 +182,14 @@ namespace p2boost::renderer_research {
 				if( SUCCEEDED( device->GetStreamSource( stream, &buffer, &offset, &stride ) ) && buffer ) {
 					g_pipeline_state.m_vertex_buffers[ stream ] =
 						static_cast< std::uint32_t >( reinterpret_cast< std::uintptr_t >( buffer ) );
+					g_pipeline_state.m_vertex_offsets[ stream ] = offset;
+					g_pipeline_state.m_vertex_strides[ stream ] = stride;
 					buffer->Release( );
 				}
+
+				UINT frequency = 0;
+				if( SUCCEEDED( device->GetStreamSourceFreq( stream, &frequency ) ) )
+					g_pipeline_state.m_vertex_frequencies[ stream ] = frequency;
 			}
 
 			IDirect3DIndexBuffer9* index_buffer{ };
@@ -255,6 +264,34 @@ namespace p2boost::renderer_research {
 					metrics.m_max_draw_texture0_height = volume.Height;
 					metrics.m_max_draw_texture0_usage  = volume.Usage;
 					metrics.m_max_draw_texture0_pool   = static_cast< std::uint32_t >( volume.Pool );
+				}
+			}
+		}
+
+		void describe_geometry( RenderWorkerMetrics& metrics ) noexcept {
+			// Query descriptors only for the slowest draw; this avoids adding
+			// COM traffic to every normal indexed submission.
+			auto* vertex_buffer =
+				reinterpret_cast< IDirect3DVertexBuffer9* >( static_cast< std::uintptr_t >( metrics.m_max_draw_vertex_buffers[ 0 ] ) );
+			if( vertex_buffer ) {
+				D3DVERTEXBUFFER_DESC description{ };
+				if( SUCCEEDED( vertex_buffer->GetDesc( &description ) ) ) {
+					metrics.m_max_draw_vertex_buffer_size  = description.Size;
+					metrics.m_max_draw_vertex_buffer_usage = description.Usage;
+					metrics.m_max_draw_vertex_buffer_pool  = static_cast< std::uint32_t >( description.Pool );
+					metrics.m_max_draw_vertex_buffer_fvf   = description.FVF;
+				}
+			}
+
+			auto* index_buffer =
+				reinterpret_cast< IDirect3DIndexBuffer9* >( static_cast< std::uintptr_t >( metrics.m_max_draw_index_buffer ) );
+			if( index_buffer ) {
+				D3DINDEXBUFFER_DESC description{ };
+				if( SUCCEEDED( index_buffer->GetDesc( &description ) ) ) {
+					metrics.m_max_draw_index_buffer_size   = description.Size;
+					metrics.m_max_draw_index_buffer_usage  = description.Usage;
+					metrics.m_max_draw_index_buffer_pool   = static_cast< std::uint32_t >( description.Pool );
+					metrics.m_max_draw_index_buffer_format = static_cast< std::uint32_t >( description.Format );
 				}
 			}
 		}
@@ -384,10 +421,17 @@ namespace p2boost::renderer_research {
 		g_pipeline_state.m_fvf				  = fvf;
 	}
 
-	void set_stream_source( UINT stream, IDirect3DVertexBuffer9* buffer ) noexcept {
+	void set_stream_source( UINT stream, IDirect3DVertexBuffer9* buffer, UINT offset, UINT stride ) noexcept {
 		if( stream < std::size( g_pipeline_state.m_vertex_buffers ) ) {
 			g_pipeline_state.m_vertex_buffers[ stream ] = static_cast< std::uint32_t >( reinterpret_cast< std::uintptr_t >( buffer ) );
+			g_pipeline_state.m_vertex_offsets[ stream ] = offset;
+			g_pipeline_state.m_vertex_strides[ stream ] = stride;
 		}
+	}
+
+	void set_stream_source_frequency( UINT stream, UINT setting ) noexcept {
+		if( stream < std::size( g_pipeline_state.m_vertex_frequencies ) )
+			g_pipeline_state.m_vertex_frequencies[ stream ] = setting;
 	}
 
 	void set_indices( IDirect3DIndexBuffer9* buffer ) noexcept {
@@ -471,11 +515,45 @@ namespace p2boost::renderer_research {
 		draw_submission_key = mix_word( draw_submission_key, observation.m_state.m_depth_stencil_surface );
 		for( const auto vertex_buffer : observation.m_state.m_vertex_buffers )
 			draw_submission_key = mix_word( draw_submission_key, vertex_buffer );
+		for( const auto offset : observation.m_state.m_vertex_offsets )
+			draw_submission_key = mix_word( draw_submission_key, offset );
+		for( const auto stride : observation.m_state.m_vertex_strides )
+			draw_submission_key = mix_word( draw_submission_key, stride );
+		for( const auto frequency : observation.m_state.m_vertex_frequencies )
+			draw_submission_key = mix_word( draw_submission_key, frequency );
 		draw_submission_key = mix_word( draw_submission_key, observation.m_state.m_index_buffer );
 		if( !draw_submission_key )
 			draw_submission_key = 1;
-		observation.m_first_draw_submission = insert_process_key( draw_submission_key, g_draw_submission_keys );
+		observation.m_draw_submission_key = draw_submission_key;
 		return observation;
+	}
+
+	void classify_draw_submission( PipelineObservation& pipeline,
+		unsigned int									method,
+		unsigned int									argument_0,
+		unsigned int									argument_1,
+		unsigned int									argument_2,
+		unsigned int									argument_3,
+		unsigned int									argument_4,
+		unsigned int									argument_5 ) noexcept {
+		// Draw family, topology, and ranges determine which dynamic-buffer bytes
+		// the driver consumes even when every bound COM object is unchanged.
+		auto key = mix_word( pipeline.m_draw_submission_key, method );
+		key		 = mix_word( key, argument_0 );
+		key		 = mix_word( key, argument_1 );
+		key		 = mix_word( key, argument_2 );
+		key		 = mix_word( key, argument_3 );
+		key		 = mix_word( key, argument_4 );
+		key		 = mix_word( key, argument_5 );
+		if( !key )
+			key = 1;
+		pipeline.m_draw_arguments[ 0 ]	 = argument_0;
+		pipeline.m_draw_arguments[ 1 ]	 = argument_1;
+		pipeline.m_draw_arguments[ 2 ]	 = argument_2;
+		pipeline.m_draw_arguments[ 3 ]	 = argument_3;
+		pipeline.m_draw_arguments[ 4 ]	 = argument_4;
+		pipeline.m_draw_arguments[ 5 ]	 = argument_5;
+		pipeline.m_first_draw_submission = insert_process_key( key, g_draw_submission_keys );
 	}
 
 	unsigned int begin_driver_call( ) noexcept {
@@ -559,8 +637,9 @@ namespace p2boost::renderer_research {
 		metrics.m_max_draw_primitive_type  = primitive_type;
 		metrics.m_max_draw_primitive_count = primitive_count;
 		metrics.m_max_draw_vertex_count	   = vertex_count;
-		metrics.m_max_draw_vertex_shader   = pipeline.m_state.m_vertex_shader;
-		metrics.m_max_draw_pixel_shader	   = pipeline.m_state.m_pixel_shader;
+		std::copy_n( pipeline.m_draw_arguments, metrics.m_max_draw_arguments.size( ), metrics.m_max_draw_arguments.begin( ) );
+		metrics.m_max_draw_vertex_shader = pipeline.m_state.m_vertex_shader;
+		metrics.m_max_draw_pixel_shader	 = pipeline.m_state.m_pixel_shader;
 		std::copy_n( pipeline.m_state.m_textures, metrics.m_max_draw_textures.size( ), metrics.m_max_draw_textures.begin( ) );
 
 		// Some ShaderAPI paths restore state without passing through the public
@@ -603,7 +682,17 @@ namespace p2boost::renderer_research {
 		std::copy_n( pipeline.m_state.m_vertex_buffers,
 			metrics.m_max_draw_vertex_buffers.size( ),
 			metrics.m_max_draw_vertex_buffers.begin( ) );
+		std::copy_n( pipeline.m_state.m_vertex_offsets,
+			metrics.m_max_draw_vertex_offsets.size( ),
+			metrics.m_max_draw_vertex_offsets.begin( ) );
+		std::copy_n( pipeline.m_state.m_vertex_strides,
+			metrics.m_max_draw_vertex_strides.size( ),
+			metrics.m_max_draw_vertex_strides.begin( ) );
+		std::copy_n( pipeline.m_state.m_vertex_frequencies,
+			metrics.m_max_draw_vertex_frequencies.size( ),
+			metrics.m_max_draw_vertex_frequencies.begin( ) );
 		metrics.m_max_draw_index_buffer = pipeline.m_state.m_index_buffer;
+		describe_geometry( metrics );
 		describe_texture_0( metrics );
 
 		// stack capture is limited to material stalls above two milliseconds.

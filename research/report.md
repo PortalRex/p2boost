@@ -497,6 +497,61 @@ driver reports their defaults as enabled. The DX cache also received no Portal
 2 write during the cold capture. Forcing either profile value would therefore
 be an unsupported external workaround rather than a demonstrated engine fix.
 
+A fresh-process synchronous-material control set `mat_queue_mode 0` only for
+one playback and closed the game afterward. It reproduced 53.6494 and
+58.3473 ms portal-adjacent frames. With no queued material worker, the first
+frame spent 33.5459 ms directly inside the portal renderer on the main thread.
+The same native cold work therefore occurs on either Source thread; changing
+the queue handoff only moves its attribution and is not a hitch correction.
+
+The slow portal submission binds Source's 1.5 MiB dynamic, write-only,
+default-pool vertex buffer and 64 KiB dynamic, write-only, default-pool
+16-bit index buffer. Its exact indexed draw uses base vertex 0, minimum vertex
+2070, 36 vertices, start index 8586, and two triangles. The complete first-use
+portal batch consumes only 27,648 index bytes, so it does not exhaust the
+64 KiB ring.
+
+A reversible research prototype nevertheless rebuilt the live index buffer at
+256 KiB and patched its future construction capacity. The native descriptor
+confirmed the larger allocation. Matched fresh-process captures measured
+57.7579 ms unpatched versus 58.1969 ms patched for the portal worker, followed
+by 60.6222 ms versus 60.3086 ms hardware-sync workers. The larger ring did not
+change either blocking operation and is therefore rejected; none of that
+prototype remains in the production patch.
+
+The sampled `stdshader_dx9.dll+0x27fef` leaf is Valve's public
+`PortalStaticOverlay` shader. Its slow bound 128x128 A8R8G8B8 texture matches
+the static-blend texture used by the shipped `portalstaticoverlay_*_noz`
+materials. Converting only that exact 8-mip managed texture to a lockable
+default-pool allocation reduced its formerly 9.95--10.84 ms draw to
+0.002--0.07 ms. This proves managed-resource promotion contributes to the
+cold burst, but it did not remove the complete event.
+
+A broader control converted static 2D managed textures while preserving every
+format, dimension, mip, and byte. A stronger variant used a system-memory
+writable peer, performed the real D3D9 `UpdateTexture` into a matching
+default-pool texture after the final mip write, fenced that upload during the
+existing load operation, and substituted only the resident peer at
+`SetTexture`. This reduced the portal worker's native draw total from the
+usual 27--37 ms range to 17.1109 ms and first-resource draw time to 3.6258 ms,
+but the presented portal frame still reached 46.3853 ms and the following
+hardware fence remained 57.5680 ms. Managed texture residency is therefore a
+secondary contributor, not the general hitch cause. The pool-replacement
+prototype is rejected because it cannot satisfy device-reset and completeness
+requirements while the dominant first-submission/fence cost remains.
+
+Native D3D9 vertex/index `Lock` hooks then recovered the offsets, byte counts,
+and flags hidden by Source's mesh wrapper. The 63.5426 ms portal worker made
+62 vertex locks for 199,456 bytes and 126 index locks for 56,088 bytes. The
+vertex stream used one `D3DLOCK_DISCARD` followed by 61
+`D3DLOCK_NOOVERWRITE` locks; the index stream used one discard and 124
+no-overwrite locks. Both included `D3DLOCK_NOSYSLOCK`. All 188 native locks
+together cost only 0.0399 ms. The following 57.4290 ms hardware-fence worker
+used the same correct ring policy and spent only 0.0402 ms in 206 native
+locks. Dynamic-buffer synchronization and lock flags are therefore excluded
+as causes; changing them would violate the proven API contract without
+addressing the stall.
+
 The exact call chain resolves to `shaderapidx9.dll+0xb28c/+0x1ee55`,
 `materialsystem.dll+0x3ac67`, `stdshader_dx9.dll+0x4aeb3/+0x27fef/+0x4a5c5`,
 then back through the material and ShaderAPI mesh dispatch. Ghidra places

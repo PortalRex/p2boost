@@ -159,6 +159,8 @@ namespace p2boost::portal2 {
 	namespace d3d9 {
 		constexpr size_t present{ 17 };
 		constexpr size_t create_texture{ 23 };
+		constexpr size_t create_vertex_buffer{ 26 };
+		constexpr size_t create_index_buffer{ 27 };
 		constexpr size_t update_surface{ 30 };
 		constexpr size_t update_texture{ 31 };
 		constexpr size_t stretch_rect{ 34 };
@@ -180,9 +182,11 @@ namespace p2boost::portal2 {
 		constexpr size_t create_vertex_shader{ 91 };
 		constexpr size_t set_vertex_shader{ 92 };
 		constexpr size_t set_stream_source{ 100 };
+		constexpr size_t set_stream_source_frequency{ 102 };
 		constexpr size_t set_indices{ 104 };
 		constexpr size_t create_pixel_shader{ 106 };
 		constexpr size_t set_pixel_shader{ 107 };
+		constexpr size_t buffer_lock{ 11 };
 	}
 
 }

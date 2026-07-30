@@ -56,6 +56,7 @@ namespace p2boost {
 		using DestroyOcclusionQuery_t = void( __thiscall* )( void*, unsigned int );
 		using IndexBufferLock_t		  = unsigned int( __thiscall* )( void*, int, char, void* );
 		using VertexBufferLock_t	  = unsigned int( __thiscall* )( void*, int, unsigned int, void* );
+		using NativeBufferLock_t	  = HRESULT( __stdcall* )( void*, UINT, UINT, void**, DWORD );
 
 		static void __fastcall DynamicLightExecute( void*, void* );
 		static unsigned int __fastcall CreateOcclusionQuery( void*, void* );
@@ -66,6 +67,10 @@ namespace p2boost {
 		friend void __cdecl command_execute_hook( );
 		static HRESULT __stdcall CreateTexture(
 			IDirect3DDevice9*, UINT, UINT, UINT, DWORD, D3DFORMAT, D3DPOOL, IDirect3DTexture9**, HANDLE* );
+		static HRESULT __stdcall CreateVertexBuffer( IDirect3DDevice9*, UINT, DWORD, DWORD, D3DPOOL, IDirect3DVertexBuffer9**, HANDLE* );
+		static HRESULT __stdcall CreateIndexBuffer( IDirect3DDevice9*, UINT, DWORD, D3DFORMAT, D3DPOOL, IDirect3DIndexBuffer9**, HANDLE* );
+		static HRESULT __stdcall NativeVertexBufferLock( IDirect3DVertexBuffer9*, UINT, UINT, void**, DWORD );
+		static HRESULT __stdcall NativeIndexBufferLock( IDirect3DIndexBuffer9*, UINT, UINT, void**, DWORD );
 		static HRESULT __stdcall CreateVertexShader( IDirect3DDevice9*, const DWORD*, IDirect3DVertexShader9** );
 		static HRESULT __stdcall CreatePixelShader( IDirect3DDevice9*, const DWORD*, IDirect3DPixelShader9** );
 		static HRESULT __stdcall NativePresent( IDirect3DDevice9*, const RECT*, const RECT*, HWND, const RGNDATA* );
@@ -86,6 +91,7 @@ namespace p2boost {
 		static HRESULT __stdcall SetFvf( IDirect3DDevice9*, DWORD );
 		static HRESULT __stdcall SetVertexShader( IDirect3DDevice9*, IDirect3DVertexShader9* );
 		static HRESULT __stdcall SetStreamSource( IDirect3DDevice9*, UINT, IDirect3DVertexBuffer9*, UINT, UINT );
+		static HRESULT __stdcall SetStreamSourceFrequency( IDirect3DDevice9*, UINT, UINT );
 		static HRESULT __stdcall SetIndices( IDirect3DDevice9*, IDirect3DIndexBuffer9* );
 		static HRESULT __stdcall SetPixelShader( IDirect3DDevice9*, IDirect3DPixelShader9* );
 		static HRESULT __stdcall DrawPrimitive( IDirect3DDevice9*, D3DPRIMITIVETYPE, UINT, UINT );
@@ -110,6 +116,10 @@ namespace p2boost {
 
 #ifdef P2BOOST_RESEARCH_DRAW_TRACE
 		VtableSlotHook		  m_create_texture;
+		VtableSlotHook		  m_create_vertex_buffer;
+		VtableSlotHook		  m_create_index_buffer;
+		VtableSlotHook		  m_native_vertex_buffer_lock;
+		VtableSlotHook		  m_native_index_buffer_lock;
 		VtableSlotHook		  m_create_vertex_shader;
 		VtableSlotHook		  m_create_pixel_shader;
 		VtableSlotHook		  m_native_present;
@@ -133,6 +143,7 @@ namespace p2boost {
 		VtableSlotHook		  m_set_fvf;
 		VtableSlotHook		  m_set_vertex_shader;
 		VtableSlotHook		  m_set_stream_source;
+		VtableSlotHook		  m_set_stream_source_frequency;
 		VtableSlotHook		  m_set_indices;
 		VtableSlotHook		  m_set_pixel_shader;
 		VtableSlotHook		  m_dynamic_light_execute_unsigned;

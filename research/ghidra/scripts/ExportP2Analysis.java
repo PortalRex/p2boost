@@ -139,6 +139,20 @@ public class ExportP2Analysis extends GhidraScript {
         addFunctionsReferencingAddress(targets, global, depth, 2, new HashSet<Address>());
     }
 
+    private void addVtableFunctions(Set<Function> targets, long address, int count, int depth)
+        throws Exception {
+        Address slot = currentProgram.getAddressFactory().getDefaultAddressSpace().getAddress(address);
+        for (int index = 0; index < count; ++index, slot = slot.add(4)) {
+            // MSVC x86 virtual tables contain absolute 32-bit function
+            // pointers. Export each valid entry and its callers.
+            long target = Integer.toUnsignedLong(getInt(slot));
+            Address targetAddress = currentProgram.getAddressFactory()
+                .getDefaultAddressSpace().getAddress(target);
+            if (!currentProgram.getMemory().contains(targetAddress)) break;
+            addFunctionAndCallers(targets, target, depth);
+        }
+    }
+
     @Override
     protected void run() throws Exception {
         String[] args = getScriptArgs();
@@ -260,9 +274,26 @@ public class ExportP2Analysis extends GhidraScript {
                 // indirection that Ghidra's string-reference pass does not always follow.
                 0x10008cf0L, 0x10008f60L, 0x100090b0L, 0x100093d0L,
                 // D3D9 allocation plus the vertex/index Lock entry paths.
-                0x10005a90L, 0x10005b40L, 0x10009160L, 0x1000ad90L
+                0x10005a90L, 0x10005b40L, 0x10009160L, 0x1000ad90L,
+                // Dynamic-index object construction and CMeshMgr's device
+                // initialization method expose the actual 32K-index buffer.
+                0x10008b50L, 0x10008c40L, 0x1000bf60L,
+                // CMeshMgr construction stores the shipped 1.5 MiB vertex and
+                // 64 KiB index ring capacities before either buffer allocates.
+                0x1000caf0L, 0x1006d1b0L
             };
             for (long address : dynamicBufferTargets) addFunctionAndCallers(targets, address, 2);
+            // CMeshMgr owns the shipped dynamic-index limits at these two
+            // fields. Export every direct reader so capacity, cursor, and
+            // discard semantics can be changed without guessing.
+            addFunctionsReferencingGlobal(targets, 0x100d5f88L, 3);
+            addFunctionsReferencingGlobal(targets, 0x100d5f8cL, 3);
+            // Export readers of CMeshMgr's live dynamic-index-buffer pointer.
+            // They reveal whether a capacity update can safely recreate it.
+            addFunctionsReferencingGlobal(targets, 0x100d5d9cL, 3);
+            // CMeshMgr's vtable includes device init/shutdown and the mesh
+            // allocation paths that own the live dynamic buffers.
+            addVtableFunctions(targets, 0x1006f89cL, 24, 2);
             long[] hardwareSyncTargets = {
                 // Queued render-context slot 219 reaches +0x14a50; its two query
                 // helpers are the deterministic Trust Fling hitch path.

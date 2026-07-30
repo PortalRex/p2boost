@@ -22,6 +22,9 @@ namespace p2boost::renderer_research {
 		std::uint32_t m_vertex_declaration{ };
 		std::uint32_t m_fvf{ };
 		std::uint32_t m_vertex_buffers[ 4 ]{ };
+		std::uint32_t m_vertex_offsets[ 4 ]{ };
+		std::uint32_t m_vertex_strides[ 4 ]{ };
+		std::uint32_t m_vertex_frequencies[ 4 ]{ };
 		std::uint32_t m_index_buffer{ };
 	};
 
@@ -32,6 +35,8 @@ namespace p2boost::renderer_research {
 		bool		  m_first_pipeline{ };
 		bool		  m_first_state_pipeline{ };
 		bool		  m_first_draw_submission{ };
+		std::uint32_t m_draw_submission_key{ };
+		std::uint32_t m_draw_arguments[ 6 ]{ };
 		std::uint8_t  m_first_texture_mask{ };
 		std::uint8_t  m_first_vertex_buffer_mask{ };
 		bool		  m_first_index_buffer{ };
@@ -56,11 +61,20 @@ namespace p2boost::renderer_research {
 	void							  set_sampler_state( DWORD sampler, D3DSAMPLERSTATETYPE state, DWORD value ) noexcept;
 	void							  set_vertex_declaration( IDirect3DVertexDeclaration9* declaration ) noexcept;
 	void							  set_fvf( DWORD fvf ) noexcept;
-	void							  set_stream_source( UINT stream, IDirect3DVertexBuffer9* buffer ) noexcept;
+	void							  set_stream_source( UINT stream, IDirect3DVertexBuffer9* buffer, UINT offset, UINT stride ) noexcept;
+	void							  set_stream_source_frequency( UINT stream, UINT setting ) noexcept;
 	void							  set_indices( IDirect3DIndexBuffer9* buffer ) noexcept;
 	void							  set_vertex_shader( IDirect3DVertexShader9* shader ) noexcept;
 	void							  set_pixel_shader( IDirect3DPixelShader9* shader ) noexcept;
 	[[nodiscard]] PipelineObservation observe_pipeline( IDirect3DDevice9* device ) noexcept;
+	void							  classify_draw_submission( PipelineObservation& pipeline,
+									 unsigned int									 method,
+									 unsigned int									 argument_0,
+									 unsigned int									 argument_1,
+									 unsigned int									 argument_2,
+									 unsigned int									 argument_3,
+									 unsigned int									 argument_4,
+									 unsigned int									 argument_5 ) noexcept;
 	[[nodiscard]] unsigned int		  begin_driver_call( ) noexcept;
 	void record_driver_call( RenderWorkerMetrics& metrics, unsigned int method, unsigned int sequence, Qpc::tick_t begin_qpc ) noexcept;
 	void record_draw( RenderWorkerMetrics& metrics,

@@ -221,6 +221,14 @@ namespace p2boost {
 		const bool draw_hooks =
 			d3d_device &&
 			install_slot( m_create_texture, d3d_device, portal2::d3d9::create_texture, reinterpret_cast< void* >( &CreateTexture ) ) &&
+			install_slot( m_create_vertex_buffer,
+				d3d_device,
+				portal2::d3d9::create_vertex_buffer,
+				reinterpret_cast< void* >( &CreateVertexBuffer ) ) &&
+			install_slot( m_create_index_buffer,
+				d3d_device,
+				portal2::d3d9::create_index_buffer,
+				reinterpret_cast< void* >( &CreateIndexBuffer ) ) &&
 			install_slot( m_create_vertex_shader,
 				d3d_device,
 				portal2::d3d9::create_vertex_shader,
@@ -267,6 +275,10 @@ namespace p2boost {
 				d3d_device,
 				portal2::d3d9::set_stream_source,
 				reinterpret_cast< void* >( &SetStreamSource ) ) &&
+			install_slot( m_set_stream_source_frequency,
+				d3d_device,
+				portal2::d3d9::set_stream_source_frequency,
+				reinterpret_cast< void* >( &SetStreamSourceFrequency ) ) &&
 			install_slot( m_set_indices, d3d_device, portal2::d3d9::set_indices, reinterpret_cast< void* >( &SetIndices ) ) &&
 			install_slot( m_set_pixel_shader, d3d_device, portal2::d3d9::set_pixel_shader, reinterpret_cast< void* >( &SetPixelShader ) ) &&
 			install_slot( m_draw_primitive, d3d_device, portal2::d3d9::draw_primitive, reinterpret_cast< void* >( &DrawPrimitive ) ) &&
@@ -374,6 +386,7 @@ namespace p2boost {
 		m_draw_primitive.remove( );
 		m_set_pixel_shader.remove( );
 		m_set_indices.remove( );
+		m_set_stream_source_frequency.remove( );
 		m_set_stream_source.remove( );
 		m_set_vertex_shader.remove( );
 		m_set_fvf.remove( );
@@ -393,6 +406,10 @@ namespace p2boost {
 		m_native_present.remove( );
 		m_create_pixel_shader.remove( );
 		m_create_vertex_shader.remove( );
+		m_native_index_buffer_lock.remove( );
+		m_native_vertex_buffer_lock.remove( );
+		m_create_index_buffer.remove( );
+		m_create_vertex_buffer.remove( );
 		m_create_texture.remove( );
 		m_queued_functor_execute		 = nullptr;
 		m_queued_functor_leaf			 = nullptr;
@@ -715,7 +732,8 @@ namespace p2boost {
 			return D3DERR_INVALIDCALL;
 		const bool		  tracing = instance->m_metrics && instance->m_metrics->tracing( );
 		const Qpc::tick_t begin	  = tracing ? Qpc::now( ) : 0;
-		const HRESULT	  result  = previous( self, width, height, levels, usage, format, pool, texture, shared_handle );
+
+		const HRESULT result = previous( self, width, height, levels, usage, format, pool, texture, shared_handle );
 		if( tracing ) {
 			const Qpc::tick_t elapsed = Qpc::now( ) - begin;
 			record_timing( instance->m_pending_texture_create_count,
@@ -724,6 +742,111 @@ namespace p2boost {
 				elapsed );
 		}
 
+		return result;
+	}
+
+	HRESULT __stdcall RendererTrace::CreateVertexBuffer( IDirect3DDevice9* self,
+		UINT															   length,
+		DWORD															   usage,
+		DWORD															   fvf,
+		D3DPOOL															   pool,
+		IDirect3DVertexBuffer9**										   buffer,
+		HANDLE*															   shared_handle ) {
+		auto* instance = m_instance;
+		auto  previous =
+			 instance ? reinterpret_cast< decltype( &CreateVertexBuffer ) >( instance->m_create_vertex_buffer.previous( ) ) : nullptr;
+		if( !previous )
+			return D3DERR_INVALIDCALL;
+		const HRESULT result = previous( self, length, usage, fvf, pool, buffer, shared_handle );
+		if( SUCCEEDED( result ) && buffer && *buffer && !instance->m_native_vertex_buffer_lock.installed( ) ) {
+			auto** vtable = *reinterpret_cast< void*** >( *buffer );
+			if( vtable ) {
+				instance->m_native_vertex_buffer_lock.install( vtable + portal2::d3d9::buffer_lock,
+					reinterpret_cast< void* >( &NativeVertexBufferLock ) );
+			}
+		}
+		return result;
+	}
+
+	HRESULT __stdcall RendererTrace::CreateIndexBuffer( IDirect3DDevice9* self,
+		UINT															  length,
+		DWORD															  usage,
+		D3DFORMAT														  format,
+		D3DPOOL															  pool,
+		IDirect3DIndexBuffer9**											  buffer,
+		HANDLE*															  shared_handle ) {
+		auto* instance = m_instance;
+		auto  previous =
+			 instance ? reinterpret_cast< decltype( &CreateIndexBuffer ) >( instance->m_create_index_buffer.previous( ) ) : nullptr;
+		if( !previous )
+			return D3DERR_INVALIDCALL;
+		const HRESULT result = previous( self, length, usage, format, pool, buffer, shared_handle );
+		if( SUCCEEDED( result ) && buffer && *buffer && !instance->m_native_index_buffer_lock.installed( ) ) {
+			auto** vtable = *reinterpret_cast< void*** >( *buffer );
+			if( vtable ) {
+				instance->m_native_index_buffer_lock.install( vtable + portal2::d3d9::buffer_lock,
+					reinterpret_cast< void* >( &NativeIndexBufferLock ) );
+			}
+		}
+		return result;
+	}
+
+	HRESULT __stdcall RendererTrace::NativeVertexBufferLock(
+		IDirect3DVertexBuffer9* self, UINT offset, UINT size, void** data, DWORD flags ) {
+		auto* instance = m_instance;
+		auto  previous = instance
+							 ? reinterpret_cast< decltype( &NativeVertexBufferLock ) >( instance->m_native_vertex_buffer_lock.previous( ) )
+							 : nullptr;
+		if( !previous )
+			return D3DERR_INVALIDCALL;
+		if( !g_worker_trace.m_active || !instance->m_metrics || !instance->m_metrics->tracing( ) )
+			return previous( self, offset, size, data, flags );
+
+		UINT observed_size = size;
+		if( !observed_size ) {
+			D3DVERTEXBUFFER_DESC description{ };
+			if( SUCCEEDED( self->GetDesc( &description ) ) && offset < description.Size )
+				observed_size = description.Size - offset;
+		}
+		const Qpc::tick_t begin	  = Qpc::now( );
+		const HRESULT	  result  = previous( self, offset, size, data, flags );
+		const Qpc::tick_t elapsed = Qpc::now( ) - begin;
+		++g_worker_trace.m_native_vertex_buffer_lock_count;
+		g_worker_trace.m_native_vertex_buffer_lock_bytes += observed_size;
+		g_worker_trace.m_native_vertex_buffer_discard_count += ( flags & D3DLOCK_DISCARD ) != 0;
+		g_worker_trace.m_native_vertex_buffer_no_overwrite_count += ( flags & D3DLOCK_NOOVERWRITE ) != 0;
+		g_worker_trace.m_native_vertex_buffer_lock_flags |= flags;
+		g_worker_trace.m_native_vertex_buffer_lock_qpc += elapsed;
+		g_worker_trace.m_max_native_vertex_buffer_lock_qpc = std::max( g_worker_trace.m_max_native_vertex_buffer_lock_qpc, elapsed );
+		return result;
+	}
+
+	HRESULT __stdcall RendererTrace::NativeIndexBufferLock(
+		IDirect3DIndexBuffer9* self, UINT offset, UINT size, void** data, DWORD flags ) {
+		auto* instance = m_instance;
+		auto  previous =
+			 instance ? reinterpret_cast< decltype( &NativeIndexBufferLock ) >( instance->m_native_index_buffer_lock.previous( ) ) : nullptr;
+		if( !previous )
+			return D3DERR_INVALIDCALL;
+		if( !g_worker_trace.m_active || !instance->m_metrics || !instance->m_metrics->tracing( ) )
+			return previous( self, offset, size, data, flags );
+
+		UINT observed_size = size;
+		if( !observed_size ) {
+			D3DINDEXBUFFER_DESC description{ };
+			if( SUCCEEDED( self->GetDesc( &description ) ) && offset < description.Size )
+				observed_size = description.Size - offset;
+		}
+		const Qpc::tick_t begin	  = Qpc::now( );
+		const HRESULT	  result  = previous( self, offset, size, data, flags );
+		const Qpc::tick_t elapsed = Qpc::now( ) - begin;
+		++g_worker_trace.m_native_index_buffer_lock_count;
+		g_worker_trace.m_native_index_buffer_lock_bytes += observed_size;
+		g_worker_trace.m_native_index_buffer_discard_count += ( flags & D3DLOCK_DISCARD ) != 0;
+		g_worker_trace.m_native_index_buffer_no_overwrite_count += ( flags & D3DLOCK_NOOVERWRITE ) != 0;
+		g_worker_trace.m_native_index_buffer_lock_flags |= flags;
+		g_worker_trace.m_native_index_buffer_lock_qpc += elapsed;
+		g_worker_trace.m_max_native_index_buffer_lock_qpc = std::max( g_worker_trace.m_max_native_index_buffer_lock_qpc, elapsed );
 		return result;
 	}
 
@@ -944,6 +1067,7 @@ namespace p2boost {
 		auto  previous = instance ? reinterpret_cast< decltype( &SetTexture ) >( instance->m_set_texture.previous( ) ) : nullptr;
 		if( !previous )
 			return D3DERR_INVALIDCALL;
+
 		const HRESULT result = previous( self, stage, texture );
 		if( SUCCEEDED( result ) )
 			renderer_research::set_texture( stage, texture );
@@ -1017,7 +1141,20 @@ namespace p2boost {
 			return D3DERR_INVALIDCALL;
 		const HRESULT result = previous( self, stream, buffer, offset, stride );
 		if( SUCCEEDED( result ) )
-			renderer_research::set_stream_source( stream, buffer );
+			renderer_research::set_stream_source( stream, buffer, offset, stride );
+		return result;
+	}
+
+	HRESULT __stdcall RendererTrace::SetStreamSourceFrequency( IDirect3DDevice9* self, UINT stream, UINT setting ) {
+		auto* instance = m_instance;
+		auto  previous =
+			 instance ? reinterpret_cast< decltype( &SetStreamSourceFrequency ) >( instance->m_set_stream_source_frequency.previous( ) )
+					  : nullptr;
+		if( !previous )
+			return D3DERR_INVALIDCALL;
+		const HRESULT result = previous( self, stream, setting );
+		if( SUCCEEDED( result ) )
+			renderer_research::set_stream_source_frequency( stream, setting );
 		return result;
 	}
 
@@ -1051,7 +1188,15 @@ namespace p2boost {
 		auto  previous = instance ? reinterpret_cast< decltype( &DrawPrimitive ) >( instance->m_draw_primitive.previous( ) ) : nullptr;
 		if( !previous )
 			return D3DERR_INVALIDCALL;
-		const auto pipeline = renderer_research::observe_pipeline( self );
+		auto pipeline = renderer_research::observe_pipeline( self );
+		renderer_research::classify_draw_submission( pipeline,
+			portal2::d3d9::draw_primitive,
+			static_cast< unsigned int >( primitive_type ),
+			start_vertex,
+			primitive_count,
+			0,
+			0,
+			0 );
 		if( !g_worker_trace.m_active || !instance->m_metrics || !instance->m_metrics->tracing( ) )
 			return previous( self, primitive_type, start_vertex, primitive_count );
 		const unsigned int sequence = renderer_research::begin_driver_call( );
@@ -1082,7 +1227,15 @@ namespace p2boost {
 			 instance ? reinterpret_cast< decltype( &DrawIndexedPrimitive ) >( instance->m_draw_indexed_primitive.previous( ) ) : nullptr;
 		if( !previous )
 			return D3DERR_INVALIDCALL;
-		const auto pipeline = renderer_research::observe_pipeline( self );
+		auto pipeline = renderer_research::observe_pipeline( self );
+		renderer_research::classify_draw_submission( pipeline,
+			portal2::d3d9::draw_indexed_primitive,
+			static_cast< unsigned int >( primitive_type ),
+			static_cast< unsigned int >( base_vertex_index ),
+			min_vertex_index,
+			vertex_count,
+			start_index,
+			primitive_count );
 		if( !g_worker_trace.m_active || !instance->m_metrics || !instance->m_metrics->tracing( ) )
 			return previous( self, primitive_type, base_vertex_index, min_vertex_index, vertex_count, start_index, primitive_count );
 		const unsigned int sequence = renderer_research::begin_driver_call( );
@@ -1108,7 +1261,15 @@ namespace p2boost {
 		auto  previous = instance ? reinterpret_cast< decltype( &DrawPrimitiveUp ) >( instance->m_draw_primitive_up.previous( ) ) : nullptr;
 		if( !previous )
 			return D3DERR_INVALIDCALL;
-		const auto pipeline = renderer_research::observe_pipeline( self );
+		auto pipeline = renderer_research::observe_pipeline( self );
+		renderer_research::classify_draw_submission( pipeline,
+			portal2::d3d9::draw_primitive_up,
+			static_cast< unsigned int >( primitive_type ),
+			primitive_count,
+			vertex_stride,
+			0,
+			0,
+			0 );
 		if( !g_worker_trace.m_active || !instance->m_metrics || !instance->m_metrics->tracing( ) )
 			return previous( self, primitive_type, primitive_count, vertex_data, vertex_stride );
 		const unsigned int sequence = renderer_research::begin_driver_call( );
@@ -1142,7 +1303,15 @@ namespace p2boost {
 							 : nullptr;
 		if( !previous )
 			return D3DERR_INVALIDCALL;
-		const auto pipeline = renderer_research::observe_pipeline( self );
+		auto pipeline = renderer_research::observe_pipeline( self );
+		renderer_research::classify_draw_submission( pipeline,
+			portal2::d3d9::draw_indexed_primitive_up,
+			static_cast< unsigned int >( primitive_type ),
+			min_vertex_index,
+			vertex_count,
+			primitive_count,
+			static_cast< unsigned int >( index_format ),
+			vertex_stride );
 		if( !g_worker_trace.m_active || !instance->m_metrics || !instance->m_metrics->tracing( ) )
 			return previous( self,
 				primitive_type,
