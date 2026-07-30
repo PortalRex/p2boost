@@ -10,25 +10,38 @@
 #include <atomic>
 #include <cstddef>
 #include <cstring>
+#include <iterator>
 #include <vector>
 
 namespace p2boost::renderer_research {
 	namespace {
 
-		constexpr std::size_t pointer_table_size  = 8192;
-		constexpr std::size_t pipeline_table_size = 16384;
+		constexpr std::size_t pointer_table_size		= 8192;
+		constexpr std::size_t pipeline_table_size		= 16384;
+		constexpr std::size_t render_state_count		= 256;
+		constexpr std::size_t texture_stage_count		= 8;
+		constexpr std::size_t texture_stage_state_count = 33;
+		constexpr std::size_t sampler_count				= 16;
+		constexpr std::size_t sampler_state_count		= 14;
 		static_assert( ( pointer_table_size & ( pointer_table_size - 1 ) ) == 0 );
 		static_assert( ( pipeline_table_size & ( pipeline_table_size - 1 ) ) == 0 );
 
 		thread_local std::uint32_t g_dynamic_light_table[ pointer_table_size ]{ };
 		thread_local std::uint32_t g_dynamic_surface_table[ pointer_table_size ]{ };
+		thread_local std::uint32_t g_render_states[ render_state_count ]{ };
+		thread_local std::uint32_t g_texture_stage_states[ texture_stage_count ][ texture_stage_state_count ]{ };
+		thread_local std::uint32_t g_sampler_states[ sampler_count ][ sampler_state_count ]{ };
 		thread_local PipelineState g_pipeline_state;
 		thread_local unsigned int  g_driver_call_sequence{ };
+		thread_local bool		   g_device_state_initialized{ };
 
 		alignas( 64 ) std::atomic_uint32_t g_vertex_shader_keys[ pipeline_table_size ]{ };
 		alignas( 64 ) std::atomic_uint32_t g_pixel_shader_keys[ pipeline_table_size ]{ };
 		alignas( 64 ) std::atomic_uint32_t g_pipeline_keys[ pipeline_table_size ]{ };
+		alignas( 64 ) std::atomic_uint32_t g_state_pipeline_keys[ pipeline_table_size ]{ };
 		alignas( 64 ) std::atomic_uint32_t g_texture_keys[ pipeline_table_size ]{ };
+		alignas( 64 ) std::atomic_uint32_t g_geometry_keys[ pipeline_table_size ]{ };
+		alignas( 64 ) std::atomic_uint32_t g_draw_submission_keys[ pipeline_table_size ]{ };
 
 		std::uint64_t hash_bytes( const std::uint8_t* bytes, std::size_t size ) noexcept {
 			// FNV-1a gives stable research identities without storing bytecode.
@@ -91,6 +104,92 @@ namespace p2boost::renderer_research {
 				slot = ( slot + 1 ) & ( pipeline_table_size - 1 );
 			}
 			return false;
+		}
+
+		std::uint32_t mix_word( std::uint32_t hash, std::uint32_t value ) noexcept {
+			// FNV-1a over words is sufficient for classifying exact state reuse.
+			for( unsigned int byte = 0; byte < sizeof( value ); ++byte ) {
+				hash ^= value & 0xffu;
+				hash *= 16777619u;
+				value >>= 8;
+			}
+			return hash;
+		}
+
+		void initialize_device_state( IDirect3DDevice9* device ) noexcept {
+			if( g_device_state_initialized || !device )
+				return;
+
+			// The plugin loads after D3D9 establishes its default state. Seed
+			// the mirror once from the authoritative device, then let the
+			// setter hooks maintain it without per-draw Get calls.
+			for( std::size_t index = 0; index < render_state_count; ++index ) {
+				DWORD value = 0;
+				if( SUCCEEDED( device->GetRenderState( static_cast< D3DRENDERSTATETYPE >( index ), &value ) ) )
+					g_render_states[ index ] = value;
+			}
+
+			for( DWORD stage = 0; stage < texture_stage_count; ++stage ) {
+				for( DWORD state = 0; state < texture_stage_state_count; ++state ) {
+					DWORD value = 0;
+					if( SUCCEEDED( device->GetTextureStageState( stage, static_cast< D3DTEXTURESTAGESTATETYPE >( state ), &value ) ) ) {
+						g_texture_stage_states[ stage ][ state ] = value;
+					}
+				}
+			}
+
+			for( DWORD sampler = 0; sampler < sampler_count; ++sampler ) {
+				for( DWORD state = 0; state < sampler_state_count; ++state ) {
+					DWORD value = 0;
+					if( SUCCEEDED( device->GetSamplerState( sampler, static_cast< D3DSAMPLERSTATETYPE >( state ), &value ) ) )
+						g_sampler_states[ sampler ][ state ] = value;
+				}
+			}
+
+			for( DWORD index = 0; index < std::size( g_pipeline_state.m_render_targets ); ++index ) {
+				IDirect3DSurface9* target{ };
+				if( SUCCEEDED( device->GetRenderTarget( index, &target ) ) && target ) {
+					g_pipeline_state.m_render_targets[ index ] =
+						static_cast< std::uint32_t >( reinterpret_cast< std::uintptr_t >( target ) );
+					target->Release( );
+				}
+			}
+
+			IDirect3DSurface9* depth_stencil{ };
+			if( SUCCEEDED( device->GetDepthStencilSurface( &depth_stencil ) ) && depth_stencil ) {
+				g_pipeline_state.m_depth_stencil_surface =
+					static_cast< std::uint32_t >( reinterpret_cast< std::uintptr_t >( depth_stencil ) );
+				depth_stencil->Release( );
+			}
+
+			IDirect3DVertexDeclaration9* declaration{ };
+			if( SUCCEEDED( device->GetVertexDeclaration( &declaration ) ) && declaration ) {
+				g_pipeline_state.m_vertex_declaration = static_cast< std::uint32_t >( reinterpret_cast< std::uintptr_t >( declaration ) );
+				declaration->Release( );
+			}
+
+			DWORD fvf = 0;
+			if( SUCCEEDED( device->GetFVF( &fvf ) ) )
+				g_pipeline_state.m_fvf = fvf;
+
+			for( UINT stream = 0; stream < std::size( g_pipeline_state.m_vertex_buffers ); ++stream ) {
+				IDirect3DVertexBuffer9* buffer{ };
+				UINT					offset = 0;
+				UINT					stride = 0;
+				if( SUCCEEDED( device->GetStreamSource( stream, &buffer, &offset, &stride ) ) && buffer ) {
+					g_pipeline_state.m_vertex_buffers[ stream ] =
+						static_cast< std::uint32_t >( reinterpret_cast< std::uintptr_t >( buffer ) );
+					buffer->Release( );
+				}
+			}
+
+			IDirect3DIndexBuffer9* index_buffer{ };
+			if( SUCCEEDED( device->GetIndices( &index_buffer ) ) && index_buffer ) {
+				g_pipeline_state.m_index_buffer = static_cast< std::uint32_t >( reinterpret_cast< std::uintptr_t >( index_buffer ) );
+				index_buffer->Release( );
+			}
+
+			g_device_state_initialized = true;
 		}
 
 		std::uint8_t* resolve_command_key(
@@ -247,6 +346,54 @@ namespace p2boost::renderer_research {
 		}
 	}
 
+	void set_render_target( DWORD index, IDirect3DSurface9* target ) noexcept {
+		if( index < std::size( g_pipeline_state.m_render_targets ) ) {
+			g_pipeline_state.m_render_targets[ index ] = static_cast< std::uint32_t >( reinterpret_cast< std::uintptr_t >( target ) );
+		}
+	}
+
+	void set_depth_stencil_surface( IDirect3DSurface9* surface ) noexcept {
+		g_pipeline_state.m_depth_stencil_surface = static_cast< std::uint32_t >( reinterpret_cast< std::uintptr_t >( surface ) );
+	}
+
+	void set_render_state( D3DRENDERSTATETYPE state, DWORD value ) noexcept {
+		const auto index = static_cast< std::size_t >( state );
+		if( index < render_state_count )
+			g_render_states[ index ] = value;
+	}
+
+	void set_texture_stage_state( DWORD stage, D3DTEXTURESTAGESTATETYPE state, DWORD value ) noexcept {
+		const auto state_index = static_cast< std::size_t >( state );
+		if( stage < texture_stage_count && state_index < texture_stage_state_count )
+			g_texture_stage_states[ stage ][ state_index ] = value;
+	}
+
+	void set_sampler_state( DWORD sampler, D3DSAMPLERSTATETYPE state, DWORD value ) noexcept {
+		const auto state_index = static_cast< std::size_t >( state );
+		if( sampler < sampler_count && state_index < sampler_state_count )
+			g_sampler_states[ sampler ][ state_index ] = value;
+	}
+
+	void set_vertex_declaration( IDirect3DVertexDeclaration9* declaration ) noexcept {
+		g_pipeline_state.m_vertex_declaration = static_cast< std::uint32_t >( reinterpret_cast< std::uintptr_t >( declaration ) );
+		g_pipeline_state.m_fvf				  = 0;
+	}
+
+	void set_fvf( DWORD fvf ) noexcept {
+		g_pipeline_state.m_vertex_declaration = 0;
+		g_pipeline_state.m_fvf				  = fvf;
+	}
+
+	void set_stream_source( UINT stream, IDirect3DVertexBuffer9* buffer ) noexcept {
+		if( stream < std::size( g_pipeline_state.m_vertex_buffers ) ) {
+			g_pipeline_state.m_vertex_buffers[ stream ] = static_cast< std::uint32_t >( reinterpret_cast< std::uintptr_t >( buffer ) );
+		}
+	}
+
+	void set_indices( IDirect3DIndexBuffer9* buffer ) noexcept {
+		g_pipeline_state.m_index_buffer = static_cast< std::uint32_t >( reinterpret_cast< std::uintptr_t >( buffer ) );
+	}
+
 	void set_vertex_shader( IDirect3DVertexShader9* shader ) noexcept {
 		g_pipeline_state.m_vertex_shader = static_cast< std::uint32_t >( reinterpret_cast< std::uintptr_t >( shader ) );
 	}
@@ -255,12 +402,35 @@ namespace p2boost::renderer_research {
 		g_pipeline_state.m_pixel_shader = static_cast< std::uint32_t >( reinterpret_cast< std::uintptr_t >( shader ) );
 	}
 
-	PipelineObservation observe_pipeline( ) noexcept {
+	PipelineObservation observe_pipeline( IDirect3DDevice9* device ) noexcept {
 		// classify first-seen resources without retaining COM references.
+		initialize_device_state( device );
 		PipelineObservation observation{ };
-		observation.m_state				  = g_pipeline_state;
-		observation.m_first_vertex_shader = insert_process_key( observation.m_state.m_vertex_shader, g_vertex_shader_keys );
-		observation.m_first_pixel_shader  = insert_process_key( observation.m_state.m_pixel_shader, g_pixel_shader_keys );
+		observation.m_state = g_pipeline_state;
+
+		// D3D9 drivers may specialize the same shader pair for blend, depth,
+		// stencil, fog, and vertex-layout state. Include every observed render
+		// state so a slow first combination is not mislabeled as a repeat.
+		auto state_hash = 2166136261u;
+		for( const auto value : g_render_states )
+			state_hash = mix_word( state_hash, value );
+		observation.m_state.m_render_state_hash = state_hash;
+
+		auto texture_stage_state_hash = 2166136261u;
+		for( const auto& stage : g_texture_stage_states ) {
+			for( const auto value : stage )
+				texture_stage_state_hash = mix_word( texture_stage_state_hash, value );
+		}
+		observation.m_state.m_texture_stage_state_hash = texture_stage_state_hash;
+
+		auto sampler_state_hash = 2166136261u;
+		for( const auto& sampler : g_sampler_states ) {
+			for( const auto value : sampler )
+				sampler_state_hash = mix_word( sampler_state_hash, value );
+		}
+		observation.m_state.m_sampler_state_hash = sampler_state_hash;
+		observation.m_first_vertex_shader		 = insert_process_key( observation.m_state.m_vertex_shader, g_vertex_shader_keys );
+		observation.m_first_pixel_shader		 = insert_process_key( observation.m_state.m_pixel_shader, g_pixel_shader_keys );
 
 		// combine both shader identities into one stable pipeline key.
 		auto pair_key = observation.m_state.m_vertex_shader * 0x9e3779b9u;
@@ -269,11 +439,42 @@ namespace p2boost::renderer_research {
 			pair_key = 1;
 		}
 		observation.m_first_pipeline = insert_process_key( pair_key, g_pipeline_keys );
+
+		auto state_pipeline_key = mix_word( state_hash, observation.m_state.m_vertex_shader );
+		state_pipeline_key		= mix_word( state_pipeline_key, observation.m_state.m_pixel_shader );
+		state_pipeline_key		= mix_word( state_pipeline_key, observation.m_state.m_vertex_declaration );
+		state_pipeline_key		= mix_word( state_pipeline_key, observation.m_state.m_fvf );
+		if( !state_pipeline_key )
+			state_pipeline_key = 1;
+		observation.m_first_state_pipeline = insert_process_key( state_pipeline_key, g_state_pipeline_keys );
+
 		for( std::size_t stage = 0; stage < 4; ++stage ) {
 			if( insert_process_key( observation.m_state.m_textures[ stage ], g_texture_keys ) ) {
 				observation.m_first_texture_mask |= static_cast< std::uint8_t >( 1u << stage );
 			}
 		}
+		for( std::size_t stream = 0; stream < std::size( observation.m_state.m_vertex_buffers ); ++stream ) {
+			if( insert_process_key( observation.m_state.m_vertex_buffers[ stream ], g_geometry_keys ) )
+				observation.m_first_vertex_buffer_mask |= static_cast< std::uint8_t >( 1u << stream );
+		}
+		observation.m_first_index_buffer = insert_process_key( observation.m_state.m_index_buffer, g_geometry_keys );
+
+		// Track the complete driver-visible draw state as one key. This catches
+		// lazy specialization that only occurs for an exact resource combination.
+		auto draw_submission_key = state_pipeline_key;
+		draw_submission_key		 = mix_word( draw_submission_key, texture_stage_state_hash );
+		draw_submission_key		 = mix_word( draw_submission_key, sampler_state_hash );
+		for( const auto texture : observation.m_state.m_textures )
+			draw_submission_key = mix_word( draw_submission_key, texture );
+		for( const auto render_target : observation.m_state.m_render_targets )
+			draw_submission_key = mix_word( draw_submission_key, render_target );
+		draw_submission_key = mix_word( draw_submission_key, observation.m_state.m_depth_stencil_surface );
+		for( const auto vertex_buffer : observation.m_state.m_vertex_buffers )
+			draw_submission_key = mix_word( draw_submission_key, vertex_buffer );
+		draw_submission_key = mix_word( draw_submission_key, observation.m_state.m_index_buffer );
+		if( !draw_submission_key )
+			draw_submission_key = 1;
+		observation.m_first_draw_submission = insert_process_key( draw_submission_key, g_draw_submission_keys );
 		return observation;
 	}
 
@@ -327,12 +528,28 @@ namespace p2boost::renderer_research {
 			++metrics.m_first_pipeline_draw_count;
 			metrics.m_first_pipeline_draw_qpc += elapsed;
 		}
+		if( pipeline.m_first_state_pipeline ) {
+			++metrics.m_first_state_pipeline_draw_count;
+			metrics.m_first_state_pipeline_draw_qpc += elapsed;
+		}
+		if( pipeline.m_first_vertex_buffer_mask || pipeline.m_first_index_buffer ) {
+			++metrics.m_first_geometry_draw_count;
+			metrics.m_first_geometry_draw_qpc += elapsed;
+		}
+		if( pipeline.m_first_draw_submission ) {
+			++metrics.m_first_draw_submission_count;
+			metrics.m_first_draw_submission_qpc += elapsed;
+		}
 		if( first_pipeline || first_texture ) {
 			++metrics.m_first_resource_draw_count;
 			metrics.m_first_resource_draw_qpc += elapsed;
 		}
 		for( auto mask = pipeline.m_first_texture_mask; mask != 0; mask >>= 1 )
 			metrics.m_first_texture_count += mask & 1u;
+		for( auto mask = pipeline.m_first_vertex_buffer_mask; mask != 0; mask >>= 1 )
+			metrics.m_first_vertex_buffer_count += mask & 1u;
+		if( pipeline.m_first_index_buffer )
+			++metrics.m_first_index_buffer_count;
 		if( elapsed <= metrics.m_max_draw_qpc ) {
 			return;
 		}
@@ -372,10 +589,21 @@ namespace p2boost::renderer_research {
 				}
 			}
 		}
-		metrics.m_max_draw_first_vertex_shader = pipeline.m_first_vertex_shader;
-		metrics.m_max_draw_first_pixel_shader  = pipeline.m_first_pixel_shader;
-		metrics.m_max_draw_first_pipeline	   = pipeline.m_first_pipeline;
-		metrics.m_max_draw_first_texture_mask  = pipeline.m_first_texture_mask;
+		metrics.m_max_draw_first_vertex_shader		= pipeline.m_first_vertex_shader;
+		metrics.m_max_draw_first_pixel_shader		= pipeline.m_first_pixel_shader;
+		metrics.m_max_draw_first_pipeline			= pipeline.m_first_pipeline;
+		metrics.m_max_draw_first_state_pipeline		= pipeline.m_first_state_pipeline;
+		metrics.m_max_draw_first_submission			= pipeline.m_first_draw_submission;
+		metrics.m_max_draw_first_texture_mask		= pipeline.m_first_texture_mask;
+		metrics.m_max_draw_first_vertex_buffer_mask = pipeline.m_first_vertex_buffer_mask;
+		metrics.m_max_draw_first_index_buffer		= pipeline.m_first_index_buffer;
+		metrics.m_max_draw_render_state_hash		= pipeline.m_state.m_render_state_hash;
+		metrics.m_max_draw_vertex_declaration		= pipeline.m_state.m_vertex_declaration;
+		metrics.m_max_draw_fvf						= pipeline.m_state.m_fvf;
+		std::copy_n( pipeline.m_state.m_vertex_buffers,
+			metrics.m_max_draw_vertex_buffers.size( ),
+			metrics.m_max_draw_vertex_buffers.begin( ) );
+		metrics.m_max_draw_index_buffer = pipeline.m_state.m_index_buffer;
 		describe_texture_0( metrics );
 
 		// stack capture is limited to material stalls above two milliseconds.

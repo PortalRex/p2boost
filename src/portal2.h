@@ -167,13 +167,20 @@ namespace p2boost::portal2 {
 		constexpr size_t begin_scene{ 41 };
 		constexpr size_t end_scene{ 42 };
 		constexpr size_t clear{ 43 };
+		constexpr size_t set_render_state{ 57 };
 		constexpr size_t set_texture{ 65 };
+		constexpr size_t set_texture_stage_state{ 67 };
+		constexpr size_t set_sampler_state{ 69 };
 		constexpr size_t draw_primitive{ 81 };
 		constexpr size_t draw_indexed_primitive{ 82 };
 		constexpr size_t draw_primitive_up{ 83 };
 		constexpr size_t draw_indexed_primitive_up{ 84 };
+		constexpr size_t set_vertex_declaration{ 87 };
+		constexpr size_t set_fvf{ 89 };
 		constexpr size_t create_vertex_shader{ 91 };
 		constexpr size_t set_vertex_shader{ 92 };
+		constexpr size_t set_stream_source{ 100 };
+		constexpr size_t set_indices{ 104 };
 		constexpr size_t create_pixel_shader{ 106 };
 		constexpr size_t set_pixel_shader{ 107 };
 	}

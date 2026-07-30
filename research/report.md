@@ -471,6 +471,32 @@ but its five first-resource/shader-pair draws totaled only 0.2346 ms. Its
 slowest 6.3841 ms draw used an already-seen managed 128x128 A8R8G8B8 texture
 and an already-seen shader pair.
 
+Two later cold-process captures progressively removed the remaining
+first-use ambiguity. The research device mirror now includes every D3D9 render
+state, vertex declaration or FVF, four textures, four vertex streams, the
+index buffer, four render targets, the depth-stencil surface, all pixel sampler
+states, and all fixed-function texture-stage states. It classifies the entire
+driver-visible submission as one process-wide key.
+
+In the final 24-second capture, the successful-portal worker took 55.7190 ms
+and spent 32.7002 ms in 549 native draws. Only two unseen complete submission
+keys appeared, costing 0.2866 ms in total. The slowest 9.8624 ms indexed draw
+used a complete submission key already observed earlier in the same device.
+The following worker spent 56.7540 ms in the real Source hardware fence.
+No texture, shader, or query was created in the portal worker, and 129 vertex
+buffer locks cost only 0.0594 ms. A separate geometry-aware capture likewise
+found no first vertex or index buffer use in any portal worker above 20 ms.
+The cold stall is therefore not explained by a previously unseen Source
+resource, shader pair, render-target combination, sampler configuration, or
+geometry binding.
+
+The installed NVIDIA application profile was queried read-only through the
+official NVAPI DRS interface. `portal2.exe` has no application, global, or base
+override for either `PS_OFFLINE_SHADER_COMPILER` or `PS_SHADERDISKCACHE`; the
+driver reports their defaults as enabled. The DX cache also received no Portal
+2 write during the cold capture. Forcing either profile value would therefore
+be an unsupported external workaround rather than a demonstrated engine fix.
+
 The exact call chain resolves to `shaderapidx9.dll+0xb28c/+0x1ee55`,
 `materialsystem.dll+0x3ac67`, `stdshader_dx9.dll+0x4aeb3/+0x27fef/+0x4a5c5`,
 then back through the material and ShaderAPI mesh dispatch. Ghidra places

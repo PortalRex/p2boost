@@ -244,11 +244,30 @@ namespace p2boost {
 			install_slot( m_begin_scene, d3d_device, portal2::d3d9::begin_scene, reinterpret_cast< void* >( &BeginScene ) ) &&
 			install_slot( m_end_scene, d3d_device, portal2::d3d9::end_scene, reinterpret_cast< void* >( &EndScene ) ) &&
 			install_slot( m_clear, d3d_device, portal2::d3d9::clear, reinterpret_cast< void* >( &Clear ) ) &&
+			install_slot( m_set_render_state, d3d_device, portal2::d3d9::set_render_state, reinterpret_cast< void* >( &SetRenderState ) ) &&
 			install_slot( m_set_texture, d3d_device, portal2::d3d9::set_texture, reinterpret_cast< void* >( &SetTexture ) ) &&
+			install_slot( m_set_texture_stage_state,
+				d3d_device,
+				portal2::d3d9::set_texture_stage_state,
+				reinterpret_cast< void* >( &SetTextureStageState ) ) &&
+			install_slot( m_set_sampler_state,
+				d3d_device,
+				portal2::d3d9::set_sampler_state,
+				reinterpret_cast< void* >( &SetSamplerState ) ) &&
+			install_slot( m_set_vertex_declaration,
+				d3d_device,
+				portal2::d3d9::set_vertex_declaration,
+				reinterpret_cast< void* >( &SetVertexDeclaration ) ) &&
+			install_slot( m_set_fvf, d3d_device, portal2::d3d9::set_fvf, reinterpret_cast< void* >( &SetFvf ) ) &&
 			install_slot( m_set_vertex_shader,
 				d3d_device,
 				portal2::d3d9::set_vertex_shader,
 				reinterpret_cast< void* >( &SetVertexShader ) ) &&
+			install_slot( m_set_stream_source,
+				d3d_device,
+				portal2::d3d9::set_stream_source,
+				reinterpret_cast< void* >( &SetStreamSource ) ) &&
+			install_slot( m_set_indices, d3d_device, portal2::d3d9::set_indices, reinterpret_cast< void* >( &SetIndices ) ) &&
 			install_slot( m_set_pixel_shader, d3d_device, portal2::d3d9::set_pixel_shader, reinterpret_cast< void* >( &SetPixelShader ) ) &&
 			install_slot( m_draw_primitive, d3d_device, portal2::d3d9::draw_primitive, reinterpret_cast< void* >( &DrawPrimitive ) ) &&
 			install_slot( m_draw_indexed_primitive,
@@ -354,8 +373,15 @@ namespace p2boost {
 		m_draw_indexed_primitive.remove( );
 		m_draw_primitive.remove( );
 		m_set_pixel_shader.remove( );
+		m_set_indices.remove( );
+		m_set_stream_source.remove( );
 		m_set_vertex_shader.remove( );
+		m_set_fvf.remove( );
+		m_set_vertex_declaration.remove( );
+		m_set_sampler_state.remove( );
+		m_set_texture_stage_state.remove( );
 		m_set_texture.remove( );
+		m_set_render_state.remove( );
 		m_clear.remove( );
 		m_end_scene.remove( );
 		m_begin_scene.remove( );
@@ -815,12 +841,18 @@ namespace p2boost {
 		auto  previous = instance ? reinterpret_cast< decltype( &SetRenderTarget ) >( instance->m_set_render_target.previous( ) ) : nullptr;
 		if( !previous )
 			return D3DERR_INVALIDCALL;
-		if( !g_worker_trace.m_active || !instance->m_metrics || !instance->m_metrics->tracing( ) )
-			return previous( self, index, target );
+		if( !g_worker_trace.m_active || !instance->m_metrics || !instance->m_metrics->tracing( ) ) {
+			const HRESULT result = previous( self, index, target );
+			if( SUCCEEDED( result ) )
+				renderer_research::set_render_target( index, target );
+			return result;
+		}
 
 		const unsigned int sequence = renderer_research::begin_driver_call( );
 		const Qpc::tick_t  begin	= Qpc::now( );
 		const HRESULT	   result	= previous( self, index, target );
+		if( SUCCEEDED( result ) )
+			renderer_research::set_render_target( index, target );
 		renderer_research::record_driver_call( g_worker_trace, portal2::d3d9::set_render_target, sequence, begin );
 		return result;
 	}
@@ -832,12 +864,18 @@ namespace p2boost {
 							 : nullptr;
 		if( !previous )
 			return D3DERR_INVALIDCALL;
-		if( !g_worker_trace.m_active || !instance->m_metrics || !instance->m_metrics->tracing( ) )
-			return previous( self, surface );
+		if( !g_worker_trace.m_active || !instance->m_metrics || !instance->m_metrics->tracing( ) ) {
+			const HRESULT result = previous( self, surface );
+			if( SUCCEEDED( result ) )
+				renderer_research::set_depth_stencil_surface( surface );
+			return result;
+		}
 
 		const unsigned int sequence = renderer_research::begin_driver_call( );
 		const Qpc::tick_t  begin	= Qpc::now( );
 		const HRESULT	   result	= previous( self, surface );
+		if( SUCCEEDED( result ) )
+			renderer_research::set_depth_stencil_surface( surface );
 		renderer_research::record_driver_call( g_worker_trace, portal2::d3d9::set_depth_stencil_surface, sequence, begin );
 		return result;
 	}
@@ -888,6 +926,18 @@ namespace p2boost {
 		return result;
 	}
 
+	// Mirror render state only after the native device accepts the change.
+	HRESULT __stdcall RendererTrace::SetRenderState( IDirect3DDevice9* self, D3DRENDERSTATETYPE state, DWORD value ) {
+		auto* instance = m_instance;
+		auto  previous = instance ? reinterpret_cast< decltype( &SetRenderState ) >( instance->m_set_render_state.previous( ) ) : nullptr;
+		if( !previous )
+			return D3DERR_INVALIDCALL;
+		const HRESULT result = previous( self, state, value );
+		if( SUCCEEDED( result ) )
+			renderer_research::set_render_state( state, value );
+		return result;
+	}
+
 	// Mirror texture bindings without retaining COM references.
 	HRESULT __stdcall RendererTrace::SetTexture( IDirect3DDevice9* self, DWORD stage, IDirect3DBaseTexture9* texture ) {
 		auto* instance = m_instance;
@@ -900,6 +950,53 @@ namespace p2boost {
 		return result;
 	}
 
+	HRESULT __stdcall RendererTrace::SetTextureStageState(
+		IDirect3DDevice9* self, DWORD stage, D3DTEXTURESTAGESTATETYPE state, DWORD value ) {
+		auto* instance = m_instance;
+		auto  previous =
+			 instance ? reinterpret_cast< decltype( &SetTextureStageState ) >( instance->m_set_texture_stage_state.previous( ) ) : nullptr;
+		if( !previous )
+			return D3DERR_INVALIDCALL;
+		const HRESULT result = previous( self, stage, state, value );
+		if( SUCCEEDED( result ) )
+			renderer_research::set_texture_stage_state( stage, state, value );
+		return result;
+	}
+
+	HRESULT __stdcall RendererTrace::SetSamplerState( IDirect3DDevice9* self, DWORD sampler, D3DSAMPLERSTATETYPE state, DWORD value ) {
+		auto* instance = m_instance;
+		auto  previous = instance ? reinterpret_cast< decltype( &SetSamplerState ) >( instance->m_set_sampler_state.previous( ) ) : nullptr;
+		if( !previous )
+			return D3DERR_INVALIDCALL;
+		const HRESULT result = previous( self, sampler, state, value );
+		if( SUCCEEDED( result ) )
+			renderer_research::set_sampler_state( sampler, state, value );
+		return result;
+	}
+
+	HRESULT __stdcall RendererTrace::SetVertexDeclaration( IDirect3DDevice9* self, IDirect3DVertexDeclaration9* declaration ) {
+		auto* instance = m_instance;
+		auto  previous =
+			 instance ? reinterpret_cast< decltype( &SetVertexDeclaration ) >( instance->m_set_vertex_declaration.previous( ) ) : nullptr;
+		if( !previous )
+			return D3DERR_INVALIDCALL;
+		const HRESULT result = previous( self, declaration );
+		if( SUCCEEDED( result ) )
+			renderer_research::set_vertex_declaration( declaration );
+		return result;
+	}
+
+	HRESULT __stdcall RendererTrace::SetFvf( IDirect3DDevice9* self, DWORD fvf ) {
+		auto* instance = m_instance;
+		auto  previous = instance ? reinterpret_cast< decltype( &SetFvf ) >( instance->m_set_fvf.previous( ) ) : nullptr;
+		if( !previous )
+			return D3DERR_INVALIDCALL;
+		const HRESULT result = previous( self, fvf );
+		if( SUCCEEDED( result ) )
+			renderer_research::set_fvf( fvf );
+		return result;
+	}
+
 	HRESULT __stdcall RendererTrace::SetVertexShader( IDirect3DDevice9* self, IDirect3DVertexShader9* shader ) {
 		// mirror the currently bound vertex shader for draw attribution.
 		auto* instance = m_instance;
@@ -909,6 +1006,29 @@ namespace p2boost {
 		const HRESULT result = previous( self, shader );
 		if( SUCCEEDED( result ) )
 			renderer_research::set_vertex_shader( shader );
+		return result;
+	}
+
+	HRESULT __stdcall RendererTrace::SetStreamSource(
+		IDirect3DDevice9* self, UINT stream, IDirect3DVertexBuffer9* buffer, UINT offset, UINT stride ) {
+		auto* instance = m_instance;
+		auto  previous = instance ? reinterpret_cast< decltype( &SetStreamSource ) >( instance->m_set_stream_source.previous( ) ) : nullptr;
+		if( !previous )
+			return D3DERR_INVALIDCALL;
+		const HRESULT result = previous( self, stream, buffer, offset, stride );
+		if( SUCCEEDED( result ) )
+			renderer_research::set_stream_source( stream, buffer );
+		return result;
+	}
+
+	HRESULT __stdcall RendererTrace::SetIndices( IDirect3DDevice9* self, IDirect3DIndexBuffer9* buffer ) {
+		auto* instance = m_instance;
+		auto  previous = instance ? reinterpret_cast< decltype( &SetIndices ) >( instance->m_set_indices.previous( ) ) : nullptr;
+		if( !previous )
+			return D3DERR_INVALIDCALL;
+		const HRESULT result = previous( self, buffer );
+		if( SUCCEEDED( result ) )
+			renderer_research::set_indices( buffer );
 		return result;
 	}
 
@@ -931,7 +1051,7 @@ namespace p2boost {
 		auto  previous = instance ? reinterpret_cast< decltype( &DrawPrimitive ) >( instance->m_draw_primitive.previous( ) ) : nullptr;
 		if( !previous )
 			return D3DERR_INVALIDCALL;
-		const auto pipeline = renderer_research::observe_pipeline( );
+		const auto pipeline = renderer_research::observe_pipeline( self );
 		if( !g_worker_trace.m_active || !instance->m_metrics || !instance->m_metrics->tracing( ) )
 			return previous( self, primitive_type, start_vertex, primitive_count );
 		const unsigned int sequence = renderer_research::begin_driver_call( );
@@ -962,7 +1082,7 @@ namespace p2boost {
 			 instance ? reinterpret_cast< decltype( &DrawIndexedPrimitive ) >( instance->m_draw_indexed_primitive.previous( ) ) : nullptr;
 		if( !previous )
 			return D3DERR_INVALIDCALL;
-		const auto pipeline = renderer_research::observe_pipeline( );
+		const auto pipeline = renderer_research::observe_pipeline( self );
 		if( !g_worker_trace.m_active || !instance->m_metrics || !instance->m_metrics->tracing( ) )
 			return previous( self, primitive_type, base_vertex_index, min_vertex_index, vertex_count, start_index, primitive_count );
 		const unsigned int sequence = renderer_research::begin_driver_call( );
@@ -988,7 +1108,7 @@ namespace p2boost {
 		auto  previous = instance ? reinterpret_cast< decltype( &DrawPrimitiveUp ) >( instance->m_draw_primitive_up.previous( ) ) : nullptr;
 		if( !previous )
 			return D3DERR_INVALIDCALL;
-		const auto pipeline = renderer_research::observe_pipeline( );
+		const auto pipeline = renderer_research::observe_pipeline( self );
 		if( !g_worker_trace.m_active || !instance->m_metrics || !instance->m_metrics->tracing( ) )
 			return previous( self, primitive_type, primitive_count, vertex_data, vertex_stride );
 		const unsigned int sequence = renderer_research::begin_driver_call( );
@@ -1022,7 +1142,7 @@ namespace p2boost {
 							 : nullptr;
 		if( !previous )
 			return D3DERR_INVALIDCALL;
-		const auto pipeline = renderer_research::observe_pipeline( );
+		const auto pipeline = renderer_research::observe_pipeline( self );
 		if( !g_worker_trace.m_active || !instance->m_metrics || !instance->m_metrics->tracing( ) )
 			return previous( self,
 				primitive_type,
