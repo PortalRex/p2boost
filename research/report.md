@@ -552,6 +552,23 @@ locks. Dynamic-buffer synchronization and lock flags are therefore excluded
 as causes; changing them would violate the proven API contract without
 addressing the stall.
 
+The exact `PortalStaticOverlay` pixel bytecode was also submitted unchanged
+except for a research-only Shader Model 3 version token. D3D9 rejected it, the
+hook restored the original token, and the captured shader hash remained
+`0x30008b6dfcc685e3`; its slow draw was still 9.8998 ms. Shader Model 2 and 3
+have different validation and declaration contracts, so relabeling legacy
+bytecode is not a valid optimization. The control was removed rather than
+shipping a semantic shader rewrite without image-equivalence proof.
+
+For completeness, Microsoft's installed `fxc` compiled Valve's public
+`portalstaticoverlay_ps2x.fxc` into genuine `ps_3_0` bytecode for both fog
+combinations. D3D9 accepted both replacements and the captured hashes changed
+to `0xd2c7dbe79f610daf` and `0x192cf6bedb32783b`, proving they were active.
+Their slow draws were 9.9593 and 10.0160 ms, while the following engine fences
+remained 57.4544 and 57.0972 ms. A correctly recompiled Shader Model 3 portal
+shader therefore does not reduce this cold driver event. The file-substitution
+mechanism and generated candidates were removed from the patch.
+
 The exact call chain resolves to `shaderapidx9.dll+0xb28c/+0x1ee55`,
 `materialsystem.dll+0x3ac67`, `stdshader_dx9.dll+0x4aeb3/+0x27fef/+0x4a5c5`,
 then back through the material and ShaderAPI mesh dispatch. Ghidra places
