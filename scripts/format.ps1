@@ -18,7 +18,7 @@ if (-not $clangFormatPath) {
     throw 'clang-format was not found. Install LLVM or the Visual Studio C++ Clang tools.'
 }
 
-$files = Get-ChildItem $repo\src, $repo\tests, $repo\tools -Recurse -File |
+$files = Get-ChildItem $repo\src, $repo\tests -Recurse -File |
     Where-Object { $_.Extension -in '.cpp', '.hpp', '.h' }
 $researchHelpers = Get-ChildItem $repo\research\runtime\native_d3d9\research_hooks.* -File
 $files = @($files) + @($researchHelpers)

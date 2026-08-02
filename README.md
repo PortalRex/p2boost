@@ -1,7 +1,7 @@
 # p2boost
 
 p2boost is a Windows x86 Source plugin for Portal 2 build `23973718`. Version
-0.7 is Vulkan-only and expects Portal 2's shipped DXVK renderer. Launch the game
+0.8 is Vulkan-only and expects Portal 2's shipped DXVK renderer. Launch the game
 with `-vulkan`; native D3D9 is deliberately rejected.
 
 The release contains two independently measured, gameplay-neutral changes:
@@ -35,22 +35,23 @@ chain and no longer carries native renderer hooks.
 ## NVIDIA alt-tab profile
 
 Some NVIDIA systems show a black screen after alt-tabbing the Vulkan renderer.
-`p2boost_driver.exe` applies these two values to the `portal2.exe` application
-profile:
+On plugin load, `p2boost.dll` checks these two values in the `portal2.exe`
+application profile:
 
 | NVIDIA setting | Value |
 |---|---:|
 | Vulkan/OpenGL present method | `0x00000001` (prefer layered on DXGI swapchain) |
 | Vulkan/OpenGL present method flags | `0x000802A5` (treat DXVK as native) |
 
-The helper uses NVIDIA's public NVAPI DRS interface. It does not edit the global
-profile. Before the first write it records whether each value was a user
-override and its prior value. `uninstall.ps1` restores that backup; when no
-valid backup exists, the helper refuses to guess.
+The DLL uses NVIDIA's public NVAPI DRS interface and changes only Portal 2's
+application profile, never the global profile. If either value is missing, it
+applies both required values, shows one restart message, and asks Portal 2 to
+close normally. The next launch sees the completed profile and continues
+without a prompt. If NVAPI is unavailable or rejects the write, the plugin
+leaves the game open and reports the failure through `p2boost_status`.
 
-NVIDIA requires an elevated token for DRS writes. Only the short-lived helper
-is elevated by the install/uninstall scripts; Portal 2 and `p2boost.dll` remain
-normal user processes.
+Because the setting is now owned directly by the DLL, uninstalling p2boost does
+not reset the Portal 2 application profile.
 
 ## Build and install
 
@@ -62,11 +63,11 @@ Requirements are Visual Studio 2022, CMake 3.24 or newer, and an x86 toolchain.
 ```
 
 Add `-vulkan` to Portal 2's Steam launch options. The installer copies
-`p2boost.dll`, symbols, and `p2boost_driver.exe`, adds one managed
-`plugin_load p2boost` block to `portal2/cfg/autoexec.cfg`, and configures the
-per-game NVIDIA profile.
+`p2boost.dll` and its symbols and adds one managed `plugin_load p2boost` block
+to `portal2/cfg/autoexec.cfg`. Profile setup happens inside the DLL on its first
+load.
 
-To remove it and restore the previous NVIDIA values:
+To remove the plugin:
 
 ```powershell
 .\scripts\uninstall.ps1 -GameRoot 'D:\SteamLibrary\steamapps\common\Portal 2'
@@ -74,8 +75,8 @@ To remove it and restore the previous NVIDIA values:
 
 ## Commands
 
-- `p2boost_status` prints the build fingerprint, DXVK/Vulkan verification,
-  enabled fixes, SAR state, overlay availability, and metric count.
+- `p2boost_status` prints the build fingerprint, DXVK/Vulkan and NVIDIA-profile
+  state, enabled fixes, SAR state, overlay availability, and metric count.
 - `p2boost_enable 0|1` provides a reversible runtime A/B switch.
 - `p2boost_flat_textures 0|1` replaces admitted world/model albedo with its
   alpha-weighted average color while preserving cutout and transparency data.
@@ -85,8 +86,6 @@ To remove it and restore the previous NVIDIA values:
   time, a 64-frame graph, one-second hitch count, and shadow-cache activity.
 - `p2boost_trace 0|1` records bounded frame and shadow-cache metrics.
 - `p2boost_dump_metrics` writes `p2boost_metrics.csv` in the game root.
-- `p2boost_driver_profile status|apply|restore` runs the elevated NVIDIA helper.
-  Restart Portal 2 after `apply` or `restore`.
 
 ## Compatibility and safety
 
@@ -105,7 +104,7 @@ network, demo, entity, or simulation semantics.
 - `src/engine` contains typed wrappers for the minimal public Source ABI, the
   console bridge, and only the reversed fields/signatures used by release code.
 - `src/memory` contains the small chain-aware hook and pattern helpers.
-- `tools/p2boost_driver.cpp` is the reversible NVIDIA application-profile tool.
+- `src/platform` contains the in-process NVIDIA application-profile bridge.
 - `research` contains Ghidra scripts, old native-D3D9 probes, benchmark routes,
   and rejected-experiment notes. Nothing there is linked into `p2boost.dll`.
 - `third_party/nvapi` contains NVIDIA's MIT-licensed public build interface.

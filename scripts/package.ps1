@@ -7,7 +7,7 @@ New-Item -ItemType Directory -Force $destination | Out-Null
 foreach ($name in '.clang-format','README.md','LICENSE','THIRD_PARTY_NOTICES.md','CMakeLists.txt','CMakePresets.json') {
     Copy-Item -LiteralPath (Join-Path $repo $name) -Destination $destination
 }
-foreach ($directory in 'src','tests','tools','scripts','third_party','.github') {
+foreach ($directory in 'src','tests','scripts','third_party','.github') {
     Copy-Item -LiteralPath (Join-Path $repo $directory) -Destination $destination -Recurse
 }
 New-Item -ItemType Directory -Force (Join-Path $destination 'benchmarks') | Out-Null
@@ -29,7 +29,6 @@ Copy-Item -LiteralPath (Join-Path $repo 'research\ghidra\scripts') `
 $binaryDirectory = Join-Path $repo "build\vs2022-x86\$Configuration"
 Copy-Item -LiteralPath (Join-Path $binaryDirectory 'p2boost.dll') -Destination $destination
 Copy-Item -LiteralPath (Join-Path $binaryDirectory 'p2boost.pdb') -Destination $destination
-Copy-Item -LiteralPath (Join-Path $binaryDirectory 'p2boost_driver.exe') -Destination $destination
 $archive = "${destination}.zip"
 # PowerShell's wildcard omits root dotfiles, so add the format policy
 # explicitly while keeping the archive rooted at its contents.

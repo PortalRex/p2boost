@@ -3,13 +3,13 @@
 #include "flat_textures.h"
 #include "frame_limiter.h"
 #include "frame_metrics.h"
+#include "nvidia_profile.h"
 #include "profiler_overlay.h"
 #include "projected_shadow_cache.h"
 #include "runtime_verification.h"
 #include "sdk.h"
 
 #include <Windows.h>
-#include <shellapi.h>
 
 #include <cstring>
 #include <string>
@@ -17,15 +17,44 @@
 namespace p2boost {
 	namespace {
 
-		// convert paths for the Unicode process launcher.
-		std::wstring widen( const std::string& input ) {
-			if( input.empty( ) )
-				return { };
+		struct WindowSearch {
+			DWORD m_process{ };
+			HWND  m_window{ };
+		};
 
-			const int	 size = MultiByteToWideChar( CP_UTF8, 0, input.data( ), static_cast< int >( input.size( ) ), nullptr, 0 );
-			std::wstring output( static_cast< size_t >( size ), L'\0' );
-			MultiByteToWideChar( CP_UTF8, 0, input.data( ), static_cast< int >( input.size( ) ), output.data( ), size );
-			return output;
+		// remember the first visible top-level window owned by Portal 2.
+		BOOL CALLBACK find_process_window( HWND window, LPARAM parameter ) {
+			auto* search = reinterpret_cast< WindowSearch* >( parameter );
+			DWORD process{ };
+			GetWindowThreadProcessId( window, &process );
+			if( process != search->m_process || !IsWindowVisible( window ) || GetWindow( window, GW_OWNER ) )
+				return TRUE;
+
+			search->m_window = window;
+			return FALSE;
+		}
+
+		// resolve the window at the time it is needed instead of caching it.
+		HWND process_window( ) noexcept {
+			WindowSearch search{ GetCurrentProcessId( ) };
+			EnumWindows( &find_process_window, reinterpret_cast< LPARAM >( &search ) );
+			return search.m_window;
+		}
+
+		// explain the one-time change, then request a clean engine shutdown.
+		void restart_after_profile_update( ) noexcept {
+			const HWND window = process_window( );
+			MessageBoxW( window,
+						 L"p2boost applied the NVIDIA settings required for reliable Vulkan alt-tabbing.\n\n"
+						 L"Portal 2 must restart and will now close.",
+						 L"p2boost - restart required",
+						 MB_OK | MB_ICONINFORMATION | MB_SETFOREGROUND );
+
+			if( window && PostMessageW( window, WM_CLOSE, 0, 0 ) )
+				return;
+
+			// a missing game window leaves no graceful close path.
+			ExitProcess( 0 );
 		}
 
 		// compare the active window owner without caching a stale HWND.
@@ -43,6 +72,17 @@ namespace p2boost {
 			// publish the instance before engine-owned command callbacks can fire.
 			m_instance = this;
 
+			// configure the NVIDIA application profile before installing engine hooks.
+			m_verification = verify_runtime( );
+			if( m_verification.m_dxvk_vulkan ) {
+				m_nvidia_profile = configure_nvidia_profile( );
+				if( m_nvidia_profile == NvidiaProfileState::applied ) {
+					m_instance = nullptr;
+					restart_after_profile_update( );
+					return false;
+				}
+			}
+
 			// register the complete public command surface as one transaction.
 			if( !m_commands.connect( interface_factory ) ||
 				!m_commands.add( "p2boost_status", "Print p2boost runtime state.", &CommandThunk ) ||
@@ -50,15 +90,12 @@ namespace p2boost {
 				!m_commands.add( "p2boost_flat_textures", "Enable or disable alpha-safe flat textures.", &CommandThunk ) ||
 				!m_commands.add( "p2boost_trace", "Enable or disable frame tracing.", &CommandThunk ) ||
 				!m_commands.add( "p2boost_overlay", "Enable or disable the frame profiler.", &CommandThunk ) ||
-				!m_commands.add( "p2boost_dump_metrics", "Write frame metrics to CSV.", &CommandThunk ) ||
-				!m_commands.add( "p2boost_driver_profile", "Configure the NVIDIA DXVK presentation profile.", &CommandThunk ) ) {
+				!m_commands.add( "p2boost_dump_metrics", "Write frame metrics to CSV.", &CommandThunk ) ) {
 				console_print( "[p2boost] failed to register console commands\n" );
 				m_instance = nullptr;
 				return false;
 			}
 
-			// fingerprint the exact binaries before resolving any private code.
-			m_verification = verify_runtime( );
 			m_overlay.connect( interface_factory );
 
 			// each feature validates its own signatures and remains disabled on failure.
@@ -81,6 +118,9 @@ namespace p2boost {
 						   m_enabled ? "enabled" : "disabled" );
 			for( const auto& error : m_verification.m_errors )
 				console_print( "[p2boost] %s\n", error.c_str( ) );
+			if( m_nvidia_profile == NvidiaProfileState::unavailable || m_nvidia_profile == NvidiaProfileState::failed )
+				console_print( "[p2boost] NVIDIA profile setup %s; no driver settings were changed\n",
+							   nvidia_profile_state_name( m_nvidia_profile ) );
 			return true;
 		}
 
@@ -184,8 +224,6 @@ namespace p2boost {
 				return OverlayCommand( args );
 			if( _stricmp( command, "p2boost_dump_metrics" ) == 0 )
 				return DumpMetricsCommand( );
-			if( _stricmp( command, "p2boost_driver_profile" ) == 0 )
-				return DriverProfileCommand( args );
 
 			return sdk::Continue;
 		}
@@ -224,12 +262,13 @@ namespace p2boost {
 
 		// print one machine-readable snapshot for support and automated tests.
 		sdk::PluginResult StatusCommand( ) const {
-			console_print( "[p2boost] build=23973718 supported=%d dxvk_vulkan=%d enabled=%d "
+			console_print( "[p2boost] build=23973718 supported=%d dxvk_vulkan=%d nvidia_profile=%s enabled=%d "
 						   "limiter=%d shadow_cache=%d shadow_hits=%u tracing=%d overlay=%d overlay_available=%d "
 						   "flat_available=%d flat=%d flat_textures=%zu flat_ready=%zu flat_binds=%llu "
 						   "flat_uploads=%llu/%llu/%llu sar=%d samples=%zu root=%s\n",
 						   m_verification.m_supported,
 						   m_verification.m_dxvk_vulkan,
+						   nvidia_profile_state_name( m_nvidia_profile ),
 						   m_enabled,
 						   m_frame_limiter.installed( ),
 						   m_shadow_cache.installed( ),
@@ -318,22 +357,6 @@ namespace p2boost {
 			return sdk::Stop;
 		}
 
-		// delegate reversible NVIDIA profile changes to the signed helper process.
-		sdk::PluginResult DriverProfileCommand( const sdk::CCommand& args ) const {
-			if( args.ArgC( ) != 2 || ( _stricmp( args.Arg( 1 ), "status" ) != 0 && _stricmp( args.Arg( 1 ), "apply" ) != 0 && _stricmp( args.Arg( 1 ), "restore" ) != 0 ) ) {
-				console_print( "usage: p2boost_driver_profile status|apply|restore\n" );
-				return sdk::Stop;
-			}
-
-			const bool success = run_driver_profile_tool( args.Arg( 1 ) );
-			console_print( "[p2boost] NVIDIA profile %s %s%s\n",
-						   args.Arg( 1 ),
-						   success ? "succeeded" : "failed",
-						   success && _stricmp( args.Arg( 1 ), "apply" ) == 0 ? "; restart Portal 2 before testing alt-tab" : "" );
-
-			return sdk::Stop;
-		}
-
 		bool can_enable( ) const noexcept {
 			// partial activation would make A/B results impossible to interpret.
 			return m_verification.m_supported && m_verification.m_dxvk_vulkan && m_frame_limiter.installed( ) &&
@@ -346,33 +369,6 @@ namespace p2boost {
 			m_shadow_cache.set_enabled( m_enabled );
 		}
 
-		bool run_driver_profile_tool( const char* action ) const {
-			// keep NVAPI and elevation outside the game process.
-			const std::wstring directory	   = widen( m_verification.m_game_root + "\\portal2" );
-			const std::wstring executable	   = directory + L"\\p2boost_driver.exe";
-			const std::wstring parameters	   = widen( action );
-			const bool		   changes_profile = _stricmp( action, "status" ) != 0;
-
-			SHELLEXECUTEINFOW launch{ };
-			launch.cbSize		= sizeof( launch );
-			launch.fMask		= SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC;
-			launch.lpVerb		= changes_profile ? L"runas" : L"open";
-			launch.lpFile		= executable.c_str( );
-			launch.lpParameters = parameters.c_str( );
-			launch.lpDirectory	= directory.c_str( );
-			launch.nShow		= SW_HIDE;
-			if( !ShellExecuteExW( &launch ) || !launch.hProcess )
-				return false;
-
-			// bound the wait so a broken helper cannot hang the engine indefinitely.
-			const DWORD wait	  = WaitForSingleObject( launch.hProcess, 15000 );
-			DWORD		exit_code = 1;
-			if( wait == WAIT_OBJECT_0 )
-				GetExitCodeProcess( launch.hProcess, &exit_code );
-			CloseHandle( launch.hProcess );
-			return wait == WAIT_OBJECT_0 && exit_code == 0;
-		}
-
 		static void __cdecl CommandThunk( const sdk::CCommand& command ) {
 			// Source invokes a C callback, so forward through the live instance.
 			if( m_instance )
@@ -382,6 +378,7 @@ namespace p2boost {
 		static Plugin* m_instance;
 
 		VerificationResult	   m_verification;
+		NvidiaProfileState	   m_nvidia_profile{ NvidiaProfileState::unknown };
 		FrameMetrics		   m_metrics;
 		FrameLimiter		   m_frame_limiter;
 		ProjectedShadowCache   m_shadow_cache;

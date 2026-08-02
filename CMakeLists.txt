@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(p2boost VERSION 0.7.0 LANGUAGES CXX)
+project(p2boost VERSION 0.8.0 LANGUAGES CXX)
 
 option(P2BOOST_BUILD_RESEARCH_TOOLS "Build offline profiling tools from research/" OFF)
 
@@ -43,32 +43,28 @@ add_library(p2boost SHARED
   src/core/plugin.cpp
   src/engine/console.cpp
   src/engine/console_commands.cpp
+  src/platform/nvidia_profile.cpp
 )
 target_include_directories(p2boost PRIVATE ${P2BOOST_INCLUDE_DIRECTORIES})
+target_include_directories(p2boost SYSTEM PRIVATE third_party/nvapi/include)
 target_compile_definitions(p2boost PRIVATE
   WIN32_LEAN_AND_MEAN
   NOMINMAX
   P2BOOST_VERSION="${PROJECT_VERSION}"
 )
-target_compile_options(p2boost PRIVATE /W4 /WX /permissive- /Zc:__cplusplus /guard:cf)
+target_compile_options(p2boost PRIVATE /W4 /WX /permissive- /Zc:__cplusplus /guard:cf /external:W0)
 target_link_options(p2boost PRIVATE /DEF:${CMAKE_CURRENT_SOURCE_DIR}/src/p2boost.def /guard:cf /DEBUG:FULL)
-target_link_libraries(p2boost PRIVATE p2boost_core bcrypt shell32)
+target_link_libraries(p2boost PRIVATE
+  p2boost_core
+  bcrypt
+  ${CMAKE_CURRENT_SOURCE_DIR}/third_party/nvapi/x86/nvapi.lib
+)
 set_target_properties(p2boost PROPERTIES
   OUTPUT_NAME p2boost
   PREFIX ""
   PDB_NAME p2boost
   PDB_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/$<CONFIG>"
 )
-
-# This small pre-launch helper uses NVIDIA's public DRS API to apply only the
-# two per-application DXVK presentation values. It records and restores the
-# prior user overrides; no global driver profile is modified.
-add_executable(p2boost_driver tools/p2boost_driver.cpp)
-target_include_directories(p2boost_driver SYSTEM PRIVATE third_party/nvapi/include)
-target_compile_definitions(p2boost_driver PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
-target_compile_options(p2boost_driver PRIVATE /W4 /WX /permissive- /Zc:__cplusplus /external:W0)
-target_link_options(p2boost_driver PRIVATE /guard:cf)
-target_link_libraries(p2boost_driver PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party/nvapi/x86/nvapi.lib)
 
 enable_testing()
 add_executable(p2boost_tests tests/test_main.cpp)

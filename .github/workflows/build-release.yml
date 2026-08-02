@@ -40,8 +40,6 @@ jobs:
         run: |
           cmake --build --preset release --target p2boost -- /m
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          cmake --build --preset release --target p2boost_driver -- /m
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cmake --build --preset release --target p2boost_tests -- /m
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 

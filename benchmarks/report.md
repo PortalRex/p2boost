@@ -13,17 +13,18 @@ A live module snapshot verified `shaderapivk.dll`, `DXVK_D3D9.DLL`, and
 `vulkan-1.dll` in the same Portal 2 process. `p2boost_status` then reported
 `supported=1`, `dxvk_vulkan=1`, and both release hooks installed.
 
-The NVIDIA helper initially read the effective defaults:
+The original standalone NVAPI validation read these effective defaults:
 
 ```text
 present_method=0x00000002
 present_flags=0x00000000
 ```
 
-An elevated apply changed only the `portal2.exe` profile to `0x00000001` and
-`0x000802A5`. A complete restore/status/reapply test returned to both defaults,
-then reapplied and verified both target values. The backup recorded that neither
-setting previously had an application-profile override.
+The validation changed only the `portal2.exe` profile to `0x00000001` and
+`0x000802A5`, verified both values, and confirmed that the global profile stayed
+untouched. Version 0.8 performs that same application-profile check directly
+inside `p2boost.dll` during plugin load. A successful change produces a restart
+message and cleanly closes Portal 2 before the Vulkan swapchain is created.
 
 ## Intro3 PortalGun demo
 
@@ -86,7 +87,6 @@ The 100 ms post-portal windows measured 10.7291 ms median worst-frame and
 far below the earlier native-D3D9 50-60 ms submission/fence stall but is not
 reported as a perfect hitch-free gate.
 
-A final uninstall/apply lifecycle restored both NVIDIA defaults, removed all
-p2boost files and the managed autoexec block, then reinstalled the release,
-reapplied both values, matched the installed DLL hash to the Release build, and
-restored the active `plugin_load p2boost` line.
+The final package lifecycle removed all p2boost files and the managed autoexec
+block, reinstalled the release, matched the installed DLL hash to the Release
+build, and restored the active `plugin_load p2boost` line.

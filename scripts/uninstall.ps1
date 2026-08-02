@@ -1,18 +1,6 @@
 param([string]$GameRoot = 'D:\SteamLibrary\steamapps\common\Portal 2')
 $ErrorActionPreference = 'Stop'
 $autoexec = Join-Path $GameRoot 'portal2\cfg\autoexec.cfg'
-$pluginDirectory = Join-Path $GameRoot 'portal2'
-$driver = Join-Path $pluginDirectory 'p2boost_driver.exe'
-$driverBackup = Join-Path $pluginDirectory 'p2boost_driver_profile.state'
-
-# Restore only values captured by the installer. If restoration fails, keep
-# the helper and backup in place so the original profile is still recoverable.
-if ((Test-Path -LiteralPath $driver) -and (Test-Path -LiteralPath $driverBackup)) {
-    $driverProcess = Start-Process -FilePath $driver -Verb RunAs -ArgumentList 'restore' -Wait -PassThru
-    if ($driverProcess.ExitCode -ne 0) {
-        throw "NVIDIA profile restoration failed with exit code $($driverProcess.ExitCode)"
-    }
-}
 
 if (Test-Path -LiteralPath $autoexec) {
     $text = Get-Content -LiteralPath $autoexec -Raw
@@ -26,4 +14,4 @@ foreach ($directory in $GameRoot,(Join-Path $GameRoot 'portal2')) {
         if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force }
     }
 }
-Write-Host 'Restored the NVIDIA profile and removed the managed autoexec block and p2boost binaries.'
+Write-Host 'Removed the managed autoexec block and p2boost binaries.'
