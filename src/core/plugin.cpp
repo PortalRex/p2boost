@@ -41,7 +41,7 @@ namespace p2boost {
 			return search.m_window;
 		}
 
-		// explain the one-time change, then request a clean engine shutdown.
+		// explain the one-time change, then terminate before Vulkan starts.
 		void restart_after_profile_update( ) noexcept {
 			const HWND window = process_window( );
 			MessageBoxW( window,
@@ -50,10 +50,8 @@ namespace p2boost {
 						 L"p2boost - restart required",
 						 MB_OK | MB_ICONINFORMATION | MB_SETFOREGROUND );
 
-			if( window && PostMessageW( window, WM_CLOSE, 0, 0 ) )
-				return;
-
-			// a missing game window leaves no graceful close path.
+			// Source ignores WM_CLOSE while its startup command buffer is active.
+			// No session exists yet, so an immediate exit cannot lose game state.
 			ExitProcess( 0 );
 		}
 
@@ -76,7 +74,10 @@ namespace p2boost {
 			m_verification = verify_runtime( );
 			if( m_verification.m_dxvk_vulkan ) {
 				m_nvidia_profile = configure_nvidia_profile( );
-				if( m_nvidia_profile == NvidiaProfileState::applied ) {
+				if( m_nvidia_profile.m_state == NvidiaProfileState::failed )
+					m_nvidia_profile = configure_nvidia_profile_elevated( );
+
+				if( m_nvidia_profile.m_state == NvidiaProfileState::applied ) {
 					m_instance = nullptr;
 					restart_after_profile_update( );
 					return false;
@@ -118,9 +119,11 @@ namespace p2boost {
 						   m_enabled ? "enabled" : "disabled" );
 			for( const auto& error : m_verification.m_errors )
 				console_print( "[p2boost] %s\n", error.c_str( ) );
-			if( m_nvidia_profile == NvidiaProfileState::unavailable || m_nvidia_profile == NvidiaProfileState::failed )
-				console_print( "[p2boost] NVIDIA profile setup %s; no driver settings were changed\n",
-							   nvidia_profile_state_name( m_nvidia_profile ) );
+			if( m_nvidia_profile.m_state == NvidiaProfileState::unavailable || m_nvidia_profile.m_state == NvidiaProfileState::failed )
+				console_print( "[p2boost] NVIDIA profile setup %s at %s (%d); no driver settings were changed\n",
+							   nvidia_profile_state_name( m_nvidia_profile.m_state ),
+							   m_nvidia_profile.m_operation,
+							   m_nvidia_profile.m_status );
 			return true;
 		}
 
@@ -262,13 +265,15 @@ namespace p2boost {
 
 		// print one machine-readable snapshot for support and automated tests.
 		sdk::PluginResult StatusCommand( ) const {
-			console_print( "[p2boost] build=23973718 supported=%d dxvk_vulkan=%d nvidia_profile=%s enabled=%d "
+			console_print( "[p2boost] build=23973718 supported=%d dxvk_vulkan=%d nvidia_profile=%s nvidia_error=%s:%d enabled=%d "
 						   "limiter=%d shadow_cache=%d shadow_hits=%u tracing=%d overlay=%d overlay_available=%d "
 						   "flat_available=%d flat=%d flat_textures=%zu flat_ready=%zu flat_binds=%llu "
 						   "flat_uploads=%llu/%llu/%llu sar=%d samples=%zu root=%s\n",
 						   m_verification.m_supported,
 						   m_verification.m_dxvk_vulkan,
-						   nvidia_profile_state_name( m_nvidia_profile ),
+						   nvidia_profile_state_name( m_nvidia_profile.m_state ),
+						   m_nvidia_profile.m_operation,
+						   m_nvidia_profile.m_status,
 						   m_enabled,
 						   m_frame_limiter.installed( ),
 						   m_shadow_cache.installed( ),
@@ -378,7 +383,7 @@ namespace p2boost {
 		static Plugin* m_instance;
 
 		VerificationResult	   m_verification;
-		NvidiaProfileState	   m_nvidia_profile{ NvidiaProfileState::unknown };
+		NvidiaProfileResult	   m_nvidia_profile;
 		FrameMetrics		   m_metrics;
 		FrameLimiter		   m_frame_limiter;
 		ProjectedShadowCache   m_shadow_cache;

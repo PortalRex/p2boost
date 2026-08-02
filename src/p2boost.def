@@ -1,4 +1,4 @@
 LIBRARY p2boost
 EXPORTS
     CreateInterface
-
+    ApplyNvidiaProfile=_ApplyNvidiaProfile@16

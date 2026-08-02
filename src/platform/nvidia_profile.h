@@ -2,7 +2,7 @@
 
 namespace p2boost {
 
-	// result of validating Portal 2's two DXVK presentation settings.
+	// describe whether the two Portal 2 application values need attention.
 	enum class NvidiaProfileState {
 		unknown,
 		configured,
@@ -11,9 +11,20 @@ namespace p2boost {
 		failed
 	};
 
-	// apply missing per-application values directly through NVIDIA's DRS API.
-	NvidiaProfileState configure_nvidia_profile( ) noexcept;
+	// retain the exact failing call and code for useful in-game diagnostics.
+	struct NvidiaProfileResult {
+		NvidiaProfileState m_state{ NvidiaProfileState::unknown };
+		const char*		   m_operation{ "none" };
+		int				   m_status{ };
+	};
 
+	// check or update the profile using Portal 2's current process token.
+	NvidiaProfileResult configure_nvidia_profile( ) noexcept;
+
+	// retry by loading this same DLL through an elevated system rundll32.
+	NvidiaProfileResult configure_nvidia_profile_elevated( ) noexcept;
+
+	// expose a stable text value for logs and p2boost_status.
 	const char* nvidia_profile_state_name( NvidiaProfileState state ) noexcept;
 
 }

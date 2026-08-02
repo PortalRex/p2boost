@@ -57,6 +57,7 @@ target_link_options(p2boost PRIVATE /DEF:${CMAKE_CURRENT_SOURCE_DIR}/src/p2boost
 target_link_libraries(p2boost PRIVATE
   p2boost_core
   bcrypt
+  shell32
   ${CMAKE_CURRENT_SOURCE_DIR}/third_party/nvapi/x86/nvapi.lib
 )
 set_target_properties(p2boost PROPERTIES

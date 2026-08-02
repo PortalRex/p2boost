@@ -46,9 +46,12 @@ application profile:
 The DLL uses NVIDIA's public NVAPI DRS interface and changes only Portal 2's
 application profile, never the global profile. If either value is missing, it
 applies both required values, shows one restart message, and asks Portal 2 to
-close normally. The next launch sees the completed profile and continues
-without a prompt. If NVAPI is unavailable or rejects the write, the plugin
-leaves the game open and reports the failure through `p2boost_status`.
+close. If NVIDIA denies a normal-process write, the DLL invokes its own exported
+setup entry through Windows' 32-bit `rundll32` with elevation; no helper file is
+installed. The next launch sees the completed profile and continues without a
+prompt. If NVAPI remains unavailable or the elevated write fails, the plugin
+leaves the game open and reports the exact operation and status code through
+`p2boost_status`.
 
 Because the setting is now owned directly by the DLL, uninstalling p2boost does
 not reset the Portal 2 application profile.
