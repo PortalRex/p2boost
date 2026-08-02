@@ -1,5 +1,7 @@
 #include "console.h"
 #include "console_commands.h"
+#include "demo_provenance.h"
+#include "display_adjustments.h"
 #include "flat_textures.h"
 #include "frame_limiter.h"
 #include "frame_metrics.h"
@@ -98,8 +100,19 @@ namespace p2boost {
 				return false;
 			}
 
+			// Portal 2 shipped these public SDK rendering controls with FCVAR_CHEAT.
+			// removing only that flag makes the original engine path usable while
+			// preserving archive, client, bounds, and replication behavior.
+			const bool viewport_cvars_ready = !m_verification.m_supported ||
+											  ( m_commands.remove_flags( "mat_viewportscale", cvar_flag_cheat ) &&
+												m_commands.remove_flags( "mat_viewportupscale", cvar_flag_cheat ) );
+			if( !viewport_cvars_ready )
+				m_verification.m_errors.emplace_back( "viewport cvars unavailable" );
+
 			m_overlay.connect( interface_factory );
 			m_engine_client = interface_factory ? static_cast< sdk::EngineClient* >( interface_factory( "VEngineClient015", nullptr ) ) : nullptr;
+			if( m_verification.m_supported && !m_demo_provenance.connect( m_engine_client ) )
+				m_verification.m_errors.emplace_back( "demo command-buffer xref unavailable" );
 
 			// each feature validates its own signatures and remains disabled on failure.
 			if( m_verification.m_supported && !m_frame_limiter.install( &m_metrics ) )
@@ -108,6 +121,8 @@ namespace p2boost {
 				m_verification.m_errors.emplace_back( "projected-shadow signature mismatch" );
 			if( m_verification.m_supported && !m_flat_textures.install( ) )
 				m_verification.m_errors.emplace_back( "optional flat-texture hooks unavailable" );
+			if( m_verification.m_supported && !m_display_adjustments.install( m_commands ) )
+				m_verification.m_errors.emplace_back( "display-adjustment hooks unavailable" );
 
 			// enable performance fixes only when the complete supported set is ready.
 			m_enabled = can_enable( );
@@ -132,9 +147,11 @@ namespace p2boost {
 		void Unload( ) override {
 			// unregister commands first so teardown cannot race a new callback.
 			m_commands.disconnect( );
+			m_display_adjustments.remove( );
 			m_flat_textures.remove( );
 			m_overlay.set_enabled( false, m_metrics );
 			m_overlay.disconnect( );
+			m_demo_provenance.disconnect( );
 			m_engine_client = nullptr;
 			m_shadow_cache.remove( );
 			m_frame_limiter.remove( );
@@ -157,7 +174,7 @@ namespace p2boost {
 		}
 
 		void LevelInit( const char* ) override {
-			m_demo_marked = false;
+			m_demo_provenance.reset( );
 			m_shadow_cache.invalidate( );
 		}
 
@@ -168,7 +185,7 @@ namespace p2boost {
 		void GameFrame( bool simulating ) override {
 			// mirror only the state needed by diagnostics.
 			m_metrics.set_simulating( simulating );
-			mark_recorded_demo( );
+			m_demo_provenance.update( P2BOOST_VERSION, m_enabled, m_flat_textures.enabled( ) );
 
 			const bool focused = process_is_foreground( );
 			m_metrics.set_focused( focused );
@@ -269,6 +286,7 @@ namespace p2boost {
 		sdk::PluginResult StatusCommand( ) const {
 			console_print( "[p2boost] build=23973718 supported=%d dxvk_vulkan=%d nvidia_profile=%s nvidia_error=%s:%d enabled=%d "
 						   "limiter=%d shadow_cache=%d shadow_hits=%u tracing=%d overlay=%d overlay_available=%d "
+						   "display_available=%d gamma_passes=%llu viewport_passes=%llu demo_marker=%d "
 						   "flat_available=%d flat=%d flat_textures=%zu flat_ready=%zu flat_normal=%d flat_binds=%llu "
 						   "flat_uploads=%llu/%llu/%llu sar=%d samples=%zu root=%s\n",
 						   m_verification.m_supported,
@@ -283,6 +301,10 @@ namespace p2boost {
 						   m_metrics.tracing( ),
 						   m_overlay.enabled( ),
 						   m_overlay.available( ),
+						   m_display_adjustments.available( ),
+						   static_cast< unsigned long long >( m_display_adjustments.gamma_passes( ) ),
+						   static_cast< unsigned long long >( m_display_adjustments.viewport_passes( ) ),
+						   m_demo_provenance.available( ),
 						   m_flat_textures.available( ),
 						   m_flat_textures.enabled( ),
 						   m_flat_textures.texture_count( ),
@@ -378,32 +400,6 @@ namespace p2boost {
 			m_shadow_cache.set_enabled( m_enabled );
 		}
 
-		void mark_recorded_demo( ) {
-			if( !m_engine_client )
-				return;
-
-			const bool recording = m_engine_client->IsRecordingDemo( );
-			if( !recording ) {
-				m_demo_marked = false;
-				return;
-			}
-
-			if( m_demo_marked )
-				return;
-
-			// Source records ordinary console commands into the demo stream. playback
-			// therefore prints the exact build and state used by the recorder.
-			char command[ 192 ]{ };
-			std::snprintf( command,
-						   sizeof( command ),
-						   "echo \"p2boost %s (enabled=%d flat=%d backend=DXVK/Vulkan)\"",
-						   P2BOOST_VERSION,
-						   m_enabled,
-						   m_flat_textures.enabled( ) );
-			m_engine_client->ExecuteClientCmd( command );
-			m_demo_marked = true;
-		}
-
 		static void __cdecl CommandThunk( const sdk::CCommand& command ) {
 			// Source invokes a C callback, so forward through the live instance.
 			if( m_instance )
@@ -417,13 +413,14 @@ namespace p2boost {
 		FrameMetrics			m_metrics;
 		FrameLimiter			m_frame_limiter;
 		ProjectedShadowCache	m_shadow_cache;
+		DisplayAdjustments		m_display_adjustments;
+		DemoProvenance			m_demo_provenance;
 		FlatTextures			m_flat_textures;
 		ProfilerOverlay			m_overlay;
 		ConsoleCommandRegistry	m_commands;
 		sdk::EngineClient*		m_engine_client{ };
 		bool					m_enabled{ };
 		bool					m_last_focused{ };
-		bool					m_demo_marked{ };
 	};
 
 	Plugin* Plugin::m_instance{ };

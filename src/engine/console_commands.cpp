@@ -62,7 +62,35 @@ namespace p2boost {
 		return true;
 	}
 
+	bool ConsoleCommandRegistry::remove_flags( const char* name, int flags ) {
+		if( !m_cvar || !name || !flags )
+			return false;
+
+		// engine cvars share ConCommandBase's leading layout. remember the exact
+		// value so plugin unload restores every flag, including flags owned by
+		// another plugin loaded before p2boost.
+		auto* command = static_cast< ConsoleCommandBase* >( m_cvar->FindCommand( name ) );
+		if( !command )
+			return false;
+
+		for( const restored_flags_t& restored : m_restored_flags ) {
+			if( restored.m_command == command )
+				return true;
+		}
+
+		m_restored_flags.push_back( { command, command->m_flags } );
+		command->m_flags &= ~flags;
+		return true;
+	}
+
 	void ConsoleCommandRegistry::disconnect( ) {
+		// restore engine-owned cvars before releasing the ICvar interface.
+		for( const restored_flags_t& restored : m_restored_flags ) {
+			if( restored.m_command )
+				restored.m_command->m_flags = restored.m_original;
+		}
+		m_restored_flags.clear( );
+
 		// unregister before releasing storage the engine may still reference.
 		if( m_cvar ) {
 			for( auto& command : m_commands ) {

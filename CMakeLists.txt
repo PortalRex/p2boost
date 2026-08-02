@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(p2boost VERSION 0.8.2 LANGUAGES CXX)
+project(p2boost VERSION 0.8.3 LANGUAGES CXX)
 
 option(P2BOOST_BUILD_RESEARCH_TOOLS "Build offline profiling tools from research/" OFF)
 
@@ -22,11 +22,35 @@ set(P2BOOST_INCLUDE_DIRECTORIES
   src/platform
 )
 
+# Compile the readable HLSL source into a C header. Keeping shader bytecode out
+# of source control makes the post-process implementation auditable.
+file(GLOB P2BOOST_FXC_CANDIDATES "C:/Program Files (x86)/Windows Kits/10/bin/*/x86/fxc.exe")
+list(SORT P2BOOST_FXC_CANDIDATES ORDER DESCENDING)
+list(LENGTH P2BOOST_FXC_CANDIDATES P2BOOST_FXC_COUNT)
+if(P2BOOST_FXC_COUNT EQUAL 0)
+  message(FATAL_ERROR "The x86 Windows SDK shader compiler (fxc.exe) is required")
+endif()
+list(GET P2BOOST_FXC_CANDIDATES 0 P2BOOST_FXC)
+
+set(P2BOOST_GENERATED_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated")
+set(P2BOOST_GAMMA_SHADER_HEADER "${P2BOOST_GENERATED_DIRECTORY}/monitor_gamma_shader.h")
+add_custom_command(
+  OUTPUT "${P2BOOST_GAMMA_SHADER_HEADER}"
+  COMMAND "${CMAKE_COMMAND}" -E make_directory "${P2BOOST_GENERATED_DIRECTORY}"
+  COMMAND "${P2BOOST_FXC}" /nologo /T ps_2_0 /E main /Fh "${P2BOOST_GAMMA_SHADER_HEADER}"
+          /Vn g_monitor_gamma_shader "${CMAKE_CURRENT_SOURCE_DIR}/src/shaders/monitor_gamma.hlsl"
+  DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/shaders/monitor_gamma.hlsl"
+  VERBATIM
+)
+
 # The release library contains the two benchmark-proven fixes, the optional
 # flat-texture mode, and their shared runtime support. Historical probes stay
 # under research/ and are never compiled into p2boost.dll.
 add_library(p2boost_core STATIC
   src/features/flat_textures.cpp
+  src/features/display_adjustments.cpp
+  src/features/demo_provenance.cpp
+  "${P2BOOST_GAMMA_SHADER_HEADER}"
   src/core/frame_limiter.cpp
   src/core/frame_metrics.cpp
   src/core/projected_shadow_cache.cpp
@@ -35,6 +59,7 @@ add_library(p2boost_core STATIC
   src/memory/hook.cpp
 )
 target_include_directories(p2boost_core PUBLIC ${P2BOOST_INCLUDE_DIRECTORIES})
+target_include_directories(p2boost_core PRIVATE "${P2BOOST_GENERATED_DIRECTORY}")
 target_compile_definitions(p2boost_core PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_compile_options(p2boost_core PRIVATE /W4 /WX /permissive- /Zc:__cplusplus /guard:cf)
 target_link_libraries(p2boost_core PRIVATE bcrypt)

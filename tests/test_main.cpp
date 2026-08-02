@@ -1,4 +1,5 @@
 #include "address.h"
+#include "display_adjustments.h"
 #include "flat_textures.h"
 #include "frame_limiter.h"
 #include "frame_metrics.h"
@@ -262,6 +263,14 @@ namespace {
 		return color.m_red == 48 && color.m_green == 48 && color.m_blue == 48;
 	}
 
+	bool test_monitor_gamma_curve( ) {
+		// 2.2 is a zero-cost identity; lower values brighten and upper values darken.
+		const float neutral = p2boost::monitor_gamma_curve( 2.2f );
+		const float bright	= p2boost::monitor_gamma_curve( 1.6f );
+		const float dark	= p2boost::monitor_gamma_curve( 2.6f );
+		return std::fabs( neutral - 1.0f ) < 0.0001f && bright < neutral && dark > neutral;
+	}
+
 }
 
 int main( ) {
@@ -278,9 +287,10 @@ int main( ) {
 	const bool qpc			  = test_qpc( );
 	const bool flat_alpha	  = test_flat_texture_alpha( );
 	const bool flat_color	  = test_flat_texture_dominant_color( );
+	const bool gamma_curve	  = test_monitor_gamma_curve( );
 	std::printf( "address=%s rel32=%s pattern=%s hook_chain=%s callsite=%s callsite_chain=%s "
 				 "hash=%s metrics=%s overlay=%s "
-				 "phase=%s qpc=%s flat_alpha=%s flat_color=%s\n",
+				 "phase=%s qpc=%s flat_alpha=%s flat_color=%s gamma_curve=%s\n",
 				 address ? "ok" : "FAIL",
 				 relative_call ? "ok" : "FAIL",
 				 pattern ? "ok" : "FAIL",
@@ -293,8 +303,9 @@ int main( ) {
 				 phase ? "ok" : "FAIL",
 				 qpc ? "ok" : "FAIL",
 				 flat_alpha ? "ok" : "FAIL",
-				 flat_color ? "ok" : "FAIL" );
-	return address && relative_call && pattern && hook && callsite && callsite_chain && hash && metrics && overlay && phase && qpc && flat_alpha && flat_color
+				 flat_color ? "ok" : "FAIL",
+				 gamma_curve ? "ok" : "FAIL" );
+	return address && relative_call && pattern && hook && callsite && callsite_chain && hash && metrics && overlay && phase && qpc && flat_alpha && flat_color && gamma_curve
 			   ? 0
 			   : 1;
 }

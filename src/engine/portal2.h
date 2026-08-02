@@ -24,6 +24,10 @@ namespace p2boost::portal2 {
 		constexpr std::ptrdiff_t flat_texture_device_global{ 17 };
 		constexpr std::ptrdiff_t shadow_manager_object{ 4 };
 		constexpr std::ptrdiff_t flashlight_models_global{ 15 };
+
+		// VEngineClient015::ClientCmd contains one direct Cbuf_AddText call. SAR's
+		// public Portal 2 10090 offsets independently identify this rel32 operand.
+		constexpr std::ptrdiff_t engine_client_cmd_cbuf_add_text_operand{ 46 };
 	}
 
 	// recovered class and stack fields used by the two production hooks.
@@ -42,8 +46,10 @@ namespace p2boost::portal2 {
 	// VMT indices describe ABI layout rather than process addresses.
 	namespace vmt {
 		constexpr size_t update_projected{ 24 };
+		constexpr size_t engine_client_cmd{ 7 };
 		constexpr size_t engine_is_recording_demo{ 79 };
 		constexpr size_t engine_execute_client_cmd{ 104 };
+		constexpr size_t engine_active_split_screen_slot{ 127 };
 		constexpr size_t render_view_vgui_paint{ 36 };
 
 		// VMaterialSystem080 and public D3D9 ABI methods used by the optional
@@ -56,9 +62,12 @@ namespace p2boost::portal2 {
 		constexpr size_t render_context_bind{ 9 };
 		constexpr size_t material_texture_group{ 1 };
 		constexpr size_t material_shader_name{ 49 };
+		constexpr size_t d3d9_reset{ 16 };
+		constexpr size_t d3d9_present{ 17 };
 		constexpr size_t d3d9_create_texture{ 23 };
 		constexpr size_t d3d9_update_surface{ 30 };
 		constexpr size_t d3d9_update_texture{ 31 };
+		constexpr size_t d3d9_set_viewport{ 47 };
 		constexpr size_t d3d9_set_texture{ 65 };
 		constexpr size_t d3d9_texture_release{ 2 };
 		constexpr size_t d3d9_texture_get_surface_level{ 18 };

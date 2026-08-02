@@ -68,9 +68,13 @@ namespace p2boost::sdk {
 		__forceinline void ExecuteClientCmd( const char* command ) {
 			call< portal2::vmt::engine_execute_client_cmd, void >( command );
 		}
+
+		__forceinline int GetActiveSplitScreenPlayerSlot( ) {
+			return call< portal2::vmt::engine_active_split_screen_slot, int >( );
+		}
 	};
 
-	// VEngineRenderView013 is hooked at VGui_Paint to protect every UI draw.
+	// VEngineRenderView013 exposes the optional VGui_Paint renderer guard.
 	class RenderView final : public Interface {};
 
 	class Material final : public Interface {

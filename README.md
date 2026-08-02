@@ -4,7 +4,8 @@ p2boost is a Windows x86 Source plugin for Portal 2 build `23973718`. Version
 0.8 is Vulkan-only and expects Portal 2's shipped DXVK renderer. Launch the game
 with `-vulkan`; native D3D9 is deliberately rejected.
 
-The release contains two independently measured, gameplay-neutral changes:
+The release contains two independently measured, gameplay-neutral performance
+changes:
 
 - The frame limiter carries ordinary sub-frame deadline overshoot instead of
   discarding it every frame. It still resets phase after real renderer work or
@@ -14,6 +15,11 @@ The release contains two independently measured, gameplay-neutral changes:
   rebuilds. It keeps the engine's dirty-list cleanup, shadow-depth rendering,
   lighting, and all visual settings. The cache invalidates on map, focus,
   plugin, and A/B state transitions.
+
+The DXVK compatibility layer also restores two shipped display controls. A
+final gamma pass makes `mat_monitorgamma` functional, while the missing viewport
+transition expands `mat_viewportscale` before full-resolution UI is painted.
+Both paths remain dormant at their default values.
 
 No cvars are forced. There is no mandatory graphics reduction, dummy prewarming,
 demo or simulation change, replacement game DLL, or D3D9 proxy. The separate
@@ -58,7 +64,8 @@ not reset the Portal 2 application profile.
 
 ## Build and install
 
-Requirements are Visual Studio 2022, CMake 3.24 or newer, and an x86 toolchain.
+Requirements are Visual Studio 2022, CMake 3.24 or newer, an x86 toolchain, and
+the Windows SDK's x86 `fxc.exe` shader compiler.
 
 ```powershell
 .\scripts\build.ps1
@@ -79,7 +86,8 @@ To remove the plugin:
 ## Commands
 
 - `p2boost_status` prints the build fingerprint, DXVK/Vulkan and NVIDIA-profile
-  state, enabled fixes, SAR state, overlay availability, and metric count.
+  state, enabled fixes, display-pass counts, demo-marker readiness, SAR state,
+  overlay availability, and metric count.
 - `p2boost_enable 0|1` provides a reversible runtime A/B switch.
 - `p2boost_flat_textures 0|1` replaces proven color-bearing world/model samplers
   with their dominant tone and substitutes a valid neutral texture for normal/
@@ -87,13 +95,19 @@ To remove the plugin:
   into flashlight/shadow override passes. Base alpha and dedicated self-
   illumination masks remain exact, preserving cutouts, transparency, and
   emissive shapes. Blend controls, lighting lookups, video frames, particles,
-  render targets, lightmaps, and cubemaps remain original. The engine's complete
-  `VGui_Paint` boundary protects HUD, console, menus, cursors, and SAR overlays
+  render targets, lightmaps, and cubemaps remain original. Shader and texture-
+  group classification protects HUD, console, menus, cursors, and SAR overlays
   without relying on material-name exceptions.
 - `p2boost_overlay 0|1` shows actual rendered FPS, current/p95/p99/max frame
   time, a 64-frame graph, one-second hitch count, and shadow-cache activity.
 - `p2boost_trace 0|1` records bounded frame and shadow-cache metrics.
 - `p2boost_dump_metrics` writes `p2boost_metrics.csv` in the game root.
+
+`mat_monitorgamma` now changes the completed DXVK frame; 2.2 is neutral and
+therefore incurs no extra pass. `mat_viewportscale` and `mat_viewportupscale`
+have only `FCVAR_CHEAT` removed, retain every other engine flag and bound, and
+are restored to their original flags when p2boost unloads. With upscaling
+enabled, the scaled 3D/HUD image is expanded before native-resolution VGUI.
 
 ## Compatibility and safety
 
@@ -116,6 +130,8 @@ custom demo message or changing simulation data.
   overlay, and plugin entry point.
 - `src/engine` contains typed wrappers for the minimal public Source ABI, the
   console bridge, and only the reversed fields/signatures used by release code.
+- `src/features` contains optional display, provenance, and flat-texture
+  features kept separate from the benchmark-proven core patches.
 - `src/memory` contains the small chain-aware hook and pattern helpers.
 - `src/platform` contains the in-process NVIDIA application-profile bridge.
 - `research` contains Ghidra scripts, old native-D3D9 probes, benchmark routes,
