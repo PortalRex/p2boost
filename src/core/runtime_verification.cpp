@@ -14,9 +14,10 @@
 namespace p2boost {
 	namespace {
 
+		// read a loaded module path without imposing MAX_PATH.
 		std::wstring module_path( HMODULE module ) {
 			std::wstring path( 32768, L'\0' );
-			const DWORD size = GetModuleFileNameW( module, path.data( ), static_cast< DWORD >( path.size( ) ) );
+			const DWORD	 size = GetModuleFileNameW( module, path.data( ), static_cast< DWORD >( path.size( ) ) );
 			if( size == 0 || size == path.size( ) )
 				return { };
 
@@ -24,12 +25,12 @@ namespace p2boost {
 			return path;
 		}
 
+		// convert verified filesystem paths to UTF-8 for logs and commands.
 		std::string narrow( const std::wstring& input ) {
 			if( input.empty( ) )
 				return { };
 
-			const int size =
-				WideCharToMultiByte( CP_UTF8, 0, input.data( ), static_cast< int >( input.size( ) ), nullptr, 0, nullptr, nullptr );
+			const int size = WideCharToMultiByte( CP_UTF8, 0, input.data( ), static_cast< int >( input.size( ) ), nullptr, 0, nullptr, nullptr );
 			if( size <= 0 )
 				return { };
 
@@ -38,6 +39,7 @@ namespace p2boost {
 			return output;
 		}
 
+		// normalize paths before comparing loader identity.
 		std::wstring lower( std::wstring value ) {
 			std::transform( value.begin( ), value.end( ), value.begin( ), []( wchar_t character ) {
 				return static_cast< wchar_t >( std::towlower( character ) );
@@ -57,7 +59,7 @@ namespace p2boost {
 	}
 
 	const std::array< ModuleFingerprint, 4 >& supported_build_23973718( ) {
-		// Only modules that define hooked code or the required backend belong in
+		// only modules that define hooked code or the required backend belong in
 		// the production fingerprint. Native-D3D9 research modules are excluded.
 		static const std::array< ModuleFingerprint, 4 > modules{ {
 			{ "engine.dll", "bin\\engine.dll", "5196eace78d5f2f47f8ce39a49b0efd15374a2b996b272642f0493ace42c24dc" },
@@ -69,32 +71,34 @@ namespace p2boost {
 	}
 
 	std::string sha256_file( const std::wstring& path ) {
+		// permit Steam updates while hashing the currently installed file.
 		const HANDLE file = CreateFileW( path.c_str( ),
-			GENERIC_READ,
-			FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-			nullptr,
-			OPEN_EXISTING,
-			FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN,
-			nullptr );
+										 GENERIC_READ,
+										 FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+										 nullptr,
+										 OPEN_EXISTING,
+										 FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN,
+										 nullptr );
 		if( file == INVALID_HANDLE_VALUE )
 			throw std::runtime_error( "CreateFileW failed" );
 
-		BCRYPT_ALG_HANDLE algorithm{ };
-		BCRYPT_HASH_HANDLE hash{ };
-		DWORD object_size{ };
-		DWORD result_size{ };
-		std::vector< unsigned char > object;
+		BCRYPT_ALG_HANDLE				algorithm{ };
+		BCRYPT_HASH_HANDLE				hash{ };
+		DWORD							object_size{ };
+		DWORD							result_size{ };
+		std::vector< unsigned char >	object;
 		std::array< unsigned char, 32 > digest{ };
 
+		// own every BCrypt handle explicitly so all failure paths are reversible.
 		try {
 			if( BCryptOpenAlgorithmProvider( &algorithm, BCRYPT_SHA256_ALGORITHM, nullptr, 0 ) < 0 )
 				throw std::runtime_error( "BCryptOpenAlgorithmProvider failed" );
 			if( BCryptGetProperty( algorithm,
-					BCRYPT_OBJECT_LENGTH,
-					reinterpret_cast< PUCHAR >( &object_size ),
-					sizeof( object_size ),
-					&result_size,
-					0 ) < 0 )
+								   BCRYPT_OBJECT_LENGTH,
+								   reinterpret_cast< PUCHAR >( &object_size ),
+								   sizeof( object_size ),
+								   &result_size,
+								   0 ) < 0 )
 				throw std::runtime_error( "BCryptGetProperty failed" );
 
 			object.resize( object_size );
@@ -136,6 +140,7 @@ namespace p2boost {
 	VerificationResult verify_runtime( ) {
 		VerificationResult result;
 
+		// derive the installation root from the module the loader actually mapped.
 		const HMODULE engine = GetModuleHandleW( L"engine.dll" );
 		if( !engine ) {
 			result.m_errors.emplace_back( "engine.dll is not loaded" );
@@ -143,15 +148,16 @@ namespace p2boost {
 		}
 
 		const std::wstring engine_path = module_path( engine );
-		const std::wstring suffix = L"\\bin\\engine.dll";
+		const std::wstring suffix	   = L"\\bin\\engine.dll";
 		if( engine_path.size( ) <= suffix.size( ) || lower( engine_path.substr( engine_path.size( ) - suffix.size( ) ) ) != suffix ) {
 			result.m_errors.emplace_back( "cannot derive the Portal 2 root from engine.dll" );
 			return result;
 		}
 
 		const std::wstring root = engine_path.substr( 0, engine_path.size( ) - suffix.size( ) );
-		result.m_game_root = narrow( root );
+		result.m_game_root		= narrow( root );
 
+		// reject any changed production dependency before hooks can be installed.
 		for( const auto& module : supported_build_23973718( ) ) {
 			const std::wstring path = root + L"\\" + widen_ascii( module.m_relative_path );
 			try {
@@ -163,9 +169,10 @@ namespace p2boost {
 			}
 		}
 
+		// filenames alone are insufficient; verify the loaded backend paths too.
 		const std::wstring shader_api = root + L"\\bin\\shaderapivk.dll";
-		const std::wstring dxvk = root + L"\\bin\\dxvk_d3d9.dll";
-		result.m_dxvk_vulkan = is_loaded_from( L"shaderapivk.dll", shader_api ) && is_loaded_from( L"dxvk_d3d9.dll", dxvk ) &&
+		const std::wstring dxvk		  = root + L"\\bin\\dxvk_d3d9.dll";
+		result.m_dxvk_vulkan		  = is_loaded_from( L"shaderapivk.dll", shader_api ) && is_loaded_from( L"dxvk_d3d9.dll", dxvk ) &&
 							   GetModuleHandleW( L"vulkan-1.dll" ) != nullptr;
 		if( !result.m_dxvk_vulkan )
 			result.m_errors.emplace_back( "Portal 2's shipped DXVK/Vulkan backend is not active; launch with -vulkan" );

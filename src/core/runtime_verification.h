@@ -13,20 +13,20 @@ namespace p2boost {
 	};
 
 	struct VerificationResult {
-		bool m_supported{ };
-		bool m_dxvk_vulkan{ };
-		std::string m_game_root;
+		bool					   m_supported{ };
+		bool					   m_dxvk_vulkan{ };
+		std::string				   m_game_root;
 		std::vector< std::string > m_errors;
 	};
 
-	// Return the exact engine, client, Vulkan renderer, and DXVK files supported
+	// return the exact engine, client, Vulkan renderer, and DXVK files supported
 	// by this release. Hooks are never installed for an approximate match.
 	const std::array< ModuleFingerprint, 4 >& supported_build_23973718( );
 
-	// Hash a file without preventing Steam or the game from updating it.
+	// hash a file without preventing Steam or the game from updating it.
 	std::string sha256_file( const std::wstring& path );
 
-	// Validate both the game build and Portal 2's shipped Vulkan/DXVK backend.
+	// validate both the game build and Portal 2's shipped Vulkan/DXVK backend.
 	VerificationResult verify_runtime( );
 
 }

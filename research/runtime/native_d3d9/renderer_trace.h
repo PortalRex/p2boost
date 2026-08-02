@@ -1,6 +1,6 @@
 #pragma once
 
-#include "hook.h"
+#include "research_hooks.h"
 
 #include <atomic>
 
@@ -107,49 +107,49 @@ namespace p2boost {
 		CallSitePatch		  m_other_app;
 		CallSitePatch		  m_lighting_restore;
 		CallSitePatch		  m_lighting_cache_restore;
-		VtableSlotHook		  m_shader_device;
-		VtableSlotHook		  m_frame_sync;
-		VtableSlotHook		  m_resource_callbacks;
+		VmtHook			  m_shader_device;
+		VmtHook			  m_frame_sync;
+		VmtHook			  m_resource_callbacks;
 		InlineDetour		  m_hardware_sync;
-		VtableSlotHook		  m_present;
+		VmtHook			  m_present;
 		PointerImmediatePatch m_render_worker;
 
 #ifdef P2BOOST_RESEARCH_DRAW_TRACE
-		VtableSlotHook		  m_create_texture;
-		VtableSlotHook		  m_create_vertex_buffer;
-		VtableSlotHook		  m_create_index_buffer;
-		VtableSlotHook		  m_native_vertex_buffer_lock;
-		VtableSlotHook		  m_native_index_buffer_lock;
-		VtableSlotHook		  m_create_vertex_shader;
-		VtableSlotHook		  m_create_pixel_shader;
-		VtableSlotHook		  m_native_present;
-		VtableSlotHook		  m_update_surface;
-		VtableSlotHook		  m_update_texture;
-		VtableSlotHook		  m_stretch_rect;
-		VtableSlotHook		  m_set_render_target;
-		VtableSlotHook		  m_set_depth_stencil_surface;
-		VtableSlotHook		  m_begin_scene;
-		VtableSlotHook		  m_end_scene;
-		VtableSlotHook		  m_clear;
-		VtableSlotHook		  m_set_render_state;
-		VtableSlotHook		  m_set_texture_stage_state;
-		VtableSlotHook		  m_set_sampler_state;
-		VtableSlotHook		  m_draw_primitive;
-		VtableSlotHook		  m_draw_indexed_primitive;
-		VtableSlotHook		  m_draw_primitive_up;
-		VtableSlotHook		  m_draw_indexed_primitive_up;
-		VtableSlotHook		  m_set_texture;
-		VtableSlotHook		  m_set_vertex_declaration;
-		VtableSlotHook		  m_set_fvf;
-		VtableSlotHook		  m_set_vertex_shader;
-		VtableSlotHook		  m_set_stream_source;
-		VtableSlotHook		  m_set_stream_source_frequency;
-		VtableSlotHook		  m_set_indices;
-		VtableSlotHook		  m_set_pixel_shader;
-		VtableSlotHook		  m_dynamic_light_execute_unsigned;
-		VtableSlotHook		  m_dynamic_light_execute_signed;
-		VtableSlotHook		  m_create_occlusion_query;
-		VtableSlotHook		  m_destroy_occlusion_query;
+		VmtHook			  m_create_texture;
+		VmtHook			  m_create_vertex_buffer;
+		VmtHook			  m_create_index_buffer;
+		VmtHook			  m_native_vertex_buffer_lock;
+		VmtHook			  m_native_index_buffer_lock;
+		VmtHook			  m_create_vertex_shader;
+		VmtHook			  m_create_pixel_shader;
+		VmtHook			  m_native_present;
+		VmtHook			  m_update_surface;
+		VmtHook			  m_update_texture;
+		VmtHook			  m_stretch_rect;
+		VmtHook			  m_set_render_target;
+		VmtHook			  m_set_depth_stencil_surface;
+		VmtHook			  m_begin_scene;
+		VmtHook			  m_end_scene;
+		VmtHook			  m_clear;
+		VmtHook			  m_set_render_state;
+		VmtHook			  m_set_texture_stage_state;
+		VmtHook			  m_set_sampler_state;
+		VmtHook			  m_draw_primitive;
+		VmtHook			  m_draw_indexed_primitive;
+		VmtHook			  m_draw_primitive_up;
+		VmtHook			  m_draw_indexed_primitive_up;
+		VmtHook			  m_set_texture;
+		VmtHook			  m_set_vertex_declaration;
+		VmtHook			  m_set_fvf;
+		VmtHook			  m_set_vertex_shader;
+		VmtHook			  m_set_stream_source;
+		VmtHook			  m_set_stream_source_frequency;
+		VmtHook			  m_set_indices;
+		VmtHook			  m_set_pixel_shader;
+		VmtHook			  m_dynamic_light_execute_unsigned;
+		VmtHook			  m_dynamic_light_execute_signed;
+		VmtHook			  m_create_occlusion_query;
+		VmtHook			  m_destroy_occlusion_query;
 		std::atomic_uint	  m_pending_occlusion_query_create_count{ };
 		std::atomic_llong	  m_pending_occlusion_query_create_qpc{ };
 		std::atomic_llong	  m_pending_max_occlusion_query_create_qpc{ };

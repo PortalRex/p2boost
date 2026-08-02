@@ -13,22 +13,22 @@ namespace p2boost {
 	struct OverlayMetrics {
 		static constexpr size_t graph_capacity{ 64 };
 
-		double m_frame_ms{ };
-		double m_average_ms{ };
-		double m_p95_ms{ };
-		double m_p99_ms{ };
-		double m_max_ms{ };
-		double m_shadow_ms{ };
-		unsigned int m_hitch_count{ };
-		unsigned int m_shadow_updates{ };
-		unsigned int m_shadow_hits{ };
+		double								 m_frame_ms{ };
+		double								 m_average_ms{ };
+		double								 m_p95_ms{ };
+		double								 m_p99_ms{ };
+		double								 m_max_ms{ };
+		double								 m_shadow_ms{ };
+		unsigned int						 m_hitch_count{ };
+		unsigned int						 m_shadow_updates{ };
+		unsigned int						 m_shadow_hits{ };
 		std::array< double, graph_capacity > m_graph_ms{ };
-		size_t m_graph_count{ };
-		bool m_focused{ };
-		bool m_coop{ };
+		size_t								 m_graph_count{ };
+		bool								 m_focused{ };
+		bool								 m_coop{ };
 	};
 
-	// Lightweight metrics for the two shipping fixes. Native-D3D9 draw, fence,
+	// lightweight metrics for the two shipping fixes. historical draw, fence,
 	// portal, visibility, and resource probes live exclusively under research/.
 	class FrameMetrics {
 	public:
@@ -64,31 +64,31 @@ namespace p2boost {
 		void record_shadow_update( double milliseconds, bool cache_hit ) noexcept;
 
 		OverlayMetrics overlay_metrics( ) const noexcept;
-		bool dump( const std::string& path ) const;
-		size_t count( ) const noexcept;
+		bool		   dump( const std::string& path ) const;
+		size_t		   count( ) const noexcept;
 
 	private:
 		struct Sample {
-			Qpc::tick_t m_qpc{ };
-			double m_frame_ms{ };
-			double m_shadow_ms{ };
+			Qpc::tick_t	 m_qpc{ };
+			double		 m_frame_ms{ };
+			double		 m_shadow_ms{ };
 			unsigned int m_shadow_updates{ };
 			unsigned int m_shadow_hits{ };
-			bool m_simulating{ };
-			bool m_focused{ };
-			bool m_coop{ };
+			bool		 m_simulating{ };
+			bool		 m_focused{ };
+			bool		 m_coop{ };
 		};
 
-		mutable std::mutex m_samples_mutex;
+		mutable std::mutex			   m_samples_mutex;
 		std::array< Sample, capacity > m_samples{ };
-		size_t m_cursor{ };
-		size_t m_count{ };
-		Qpc::tick_t m_last_qpc{ };
+		size_t						   m_cursor{ };
+		size_t						   m_count{ };
+		Qpc::tick_t					   m_last_qpc{ };
 
 		mutable std::mutex m_pending_mutex;
-		double m_pending_shadow_ms{ };
-		unsigned int m_pending_shadow_updates{ };
-		unsigned int m_pending_shadow_hits{ };
+		double			   m_pending_shadow_ms{ };
+		unsigned int	   m_pending_shadow_updates{ };
+		unsigned int	   m_pending_shadow_hits{ };
 
 		std::atomic_bool m_tracing{ };
 		std::atomic_bool m_overlay_collection{ };

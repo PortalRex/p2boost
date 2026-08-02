@@ -1,7 +1,7 @@
 BasedOnStyle: LLVM
 Language: Cpp
 Standard: c++17
-ColumnLimit: 140
+ColumnLimit: 0
 IndentWidth: 4
 ContinuationIndentWidth: 4
 TabWidth: 4
@@ -15,12 +15,17 @@ AllowShortFunctionsOnASingleLine: None
 AllowShortIfStatementsOnASingleLine: Never
 AllowShortLoopsOnASingleLine: false
 AllowShortEnumsOnASingleLine: false
-BinPackArguments: false
-BinPackParameters: false
-AllowAllArgumentsOnNextLine: false
-AlignAfterOpenBracket: DontAlign
-AlignConsecutiveAssignments: None
-AlignConsecutiveDeclarations: None
+BinPackArguments: true
+BinPackParameters: true
+AllowAllArgumentsOnNextLine: true
+AlignAfterOpenBracket: Align
+AlignConsecutiveAssignments: Consecutive
+AlignConsecutiveBitFields: Consecutive
+AlignConsecutiveDeclarations: Consecutive
+AlignConsecutiveMacros: Consecutive
+AlignEscapedNewlines: Right
+AlignOperands: Align
+AlignTrailingComments: true
 DerivePointerAlignment: false
 PointerAlignment: Left
 ReferenceAlignment: Left
@@ -33,3 +38,4 @@ SpacesInSquareBrackets: true
 SpaceInEmptyParentheses: true
 SpaceBeforeParens: Never
 SpaceBeforeCpp11BracedList: false
+SpacesBeforeTrailingComments: 2

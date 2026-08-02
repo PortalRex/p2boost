@@ -10,37 +10,40 @@
 
 namespace {
 
-	constexpr NvU32 present_method_id{ 0x20d690f8 };
-	constexpr NvU32 present_method_layered{ 0x00000001 };
-	constexpr NvU32 present_flags_id{ 0x20324987 };
-	constexpr NvU32 present_flags_dxvk_native{ 0x000802a5 };
+	constexpr NvU32	  present_method_id{ 0x20d690f8 };
+	constexpr NvU32	  present_method_layered{ 0x00000001 };
+	constexpr NvU32	  present_flags_id{ 0x20324987 };
+	constexpr NvU32	  present_flags_dxvk_native{ 0x000802a5 };
 	constexpr wchar_t application_name[]{ L"portal2.exe" };
 	constexpr wchar_t created_profile_name[]{ L"p2boost Portal 2" };
 
 	struct PreviousSetting {
-		bool m_had_override{ };
+		bool  m_had_override{ };
 		NvU32 m_value{ };
 	};
 
 	struct Backup {
-		bool m_created_profile{ };
+		bool			m_created_profile{ };
 		PreviousSetting m_present_method;
 		PreviousSetting m_present_flags;
 	};
 
+	// resolve NVAPI errors before unloading the library.
 	void print_error( const char* operation, NvAPI_Status status ) {
 		NvAPI_ShortString message{ };
 		NvAPI_GetErrorMessage( status, message );
 		std::fprintf( stderr, "p2boost_driver: %s failed (%d: %s)\n", operation, status, message );
 	}
 
+	// keep the reversible state beside the helper executable.
 	std::filesystem::path backup_path( ) {
 		std::wstring executable( 32768, L'\0' );
-		const DWORD length = GetModuleFileNameW( nullptr, executable.data( ), static_cast< DWORD >( executable.size( ) ) );
+		const DWORD	 length = GetModuleFileNameW( nullptr, executable.data( ), static_cast< DWORD >( executable.size( ) ) );
 		executable.resize( length );
 		return std::filesystem::path( executable ).parent_path( ) / L"p2boost_driver_profile.state";
 	}
 
+	// use a small versioned text format that can be inspected and recovered.
 	bool write_backup( const std::filesystem::path& path, const Backup& backup ) {
 		std::ofstream output( path, std::ios::trunc );
 		if( !output )
@@ -57,10 +60,11 @@ namespace {
 
 	bool read_backup( const std::filesystem::path& path, Backup& backup ) {
 		std::ifstream input( path );
-		std::string line;
+		std::string	  line;
 		if( !input || !std::getline( input, line ) || line != "p2boost_driver_profile_v1" )
 			return false;
 
+		// accept fields only in the exact expected order and syntax.
 		auto read_value = [ &input ]( const char* key, NvU32& value ) {
 			std::string entry;
 			if( !std::getline( input, entry ) )
@@ -85,20 +89,22 @@ namespace {
 			!read_value( "present_flags_value", backup.m_present_flags.m_value ) )
 			return false;
 
-		backup.m_created_profile = created != 0;
+		backup.m_created_profile			   = created != 0;
 		backup.m_present_method.m_had_override = method_override != 0;
-		backup.m_present_flags.m_had_override = flags_override != 0;
+		backup.m_present_flags.m_had_override  = flags_override != 0;
 		return true;
 	}
 
 	bool find_application( NvDRSSessionHandle session, NvDRSProfileHandle& profile ) {
+		// find whichever current profile owns portal2.exe.
 		NVDRS_APPLICATION application{ };
 		application.version = NVDRS_APPLICATION_VER;
-		auto* name = reinterpret_cast< NvU16* >( const_cast< wchar_t* >( application_name ) );
+		auto* name			= reinterpret_cast< NvU16* >( const_cast< wchar_t* >( application_name ) );
 		return NvAPI_DRS_FindApplicationByName( session, name, &profile, &application ) == NVAPI_OK;
 	}
 
 	bool create_application_profile( NvDRSSessionHandle session, NvDRSProfileHandle& profile ) {
+		// create a dedicated profile only when NVIDIA has no existing association.
 		NVDRS_PROFILE profile_info{ };
 		profile_info.version = NVDRS_PROFILE_VER;
 		wcsncpy_s( reinterpret_cast< wchar_t* >( profile_info.profileName ), NVAPI_UNICODE_STRING_MAX, created_profile_name, _TRUNCATE );
@@ -123,14 +129,15 @@ namespace {
 	}
 
 	bool read_setting( NvDRSSessionHandle session, NvDRSProfileHandle profile, NvU32 id, NvU32 default_value, PreviousSetting& previous ) {
+		// distinguish an inherited value from a user-owned profile override.
 		NVDRS_SETTING setting{ };
-		setting.version = NVDRS_SETTING_VER;
+		setting.version			  = NVDRS_SETTING_VER;
 		const NvAPI_Status status = NvAPI_DRS_GetSetting( session, profile, id, &setting );
 		if( status == NVAPI_SETTING_NOT_FOUND ) {
-			// Hidden flags are absent until a profile overrides them. Preserve that
+			// hidden flags are absent until a profile overrides them. preserve that
 			// absence so restore can delete our value instead of inventing one.
 			previous.m_had_override = false;
-			previous.m_value = default_value;
+			previous.m_value		= default_value;
 			return true;
 		}
 		if( status != NVAPI_OK ) {
@@ -139,16 +146,16 @@ namespace {
 		}
 
 		previous.m_had_override = setting.settingLocation == NVDRS_CURRENT_PROFILE_LOCATION && setting.isCurrentPredefined == 0;
-		previous.m_value = setting.u32CurrentValue;
+		previous.m_value		= setting.u32CurrentValue;
 		return true;
 	}
 
 	bool set_setting( NvDRSSessionHandle session, NvDRSProfileHandle profile, NvU32 id, NvU32 value ) {
 		NVDRS_SETTING setting{ };
-		setting.version = NVDRS_SETTING_VER;
-		setting.settingId = id;
-		setting.settingType = NVDRS_DWORD_TYPE;
-		setting.u32CurrentValue = value;
+		setting.version			  = NVDRS_SETTING_VER;
+		setting.settingId		  = id;
+		setting.settingType		  = NVDRS_DWORD_TYPE;
+		setting.u32CurrentValue	  = value;
 		const NvAPI_Status status = NvAPI_DRS_SetSetting( session, profile, &setting );
 		if( status != NVAPI_OK ) {
 			print_error( "NvAPI_DRS_SetSetting", status );
@@ -158,6 +165,7 @@ namespace {
 	}
 
 	bool restore_setting( NvDRSSessionHandle session, NvDRSProfileHandle profile, NvU32 id, const PreviousSetting& previous ) {
+		// restore an override or delete ours to reveal the inherited default.
 		if( previous.m_had_override )
 			return set_setting( session, profile, id, previous.m_value );
 
@@ -186,6 +194,7 @@ namespace {
 	class DrsSession {
 	public:
 		bool open( ) {
+			// initialize, create, and load the DRS database in strict order.
 			NvAPI_Status status = NvAPI_Initialize( );
 			if( status != NVAPI_OK ) {
 				print_error( "NvAPI_Initialize", status );
@@ -222,8 +231,9 @@ namespace {
 	};
 
 	int apply_profile( NvDRSSessionHandle session, const std::filesystem::path& state_path ) {
+		// preserve the first backup so repeated apply calls remain reversible.
 		NvDRSProfileHandle profile{ };
-		Backup backup;
+		Backup			   backup;
 		if( !find_application( session, profile ) ) {
 			if( !create_application_profile( session, profile ) )
 				return 1;
@@ -256,6 +266,7 @@ namespace {
 	}
 
 	int restore_profile( NvDRSSessionHandle session, const std::filesystem::path& state_path ) {
+		// never infer prior values when the durable backup is missing or corrupt.
 		Backup backup;
 		if( !read_backup( state_path, backup ) ) {
 			std::fputs( "p2boost_driver: no valid backup exists; refusing to guess previous settings\n", stderr );
@@ -270,7 +281,7 @@ namespace {
 
 		if( backup.m_created_profile ) {
 			NVDRS_PROFILE profile_info{ };
-			profile_info.version = NVDRS_PROFILE_VER;
+			profile_info.version		   = NVDRS_PROFILE_VER;
 			const NvAPI_Status info_status = NvAPI_DRS_GetProfileInfo( session, profile, &profile_info );
 			if( info_status != NVAPI_OK || profile_info.isPredefined != 0 ||
 				std::wcscmp( reinterpret_cast< const wchar_t* >( profile_info.profileName ), created_profile_name ) != 0 ) {

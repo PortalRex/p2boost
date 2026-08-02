@@ -118,7 +118,7 @@ namespace p2boost {
 		m_metrics				  = metrics;
 		m_removing.store( false, std::memory_order_release );
 		m_instance		  = this;
-		auto install_slot = []( VtableSlotHook& hook, void* object, size_t index, void* replacement ) {
+		auto install_slot = []( VmtHook& hook, void* object, size_t index, void* replacement ) {
 			if( !object )
 				return false;
 			auto** vtable = *reinterpret_cast< void*** >( object );

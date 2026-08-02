@@ -1,7 +1,7 @@
 # p2boost
 
 p2boost is a Windows x86 Source plugin for Portal 2 build `23973718`. Version
-0.6 is Vulkan-only and expects Portal 2's shipped DXVK renderer. Launch the game
+0.7 is Vulkan-only and expects Portal 2's shipped DXVK renderer. Launch the game
 with `-vulkan`; native D3D9 is deliberately rejected.
 
 The release contains two independently measured, gameplay-neutral changes:
@@ -15,8 +15,9 @@ The release contains two independently measured, gameplay-neutral changes:
   lighting, and all visual settings. The cache invalidates on map, focus,
   plugin, and A/B state transitions.
 
-No cvars are forced. There is no graphics reduction, dummy prewarming, demo or
-simulation change, replacement game DLL, or D3D9 proxy.
+No cvars are forced. There is no mandatory graphics reduction, dummy prewarming,
+demo or simulation change, replacement game DLL, or D3D9 proxy. The separate
+flat-texture command is an explicit visual option and is disabled by default.
 
 ## Why Vulkan only
 
@@ -76,6 +77,10 @@ To remove it and restore the previous NVIDIA values:
 - `p2boost_status` prints the build fingerprint, DXVK/Vulkan verification,
   enabled fixes, SAR state, overlay availability, and metric count.
 - `p2boost_enable 0|1` provides a reversible runtime A/B switch.
+- `p2boost_flat_textures 0|1` replaces admitted world/model albedo with its
+  alpha-weighted average color while preserving cutout and transparency data.
+  HUD, VGUI, SAR, render-target, lightmap, and tiny crosshair textures remain
+  untouched.
 - `p2boost_overlay 0|1` shows actual rendered FPS, current/p95/p99/max frame
   time, a 64-frame graph, one-second hitch count, and shadow-cache activity.
 - `p2boost_trace 0|1` records bounded frame and shadow-cache metrics.
@@ -88,7 +93,7 @@ To remove it and restore the previous NVIDIA values:
 The plugin supports only the fingerprinted Windows x86 Steam build. A mismatch
 leaves every hook disabled and reports the exact failed module. Release hooks
 use validated byte signatures rather than preferred RVAs, preserve previous
-vtable targets, and restore only patches they still own.
+VMT targets, and restore only patches they still own.
 
 SAR may load before or after p2boost. p2boost does not alter timing, input,
 network, demo, entity, or simulation semantics.
@@ -97,8 +102,8 @@ network, demo, entity, or simulation semantics.
 
 - `src/core` contains the two release fixes, runtime verification, metrics,
   overlay, and plugin entry point.
-- `src/engine` contains the minimal public Source plugin ABI, console bridge,
-  and only the reversed fields/signatures used by release code.
+- `src/engine` contains typed wrappers for the minimal public Source ABI, the
+  console bridge, and only the reversed fields/signatures used by release code.
 - `src/memory` contains the small chain-aware hook and pattern helpers.
 - `tools/p2boost_driver.cpp` is the reversible NVIDIA application-profile tool.
 - `research` contains Ghidra scripts, old native-D3D9 probes, benchmark routes,

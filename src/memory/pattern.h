@@ -15,14 +15,14 @@
 namespace p2boost::pattern {
 
 	// stores one parsed byte or wildcard from a signature.
-	using byte_t = std::pair< std::uint8_t, bool >;
+	using byte_t  = std::pair< std::uint8_t, bool >;
 	using bytes_t = std::vector< byte_t >;
 
 	// convert a readable ida-style signature once before scanning.
 	inline bytes_t parse( const std::string& signature ) {
-		bytes_t out;
+		bytes_t			  out;
 		std::stringstream stream{ signature };
-		std::string token;
+		std::string		  token;
 
 		while( stream >> token ) {
 			// a question mark accepts any byte, including relocated operands.
@@ -64,10 +64,10 @@ namespace p2boost::pattern {
 			return { };
 
 		auto* begin = start.as< std::uint8_t* >( );
-		auto* end = begin + length;
-		auto found = std::search( begin, end, signature.begin( ), signature.end( ), []( std::uint8_t value, const byte_t& expected ) {
-			return expected.second || value == expected.first;
-		} );
+		auto* end	= begin + length;
+		auto  found = std::search( begin, end, signature.begin( ), signature.end( ), []( std::uint8_t value, const byte_t& expected ) {
+			 return expected.second || value == expected.first;
+		 } );
 
 		return found == end ? Address{ } : Address{ found };
 	}
@@ -75,19 +75,19 @@ namespace p2boost::pattern {
 	// require exactly one match so a weak signature can never select a hook.
 	inline Address find_unique( Address module, const std::string& text ) {
 		// scanning the mapped image accounts for loader relocations wildcarded above.
-		const size_t length = image_size( module );
+		const size_t  length	= image_size( module );
 		const bytes_t signature = parse( text );
-		const Address first = find( module, length, signature );
+		const Address first		= find( module, length, signature );
 		if( !first )
 			return { };
 
 		// a second match makes the signature ambiguous and therefore unusable.
-		const Address next = first.add( 1 );
-		const size_t remaining = length - static_cast< size_t >( next.as< std::uintptr_t >( ) - module.as< std::uintptr_t >( ) );
+		const Address next		= first.add( 1 );
+		const size_t  remaining = length - static_cast< size_t >( next.as< std::uintptr_t >( ) - module.as< std::uintptr_t >( ) );
 		return find( next, remaining, signature ) ? Address{ } : first;
 	}
 
-	// Locate one relocated function pointer without relying on a vtable RVA.
+	// locate one relocated function pointer without relying on a VMT RVA.
 	inline Address find_pointer_unique( Address module, Address target ) noexcept {
 		const size_t length = image_size( module );
 		if( !module || !target || length < sizeof( std::uintptr_t ) )

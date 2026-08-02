@@ -25,24 +25,24 @@ namespace p2boost {
 		if( !client )
 			return false;
 
-		// This xref loads Portal 2's private CClientShadowMgr singleton.
+		// this xref loads Portal 2's private CClientShadowMgr singleton.
 		const Address manager_xref = pattern::find_unique( client, portal2::signature::shadow_manager );
-		const Address manager = manager_xref.add( portal2::xref::shadow_manager_object ).at< Address >( );
-		auto** vtable = manager.to< void** >( );
-		if( !manager || !vtable )
+		const Address manager	   = manager_xref.add( portal2::xref::shadow_manager_object ).at< Address >( );
+		auto**		  vmt		   = manager.to< void** >( );
+		if( !manager || !vmt )
 			return false;
 
-		// Slot 24 is CClientShadowMgr::UpdateProjectedTexture. Its second direct
+		// method 24 is CClientShadowMgr::UpdateProjectedTexture. its second direct
 		// call removes the handle from both dirty trees and must never be skipped.
-		const Address update_projected{ vtable[ portal2::slot::update_projected ] };
+		const Address update_projected{ vmt[ portal2::vmt::update_projected ] };
 		const Address remove_dirty_call = update_projected.add( portal2::shadow::remove_dirty_call );
 		if( remove_dirty_call.at< std::uint8_t >( ) != 0xe8 )
 			return false;
 		m_remove_dirty = remove_dirty_call.rel32( 1 ).as< RemoveDirtyFn >( );
 
-		// Flashlight-model membership changes generated receiver geometry even if
+		// flashlight-model membership changes generated receiver geometry even if
 		// the shadow entry itself is unchanged, so it is part of the cache key.
-		const Address models_xref = pattern::find_unique( client, portal2::signature::flashlight_models );
+		const Address models_xref  = pattern::find_unique( client, portal2::signature::flashlight_models );
 		m_flashlight_models_parent = models_xref.add( portal2::xref::flashlight_models_global ).at< Address >( ).as< int** >( );
 		if( !m_remove_dirty || !m_flashlight_models_parent || !*m_flashlight_models_parent )
 			return false;
@@ -51,9 +51,9 @@ namespace p2boost {
 		m_states.reserve( 16 );
 		m_instance = this;
 
-		if( !m_update_projected.install( vtable + portal2::slot::update_projected, reinterpret_cast< void* >( &UpdateProjected ) ) ) {
+		if( !m_update_projected.install( vmt + portal2::vmt::update_projected, reinterpret_cast< void* >( &UpdateProjected ) ) ) {
 			m_instance = nullptr;
-			m_metrics = nullptr;
+			m_metrics  = nullptr;
 			return false;
 		}
 
@@ -63,9 +63,9 @@ namespace p2boost {
 	void ProjectedShadowCache::remove( ) {
 		m_update_projected.remove( );
 		invalidate( );
-		m_metrics = nullptr;
+		m_metrics				   = nullptr;
 		m_flashlight_models_parent = nullptr;
-		m_remove_dirty = nullptr;
+		m_remove_dirty			   = nullptr;
 		m_enabled.store( false, std::memory_order_relaxed );
 		m_hits.store( 0, std::memory_order_relaxed );
 
@@ -78,12 +78,13 @@ namespace p2boost {
 	}
 
 	void ProjectedShadowCache::set_enabled( bool enabled ) noexcept {
-		// Cached state must not cross a patched/unpatched A/B transition.
+		// cached state must not cross a patched/unpatched A/B transition.
 		if( m_enabled.exchange( enabled, std::memory_order_relaxed ) != enabled )
 			invalidate( );
 	}
 
 	void __fastcall ProjectedShadowCache::UpdateProjected( void* self, void*, unsigned int handle, bool force ) {
+		// recover the chain target before inspecting any reversed object fields.
 		ProjectedShadowCache* cache = m_instance;
 		if( !cache )
 			return;
@@ -98,15 +99,16 @@ namespace p2boost {
 			return;
 		}
 
+		// resolve the shadow record from the verified manager layout.
 		auto* entries = *reinterpret_cast< std::uint8_t** >( static_cast< std::uint8_t* >( self ) + portal2::shadow::entries );
 		if( !entries ) {
 			original( self, handle, force );
 			return;
 		}
 
-		const auto index = static_cast< std::uint16_t >( handle & 0xffffu );
+		const auto	index = static_cast< std::uint16_t >( handle & 0xffffu );
 		const auto* entry = entries + static_cast< size_t >( index ) * portal2::shadow::entry_size;
-		auto prior = cache->m_states.end( );
+		auto		prior = cache->m_states.end( );
 		for( auto state = cache->m_states.begin( ); state != cache->m_states.end( ); ++state ) {
 			if( state->m_handle == index ) {
 				prior = state;
@@ -114,20 +116,22 @@ namespace p2boost {
 			}
 		}
 
+		// include flashlight receiver membership in the cache key.
 		int* models_owner = *cache->m_flashlight_models_parent;
-		int model_count = 0;
+		int	 model_count  = 0;
 		if( models_owner ) {
 			auto* model_bytes = reinterpret_cast< std::uint8_t* >( models_owner );
-			model_count = *reinterpret_cast< int* >( model_bytes + portal2::shadow::flashlight_models );
+			model_count		  = *reinterpret_cast< int* >( model_bytes + portal2::shadow::flashlight_models );
 		}
 		const bool known_state = prior != cache->m_states.end( );
 		const bool same_models = known_state && prior->m_flashlight_models == model_count;
-		const bool same_entry = known_state && std::memcmp( prior->m_entry.data( ), entry, prior->m_entry.size( ) ) == 0;
-		const bool identical = same_models && same_entry;
+		const bool same_entry  = known_state && std::memcmp( prior->m_entry.data( ), entry, prior->m_entry.size( ) ) == 0;
+		const bool identical   = same_models && same_entry;
 
-		const bool collecting = cache->m_metrics && cache->m_metrics->collecting( );
+		const bool		collecting = cache->m_metrics && cache->m_metrics->collecting( );
 		const Stopwatch timer{ collecting };
 
+		// skip geometry rebuild only when every renderer-visible input is identical.
 		if( cache->m_enabled.load( std::memory_order_relaxed ) && identical ) {
 			cache->m_remove_dirty( self, handle );
 			cache->m_hits.fetch_add( 1, std::memory_order_relaxed );
@@ -136,13 +140,14 @@ namespace p2boost {
 			return;
 		}
 
+		// changed state follows the untouched engine path before becoming cacheable.
 		original( self, handle, force );
 		if( collecting )
 			cache->m_metrics->record_shadow_update( timer.elapsed_ms( ), false );
 
 		if( prior == cache->m_states.end( ) ) {
 			cache->m_states.push_back( { } );
-			prior = cache->m_states.end( ) - 1;
+			prior			= cache->m_states.end( ) - 1;
 			prior->m_handle = index;
 		}
 

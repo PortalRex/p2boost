@@ -8,13 +8,16 @@ namespace p2boost {
 	class Stack : public Address {
 	public:
 		// default ctor.
-		__forceinline Stack( ) noexcept : Address{ } {
+		__forceinline Stack( ) noexcept
+			: Address{ } {
 		}
 
 		// frame ctors.
-		__forceinline Stack( Address base ) noexcept : Address{ base } {
+		__forceinline Stack( Address base ) noexcept
+			: Address{ base } {
 		}
-		__forceinline Stack( const void* base ) noexcept : Address{ base } {
+		__forceinline Stack( const void* base ) noexcept
+			: Address{ base } {
 		}
 
 		// get the saved return address.

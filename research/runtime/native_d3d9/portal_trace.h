@@ -1,6 +1,6 @@
 #pragma once
 
-#include "hook.h"
+#include "research_hooks.h"
 
 namespace p2boost {
 

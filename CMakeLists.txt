@@ -22,9 +22,9 @@ set(P2BOOST_INCLUDE_DIRECTORIES
   src/platform
 )
 
-# The release library contains only the two benchmark-proven fixes and their
-# shared runtime support. Native-D3D9 probes are archived under research/ and
-# are never compiled into p2boost.dll.
+# The release library contains the two benchmark-proven fixes, the optional
+# flat-texture mode, and their shared runtime support. Historical probes stay
+# under research/ and are never compiled into p2boost.dll.
 add_library(p2boost_core STATIC
   src/features/flat_textures.cpp
   src/core/frame_limiter.cpp
@@ -79,6 +79,18 @@ target_link_libraries(p2boost_tests PRIVATE p2boost_core bcrypt)
 add_test(NAME p2boost_tests COMMAND p2boost_tests)
 
 if(P2BOOST_BUILD_RESEARCH_TOOLS)
+  # Compile the archived hook primitives separately so they can never leak
+  # into the production static library or DLL.
+  add_library(p2boost_research_hooks STATIC
+    research/runtime/native_d3d9/research_hooks.cpp
+  )
+  target_include_directories(p2boost_research_hooks PRIVATE
+    ${P2BOOST_INCLUDE_DIRECTORIES}
+    research/runtime/native_d3d9
+  )
+  target_compile_definitions(p2boost_research_hooks PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+  target_compile_options(p2boost_research_hooks PRIVATE /W4 /WX /permissive- /Zc:__cplusplus)
+
   add_executable(p2profile research/tools/p2profile.cpp)
   target_include_directories(p2profile PRIVATE ${P2BOOST_INCLUDE_DIRECTORIES})
   target_compile_definitions(p2profile PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)

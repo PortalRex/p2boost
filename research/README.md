@@ -3,7 +3,8 @@
 This directory is intentionally outside the release target.
 
 - `runtime/native_d3d9` preserves the renderer, resource, fence, visibility,
-  portal, and server probes used to isolate native-D3D9 stalls.
+  portal, and server probes used to isolate native-D3D9 stalls. Its detour and
+  pointer-patch helpers also live there so they cannot enter the release DLL.
 - `scripts` contains the matching ETW, PresentMon, gameplay-route, focus, and
   SAR test harnesses.
 - `benchmarks/native-d3d9-report.md` is the complete pre-Vulkan benchmark log.

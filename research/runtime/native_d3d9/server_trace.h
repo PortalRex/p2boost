@@ -1,6 +1,6 @@
 #pragma once
 
-#include "hook.h"
+#include "research_hooks.h"
 
 namespace p2boost {
 
@@ -26,7 +26,7 @@ namespace p2boost {
 		static void __fastcall PortalLaserThink( void* self, void* );
 
 		static ServerTrace* m_instance;
-		VtableSlotHook		m_spatial_query;
+		VmtHook			m_spatial_query;
 		InlineDetour		m_portal_laser_think;
 		SpatialQuery_t		m_original{ };
 		Metrics*			m_metrics{ };

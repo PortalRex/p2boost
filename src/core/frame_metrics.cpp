@@ -10,6 +10,7 @@
 namespace p2boost {
 	namespace {
 
+		// compute a nearest-rank percentile from an isolated snapshot.
 		double percentile( std::vector< double > values, double percentile_value ) {
 			if( values.empty( ) )
 				return 0.0;
@@ -26,40 +27,42 @@ namespace p2boost {
 	}
 
 	void FrameMetrics::record_frame( ) noexcept {
-		// Leave diagnostics completely dormant unless the trace or overlay is on.
-		// The first collected frame establishes a timestamp and is omitted.
+		// leave diagnostics completely dormant unless the trace or overlay is on.
+		// the first collected frame establishes a timestamp and is omitted.
 		if( !collecting( ) ) {
 			m_last_qpc = 0;
 			return;
 		}
 
-		const Qpc::tick_t now = Qpc::now( );
+		const Qpc::tick_t now	   = Qpc::now( );
 		const Qpc::tick_t previous = m_last_qpc;
-		m_last_qpc = now;
+		m_last_qpc				   = now;
 		if( previous == 0 )
 			return;
 
 		Sample sample;
-		sample.m_qpc = now;
-		sample.m_frame_ms = Qpc::milliseconds( now - previous );
+		sample.m_qpc		= now;
+		sample.m_frame_ms	= Qpc::milliseconds( now - previous );
 		sample.m_simulating = m_simulating.load( std::memory_order_relaxed );
-		sample.m_focused = m_focused.load( std::memory_order_relaxed );
-		sample.m_coop = m_coop.load( std::memory_order_relaxed );
+		sample.m_focused	= m_focused.load( std::memory_order_relaxed );
+		sample.m_coop		= m_coop.load( std::memory_order_relaxed );
 
+		// fold shadow work accumulated since the previous rendered frame.
 		{
 			std::lock_guard< std::mutex > pending_lock( m_pending_mutex );
-			sample.m_shadow_ms = m_pending_shadow_ms;
-			sample.m_shadow_updates = m_pending_shadow_updates;
-			sample.m_shadow_hits = m_pending_shadow_hits;
-			m_pending_shadow_ms = 0.0;
+			sample.m_shadow_ms		 = m_pending_shadow_ms;
+			sample.m_shadow_updates	 = m_pending_shadow_updates;
+			sample.m_shadow_hits	 = m_pending_shadow_hits;
+			m_pending_shadow_ms		 = 0.0;
 			m_pending_shadow_updates = 0;
-			m_pending_shadow_hits = 0;
+			m_pending_shadow_hits	 = 0;
 		}
 
+		// append in constant time and overwrite only the oldest full-buffer sample.
 		std::lock_guard< std::mutex > sample_lock( m_samples_mutex );
 		m_samples[ m_cursor ] = sample;
-		m_cursor = ( m_cursor + 1 ) % capacity;
-		m_count = std::min( m_count + 1, capacity );
+		m_cursor			  = ( m_cursor + 1 ) % capacity;
+		m_count				  = std::min( m_count + 1, capacity );
 	}
 
 	void FrameMetrics::record_shadow_update( double milliseconds, bool cache_hit ) noexcept {
@@ -74,16 +77,17 @@ namespace p2boost {
 	}
 
 	OverlayMetrics FrameMetrics::overlay_metrics( ) const noexcept {
-		OverlayMetrics result;
+		OverlayMetrics		  result;
 		std::vector< Sample > samples;
 
+		// copy only the most recent second so sorting never blocks the writer.
 		{
 			std::lock_guard< std::mutex > lock( m_samples_mutex );
 			if( m_count == 0 )
 				return result;
 
-			const size_t start = m_count == capacity ? m_cursor : 0;
-			const Qpc::tick_t newest = m_samples[ ( m_cursor + capacity - 1 ) % capacity ].m_qpc;
+			const size_t	  start		 = m_count == capacity ? m_cursor : 0;
+			const Qpc::tick_t newest	 = m_samples[ ( m_cursor + capacity - 1 ) % capacity ].m_qpc;
 			const Qpc::tick_t one_second = Qpc::ticks( 1000.0 );
 			for( size_t index = 0; index < m_count; ++index ) {
 				const Sample& sample = m_samples[ ( start + index ) % capacity ];
@@ -95,6 +99,7 @@ namespace p2boost {
 		if( samples.empty( ) )
 			return result;
 
+		// aggregate the copied samples without holding either metrics lock.
 		std::vector< double > frame_times;
 		frame_times.reserve( samples.size( ) );
 		for( const Sample& sample : samples ) {
@@ -107,14 +112,13 @@ namespace p2boost {
 		}
 
 		const Sample& latest = samples.back( );
-		result.m_frame_ms = latest.m_frame_ms;
-		result.m_average_ms =
-			std::accumulate( frame_times.begin( ), frame_times.end( ), 0.0 ) / static_cast< double >( frame_times.size( ) );
-		result.m_p95_ms = percentile( frame_times, 0.95 );
-		result.m_p99_ms = percentile( frame_times, 0.99 );
-		result.m_max_ms = *std::max_element( frame_times.begin( ), frame_times.end( ) );
-		result.m_focused = latest.m_focused;
-		result.m_coop = latest.m_coop;
+		result.m_frame_ms	 = latest.m_frame_ms;
+		result.m_average_ms	 = std::accumulate( frame_times.begin( ), frame_times.end( ), 0.0 ) / static_cast< double >( frame_times.size( ) );
+		result.m_p95_ms		 = percentile( frame_times, 0.95 );
+		result.m_p99_ms		 = percentile( frame_times, 0.99 );
+		result.m_max_ms		 = *std::max_element( frame_times.begin( ), frame_times.end( ) );
+		result.m_focused	 = latest.m_focused;
+		result.m_coop		 = latest.m_coop;
 
 		result.m_graph_count = std::min( samples.size( ), OverlayMetrics::graph_capacity );
 		for( size_t index = 0; index < result.m_graph_count; ++index )
@@ -123,6 +127,7 @@ namespace p2boost {
 	}
 
 	bool FrameMetrics::dump( const std::string& path ) const {
+		// freeze a chronological copy, then perform slow file I/O after unlocking.
 		std::vector< Sample > samples;
 		{
 			std::lock_guard< std::mutex > lock( m_samples_mutex );

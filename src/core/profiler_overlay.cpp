@@ -8,21 +8,14 @@
 namespace p2boost {
 	namespace {
 
-		constexpr size_t add_screen_text_slot{ 7 };
 		constexpr float panel_x{ 0.018f };
 		constexpr float panel_y{ 0.025f };
 		constexpr float line_height{ 0.022f };
 		constexpr float text_lifetime{ 0.35f };
 
-		using AddScreenTextFn = void( __thiscall* )( void*, float, float, float, int, int, int, int, const char* );
-
-		AddScreenTextFn add_screen_text( void* overlay ) noexcept {
-			auto*** object = reinterpret_cast< void*** >( overlay );
-			return reinterpret_cast< AddScreenTextFn >( ( *object )[ add_screen_text_slot ] );
-		}
-
-		void draw_line( void* overlay, int line, const std::array< int, 4 >& color, const char* text ) noexcept {
-			add_screen_text( overlay )( overlay,
+		// keep engine overlay calls in one small typed helper.
+		void draw_line( sdk::DebugOverlay* overlay, int line, const std::array< int, 4 >& color, const char* text ) noexcept {
+			overlay->AddScreenText(
 				panel_x,
 				panel_y + static_cast< float >( line ) * line_height,
 				text_lifetime,
@@ -33,6 +26,7 @@ namespace p2boost {
 				text );
 		}
 
+		// encode graph samples without depending on a custom font or texture.
 		char graph_character( double milliseconds ) noexcept {
 			if( milliseconds >= 8.3 )
 				return '!';
@@ -48,8 +42,9 @@ namespace p2boost {
 	}
 
 	bool ProfilerOverlay::connect( sdk::CreateInterfaceFn interface_factory ) noexcept {
+		// prefer the loader-provided factory so interface ownership stays explicit.
 		if( interface_factory )
-			m_debug_overlay = interface_factory( "VDebugOverlay004", nullptr );
+			m_debug_overlay = static_cast< sdk::DebugOverlay* >( interface_factory( "VDebugOverlay004", nullptr ) );
 		if( m_debug_overlay )
 			return true;
 
@@ -59,16 +54,16 @@ namespace p2boost {
 
 		auto factory = reinterpret_cast< sdk::CreateInterfaceFn >( GetProcAddress( engine, "CreateInterface" ) );
 		if( factory )
-			m_debug_overlay = factory( "VDebugOverlay004", nullptr );
+			m_debug_overlay = static_cast< sdk::DebugOverlay* >( factory( "VDebugOverlay004", nullptr ) );
 		return m_debug_overlay != nullptr;
 	}
 
 	void ProfilerOverlay::disconnect( ) noexcept {
-		// p2boost lines expire naturally. Clearing the engine overlay would also
+		// p2boost lines expire naturally. clearing the engine overlay would also
 		// erase drawings owned by SAR and other plugins.
 		m_debug_overlay = nullptr;
-		m_next_update = 0;
-		m_enabled = false;
+		m_next_update	= 0;
+		m_enabled		= false;
 	}
 
 	void ProfilerOverlay::set_enabled( bool enabled, FrameMetrics& metrics ) noexcept {
@@ -81,6 +76,7 @@ namespace p2boost {
 		if( !m_enabled || !m_debug_overlay )
 			return;
 
+		// refresh at 4 Hz while frame samples continue at render frequency.
 		const Qpc::tick_t now = Qpc::now( );
 		if( now < m_next_update )
 			return;
@@ -95,25 +91,26 @@ namespace p2boost {
 		static constexpr std::array< int, 4 > warning{ 255, 191, 64, 255 };
 		static constexpr std::array< int, 4 > bad{ 255, 77, 64, 255 };
 
-		char line[ 192 ]{ };
+		char		 line[ 192 ]{ };
 		const double fps = sample.m_average_ms > 0.0 ? 1000.0 / sample.m_average_ms : 0.0;
 		std::snprintf( line,
-			sizeof( line ),
-			"P2BOOST / VULKAN  %s  |  %s  |  SAR %s",
-			sample.m_coop ? "CO-OP" : "SINGLE PLAYER",
-			fixes_enabled ? "FIXES ON" : "A/B OFF",
-			sar_loaded ? "ON" : "OFF" );
+					   sizeof( line ),
+					   "P2BOOST / VULKAN  %s  |  %s  |  SAR %s",
+					   sample.m_coop ? "CO-OP" : "SINGLE PLAYER",
+					   fixes_enabled ? "FIXES ON" : "A/B OFF",
+					   sar_loaded ? "ON" : "OFF" );
 		draw_line( m_debug_overlay, 0, neutral, line );
 
 		std::snprintf( line,
-			sizeof( line ),
-			"%5.0f FPS  |  FRAME %5.2f ms  |  P95 %5.2f  P99 %5.2f  MAX %5.2f",
-			fps,
-			sample.m_frame_ms,
-			sample.m_p95_ms,
-			sample.m_p99_ms,
-			sample.m_max_ms );
-		const auto& timing_color = sample.m_hitch_count > 0 ? bad : sample.m_p99_ms >= 4.0 ? warning : good;
+					   sizeof( line ),
+					   "%5.0f FPS  |  FRAME %5.2f ms  |  P95 %5.2f  P99 %5.2f  MAX %5.2f",
+					   fps,
+					   sample.m_frame_ms,
+					   sample.m_p95_ms,
+					   sample.m_p99_ms,
+					   sample.m_max_ms );
+		const auto& timing_color = sample.m_hitch_count > 0 ? bad : sample.m_p99_ms >= 4.0 ? warning
+																						   : good;
 		draw_line( m_debug_overlay, 1, timing_color, line );
 
 		std::array< char, OverlayMetrics::graph_capacity + 3 > graph{ };
@@ -124,12 +121,12 @@ namespace p2boost {
 		draw_line( m_debug_overlay, 2, timing_color, graph.data( ) );
 
 		std::snprintf( line,
-			sizeof( line ),
-			"LAST 1S  |  HITCHES >=8.3 ms: %u  |  SHADOW CACHE %u/%u  |  %s",
-			sample.m_hitch_count,
-			sample.m_shadow_hits,
-			sample.m_shadow_updates,
-			sample.m_focused ? "FOCUSED" : "UNFOCUSED" );
+					   sizeof( line ),
+					   "LAST 1S  |  HITCHES >=8.3 ms: %u  |  SHADOW CACHE %u/%u  |  %s",
+					   sample.m_hitch_count,
+					   sample.m_shadow_hits,
+					   sample.m_shadow_updates,
+					   sample.m_focused ? "FOCUSED" : "UNFOCUSED" );
 		draw_line( m_debug_overlay, 3, sample.m_hitch_count > 0 ? bad : neutral, line );
 	}
 

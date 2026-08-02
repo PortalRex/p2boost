@@ -1,12 +1,13 @@
 #pragma once
 
 #include "frame_metrics.h"
+#include "interfaces.h"
 #include "qpc.h"
 #include "sdk.h"
 
 namespace p2boost {
 
-	// Draw a low-frequency summary through Valve's public engine ABI.
+	// draw a low-frequency summary through Valve's public engine ABI.
 	class ProfilerOverlay {
 	public:
 		bool connect( sdk::CreateInterfaceFn interface_factory ) noexcept;
@@ -25,9 +26,9 @@ namespace p2boost {
 	private:
 		void draw_panel( const OverlayMetrics& sample, bool fixes_enabled, bool sar_loaded ) noexcept;
 
-		void* m_debug_overlay{ };
-		Qpc::tick_t m_next_update{ };
-		bool m_enabled{ };
+		sdk::DebugOverlay* m_debug_overlay{ };
+		Qpc::tick_t		   m_next_update{ };
+		bool			   m_enabled{ };
 	};
 
 }

@@ -28,20 +28,20 @@ namespace p2boost {
 		if( !engine )
 			return false;
 
-		// This is the unique CEngine::Frame tail that clears the limiter's
+		// this is the unique CEngine::Frame tail that clears the limiter's
 		// accumulated interval in build 23973718.
-		const Address frame_tail = pattern::find_unique( engine, portal2::signature::frame_complete );
+		const Address frame_tail	 = pattern::find_unique( engine, portal2::signature::frame_complete );
 		const Address frame_complete = frame_tail.add( portal2::xref::frame_complete );
 		if( !frame_complete )
 			return false;
 
 		const std::vector< std::uint8_t > expected{ 0x0f, 0x57, 0xc0, 0xf3, 0x0f, 0x11, 0x46, 0x18 };
-		m_metrics = metrics;
+		m_metrics  = metrics;
 		m_instance = this;
 
 		if( !m_frame_complete.install( frame_complete.as< void* >( ), expected, reinterpret_cast< void* >( &FrameCompleteHook ) ) ) {
 			m_instance = nullptr;
-			m_metrics = nullptr;
+			m_metrics  = nullptr;
 			return false;
 		}
 
@@ -57,8 +57,8 @@ namespace p2boost {
 			m_instance = nullptr;
 	}
 
-	// Preserve the displaced x86 frame and pass its two required pointers to a
-	// normal C++ function. The patched site has no ordinary callable ABI.
+	// preserve the displaced x86 frame and pass its two required pointers to a
+	// normal C++ function. the patched site has no ordinary callable ABI.
 	void __declspec( naked ) __cdecl FrameCompleteHook( ) {
 		__asm {
 			push ebp
@@ -72,19 +72,20 @@ namespace p2boost {
 	void __cdecl FrameCompleteDispatch( void* host_state, void* caller_frame ) {
 		FrameLimiter* limiter = FrameLimiter::m_instance;
 		const Address host{ host_state };
-		const Stack caller{ caller_frame };
+		const Stack	  caller{ caller_frame };
 
-		float* accumulated = host.add( portal2::frame::accumulator ).as< float* >( );
-		const float target = caller.local( portal2::frame::target_local ).to< float >( );
-		*accumulated = carry_frame_overshoot( *accumulated, target, limiter && limiter->enabled( ) );
+		float*		accumulated = host.add( portal2::frame::accumulator ).as< float* >( );
+		const float target		= caller.local( portal2::frame::target_local ).to< float >( );
+		*accumulated			= carry_frame_overshoot( *accumulated, target, limiter && limiter->enabled( ) );
 
-		// GameFrame follows the 60 Hz simulation tick. This engine tail runs once
+		// GameFrame follows the 60 Hz simulation tick. this engine tail runs once
 		// per rendered frame and therefore drives the real FPS/frametime metrics.
 		if( limiter && limiter->m_metrics )
 			limiter->m_metrics->record_frame( );
 	}
 
 	float carry_frame_overshoot( float elapsed, float target, bool enabled ) noexcept {
+		// preserve sub-frame overshoot but reject hitches as a new timing phase.
 		if( enabled && std::isfinite( target ) && std::isfinite( elapsed ) && target > 0.0f && elapsed >= target &&
 			elapsed < target * 1.10f )
 			return elapsed - target;

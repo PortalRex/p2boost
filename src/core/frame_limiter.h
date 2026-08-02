@@ -11,7 +11,7 @@ namespace p2boost {
 	void __cdecl FrameCompleteHook( );
 	void __cdecl FrameCompleteDispatch( void* host_state, void* caller_frame );
 
-	// Carry only ordinary deadline overshoot. Real work and hitches reset phase.
+	// carry only ordinary deadline overshoot. real work and hitches reset phase.
 	float carry_frame_overshoot( float elapsed, float target, bool enabled ) noexcept;
 
 	class FrameLimiter {
@@ -38,8 +38,8 @@ namespace p2boost {
 
 		static FrameLimiter* m_instance;
 
-		CallSitePatch m_frame_complete;
-		FrameMetrics* m_metrics{ };
+		CallSitePatch	 m_frame_complete;
+		FrameMetrics*	 m_metrics{ };
 		std::atomic_bool m_enabled{ };
 	};
 
