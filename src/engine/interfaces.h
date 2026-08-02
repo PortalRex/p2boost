@@ -70,13 +70,12 @@ namespace p2boost::sdk {
 		}
 	};
 
+	// VEngineRenderView013 is hooked at VGui_Paint to protect every UI draw.
+	class RenderView final : public Interface {};
+
 	class Material final : public Interface {
 	public:
 		// expose only the material metadata needed by the classifier.
-		__forceinline const char* GetName( ) {
-			return call< portal2::vmt::material_name, const char* >( );
-		}
-
 		__forceinline const char* GetTextureGroup( ) {
 			return call< portal2::vmt::material_texture_group, const char* >( );
 		}

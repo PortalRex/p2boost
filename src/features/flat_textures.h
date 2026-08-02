@@ -54,9 +54,8 @@ namespace p2boost {
 		void release_level_textures( );
 
 		bool available( ) const noexcept {
-			return m_create_texture.installed( ) && m_set_texture.installed( ) && m_draw_primitive.installed( ) &&
-				   m_draw_indexed_primitive.installed( ) && m_draw_primitive_up.installed( ) &&
-				   m_draw_indexed_primitive_up.installed( ) && m_bind_material.installed( ) && m_material_system;
+			return m_create_texture.installed( ) && m_set_texture.installed( ) && m_bind_material.installed( ) &&
+				   m_vgui_paint.installed( ) && m_material_system && m_render_view;
 		}
 
 		bool enabled( ) const noexcept {
@@ -129,22 +128,19 @@ namespace p2boost {
 		using surface_locks_t = std::unordered_map< IDirect3DSurface9*, locked_region_t >;
 
 		// exact COM signatures for the D3D9 methods intercepted below.
-		using CreateTextureFn		   = HRESULT( __stdcall* )( IDirect3DDevice9*, unsigned int, unsigned int, unsigned int, DWORD, D3DFORMAT, D3DPOOL, IDirect3DTexture9**, HANDLE* );
-		using UpdateSurfaceFn		   = HRESULT( __stdcall* )( IDirect3DDevice9*, IDirect3DSurface9*, const RECT*, IDirect3DSurface9*, const POINT* );
-		using UpdateTextureFn		   = HRESULT( __stdcall* )( IDirect3DDevice9*, IDirect3DBaseTexture9*, IDirect3DBaseTexture9* );
-		using SetTextureFn			   = HRESULT( __stdcall* )( IDirect3DDevice9*, DWORD, IDirect3DBaseTexture9* );
-		using DrawPrimitiveFn		   = HRESULT( __stdcall* )( IDirect3DDevice9*, D3DPRIMITIVETYPE, unsigned int, unsigned int );
-		using DrawIndexedPrimitiveFn   = HRESULT( __stdcall* )( IDirect3DDevice9*, D3DPRIMITIVETYPE, int, unsigned int, unsigned int, unsigned int, unsigned int );
-		using DrawPrimitiveUpFn		   = HRESULT( __stdcall* )( IDirect3DDevice9*, D3DPRIMITIVETYPE, unsigned int, const void*, unsigned int );
-		using DrawIndexedPrimitiveUpFn = HRESULT( __stdcall* )( IDirect3DDevice9*, D3DPRIMITIVETYPE, unsigned int, unsigned int, unsigned int, const void*, D3DFORMAT, const void*, unsigned int );
-		using ReleaseTextureFn		   = ULONG( __stdcall* )( IDirect3DTexture9* );
-		using GetSurfaceLevelFn		   = HRESULT( __stdcall* )( IDirect3DTexture9*, unsigned int, IDirect3DSurface9** );
-		using LockTextureFn			   = HRESULT( __stdcall* )( IDirect3DTexture9*, unsigned int, D3DLOCKED_RECT*, const RECT*, DWORD );
-		using UnlockTextureFn		   = HRESULT( __stdcall* )( IDirect3DTexture9*, unsigned int );
-		using ReleaseSurfaceFn		   = ULONG( __stdcall* )( IDirect3DSurface9* );
-		using LockSurfaceFn			   = HRESULT( __stdcall* )( IDirect3DSurface9*, D3DLOCKED_RECT*, const RECT*, DWORD );
-		using UnlockSurfaceFn		   = HRESULT( __stdcall* )( IDirect3DSurface9* );
-		using BindMaterialFn		   = void( __thiscall* )( void*, sdk::Material*, void* );
+		using CreateTextureFn	= HRESULT( __stdcall* )( IDirect3DDevice9*, unsigned int, unsigned int, unsigned int, DWORD, D3DFORMAT, D3DPOOL, IDirect3DTexture9**, HANDLE* );
+		using UpdateSurfaceFn	= HRESULT( __stdcall* )( IDirect3DDevice9*, IDirect3DSurface9*, const RECT*, IDirect3DSurface9*, const POINT* );
+		using UpdateTextureFn	= HRESULT( __stdcall* )( IDirect3DDevice9*, IDirect3DBaseTexture9*, IDirect3DBaseTexture9* );
+		using SetTextureFn		= HRESULT( __stdcall* )( IDirect3DDevice9*, DWORD, IDirect3DBaseTexture9* );
+		using ReleaseTextureFn	= ULONG( __stdcall* )( IDirect3DTexture9* );
+		using GetSurfaceLevelFn = HRESULT( __stdcall* )( IDirect3DTexture9*, unsigned int, IDirect3DSurface9** );
+		using LockTextureFn		= HRESULT( __stdcall* )( IDirect3DTexture9*, unsigned int, D3DLOCKED_RECT*, const RECT*, DWORD );
+		using UnlockTextureFn	= HRESULT( __stdcall* )( IDirect3DTexture9*, unsigned int );
+		using ReleaseSurfaceFn	= ULONG( __stdcall* )( IDirect3DSurface9* );
+		using LockSurfaceFn		= HRESULT( __stdcall* )( IDirect3DSurface9*, D3DLOCKED_RECT*, const RECT*, DWORD );
+		using UnlockSurfaceFn	= HRESULT( __stdcall* )( IDirect3DSurface9* );
+		using BindMaterialFn	= void( __thiscall* )( void*, sdk::Material*, void* );
+		using VguiPaintFn		= void( __thiscall* )( void*, int );
 
 		// install resource hooks lazily when the first object appears.
 		bool install_texture_hooks( IDirect3DTexture9* texture );
@@ -160,10 +156,6 @@ namespace p2boost {
 		static HRESULT __stdcall UpdateSurface( IDirect3DDevice9* device, IDirect3DSurface9* source, const RECT* source_rect, IDirect3DSurface9* destination, const POINT* destination_point );
 		static HRESULT __stdcall UpdateTexture( IDirect3DDevice9* device, IDirect3DBaseTexture9* source, IDirect3DBaseTexture9* destination );
 		static HRESULT __stdcall SetTexture( IDirect3DDevice9* device, DWORD stage, IDirect3DBaseTexture9* texture );
-		static HRESULT __stdcall DrawPrimitive( IDirect3DDevice9* device, D3DPRIMITIVETYPE type, unsigned int start_vertex, unsigned int primitive_count );
-		static HRESULT __stdcall DrawIndexedPrimitive( IDirect3DDevice9* device, D3DPRIMITIVETYPE type, int base_vertex, unsigned int minimum_vertex, unsigned int vertex_count, unsigned int start_index, unsigned int primitive_count );
-		static HRESULT __stdcall DrawPrimitiveUp( IDirect3DDevice9* device, D3DPRIMITIVETYPE type, unsigned int primitive_count, const void* vertices, unsigned int stride );
-		static HRESULT __stdcall DrawIndexedPrimitiveUp( IDirect3DDevice9* device, D3DPRIMITIVETYPE type, unsigned int minimum_vertex, unsigned int vertex_count, unsigned int primitive_count, const void* indices, D3DFORMAT index_format, const void* vertices, unsigned int stride );
 		static ULONG __stdcall ReleaseTexture( IDirect3DTexture9* texture );
 		static HRESULT __stdcall GetSurfaceLevel( IDirect3DTexture9* texture, unsigned int level, IDirect3DSurface9** surface );
 		static HRESULT __stdcall LockTexture( IDirect3DTexture9* texture, unsigned int level, D3DLOCKED_RECT* locked, const RECT* rect, DWORD flags );
@@ -172,11 +164,13 @@ namespace p2boost {
 		static HRESULT __stdcall LockSurface( IDirect3DSurface9* surface, D3DLOCKED_RECT* locked, const RECT* rect, DWORD flags );
 		static HRESULT __stdcall UnlockSurface( IDirect3DSurface9* surface );
 		static void __fastcall BindMaterial( void* context, void*, sdk::Material* material, void* proxy_data );
+		static void __fastcall VguiPaint( void* render_view, void*, int mode );
 
 		static FlatTextures* m_instance;
 
 		// engine objects and chain-aware hooks installed on their VMTs.
 		sdk::MaterialSystem* m_material_system{ };
+		sdk::RenderView*	 m_render_view{ };
 		void**				 m_render_context_vmt{ };
 		IDirect3DDevice9*	 m_device{ };
 		IDirect3DTexture9*	 m_flat_normal{ };
@@ -186,10 +180,6 @@ namespace p2boost {
 		VmtHook				 m_update_surface;
 		VmtHook				 m_update_texture;
 		VmtHook				 m_set_texture;
-		VmtHook				 m_draw_primitive;
-		VmtHook				 m_draw_indexed_primitive;
-		VmtHook				 m_draw_primitive_up;
-		VmtHook				 m_draw_indexed_primitive_up;
 		VmtHook				 m_release_texture;
 		VmtHook				 m_get_surface_level;
 		VmtHook				 m_lock_texture;
@@ -198,6 +188,7 @@ namespace p2boost {
 		VmtHook				 m_lock_surface;
 		VmtHook				 m_unlock_surface;
 		VmtHook				 m_bind_material;
+		VmtHook				 m_vgui_paint;
 
 		// all resource maps share one lock because their lifetimes are coupled.
 		mutable std::shared_mutex m_mutex;

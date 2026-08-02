@@ -44,6 +44,7 @@ namespace p2boost::portal2 {
 		constexpr size_t update_projected{ 24 };
 		constexpr size_t engine_is_recording_demo{ 79 };
 		constexpr size_t engine_execute_client_cmd{ 104 };
+		constexpr size_t render_view_vgui_paint{ 36 };
 
 		// VMaterialSystem080 and public D3D9 ABI methods used by the optional
 		// flat-texture feature. these describe interface layout, not addresses.
@@ -53,17 +54,12 @@ namespace p2boost::portal2 {
 		// same GetRenderContext method for build 9568/current Steam builds.
 		constexpr size_t get_render_context{ 113 };
 		constexpr size_t render_context_bind{ 9 };
-		constexpr size_t material_name{ 0 };
 		constexpr size_t material_texture_group{ 1 };
 		constexpr size_t material_shader_name{ 49 };
 		constexpr size_t d3d9_create_texture{ 23 };
 		constexpr size_t d3d9_update_surface{ 30 };
 		constexpr size_t d3d9_update_texture{ 31 };
 		constexpr size_t d3d9_set_texture{ 65 };
-		constexpr size_t d3d9_draw_primitive{ 81 };
-		constexpr size_t d3d9_draw_indexed_primitive{ 82 };
-		constexpr size_t d3d9_draw_primitive_up{ 83 };
-		constexpr size_t d3d9_draw_indexed_primitive_up{ 84 };
 		constexpr size_t d3d9_texture_release{ 2 };
 		constexpr size_t d3d9_texture_get_surface_level{ 18 };
 		constexpr size_t d3d9_texture_lock{ 19 };

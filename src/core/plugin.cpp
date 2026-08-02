@@ -328,7 +328,7 @@ namespace p2boost {
 			if( !m_flat_textures.set_enabled( enabled ) )
 				console_print( "[p2boost] flat textures unavailable on this renderer/build\n" );
 			else
-				console_print( "[p2boost] flat textures %s; material textures are solid, normals are neutral, and alpha is preserved\n",
+				console_print( "[p2boost] flat textures %s; color maps are solid, normals are neutral, and UI/dynamic inputs are preserved\n",
 							   enabled ? "enabled" : "disabled" );
 
 			return sdk::Stop;

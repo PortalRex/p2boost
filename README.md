@@ -81,12 +81,15 @@ To remove the plugin:
 - `p2boost_status` prints the build fingerprint, DXVK/Vulkan and NVIDIA-profile
   state, enabled fixes, SAR state, overlay availability, and metric count.
 - `p2boost_enable 0|1` provides a reversible runtime A/B switch.
-- `p2boost_flat_textures 0|1` replaces authored world/model texture layers with
-  their dominant tone and substitutes a valid neutral texture for normal/bump
-  samplers. The mode stays active while paused and follows learned textures into
-  flashlight/shadow override passes. Base alpha and dedicated self-illumination
-  masks remain exact, preserving cutouts, transparency, and emissive shapes.
-  HUD, VGUI, SAR, render targets, lightmaps, and cubemaps stay untouched.
+- `p2boost_flat_textures 0|1` replaces proven color-bearing world/model samplers
+  with their dominant tone and substitutes a valid neutral texture for normal/
+  bump samplers. The mode stays active while paused and follows learned textures
+  into flashlight/shadow override passes. Base alpha and dedicated self-
+  illumination masks remain exact, preserving cutouts, transparency, and
+  emissive shapes. Blend controls, lighting lookups, video frames, particles,
+  render targets, lightmaps, and cubemaps remain original. The engine's complete
+  `VGui_Paint` boundary protects HUD, console, menus, cursors, and SAR overlays
+  without relying on material-name exceptions.
 - `p2boost_overlay 0|1` shows actual rendered FPS, current/p95/p99/max frame
   time, a 64-frame graph, one-second hitch count, and shadow-cache activity.
 - `p2boost_trace 0|1` records bounded frame and shadow-cache metrics.

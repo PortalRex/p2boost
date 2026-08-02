@@ -20,9 +20,9 @@ namespace p2boost {
 		thread_local std::uint32_t g_normal_sampler_mask{ };
 		thread_local unsigned int  g_material_bind_depth{ };
 		thread_local bool		   g_material_pass_active{ };
+		thread_local unsigned int  g_vgui_paint_depth{ };
 
-		// end the material pass after D3D receives its draw command. direct VGUI
-		// uploads that follow the draw must not inherit the world sampler roles.
+		// discard the pending world pass before VGui_Paint submits UI textures.
 		void clear_material_pass( ) noexcept {
 			// most draws occur without a pending Bind, so keep this hook nearly free.
 			if( !g_material_pass_active )
@@ -32,19 +32,6 @@ namespace p2boost {
 			g_flat_sampler_mask	   = 0;
 			g_normal_sampler_mask  = 0;
 			g_material_pass_active = false;
-		}
-
-		// every D3D draw variant closes the active Source material pass.
-		template < typename function_t, typename... arguments_t >
-		HRESULT draw_material_pass( function_t original, arguments_t... arguments ) noexcept {
-			if( !original ) {
-				clear_material_pass( );
-				return D3DERR_INVALIDCALL;
-			}
-
-			const HRESULT result = original( arguments... );
-			clear_material_pass( );
-			return result;
 		}
 
 		// unpacked color used only while classifying source pixels.
@@ -93,23 +80,20 @@ namespace p2boost {
 			if( !material )
 				return { };
 
-			const char* name   = material->GetName( );
 			const char* group  = material->GetTextureGroup( );
 			const char* shader = material->GetShaderName( );
 
-			// UI, render targets, lightmaps, and SAR-owned materials are not world
-			// albedo. leaving them original also keeps every overlay readable.
-			if( contains_text( name, "vgui/" ) || contains_text( name, "hud/" ) || contains_text( name, "sar/" ) ||
-				contains_text( group, "vgui" ) || contains_text( group, "hud" ) || contains_text( group, "sar" ) ||
-				contains_text( group, "render target" ) || contains_text( group, "lightmap" ) || contains_text( group, "cubemap" ) )
+			// engine-generated resources are inputs or outputs, not authored color maps.
+			if( contains_text( group, "render target" ) || contains_text( group, "lightmap" ) || contains_text( group, "cubemap" ) )
 				return { 0, 0, true };
 
 			if( !shader )
 				return { };
 
-			// lightmaps, framebuffer copies, flashlight maps, and shadow noise stay live.
+			// flatten only color-bearing samplers. blend/light-warp/detail control data,
+			// lightmaps, framebuffer copies, and flashlight resources stay live.
 			if( _stricmp( shader, "LightmappedGeneric" ) == 0 || _stricmp( shader, "WorldVertexTransition" ) == 0 ) {
-				constexpr std::uint32_t flat   = ( 1u << 0u ) | ( 1u << 3u ) | ( 1u << 6u ) | ( 1u << 7u ) | ( 1u << 12u );
+				constexpr std::uint32_t flat   = ( 1u << 0u ) | ( 1u << 7u );
 				constexpr std::uint32_t normal = ( 1u << 4u ) | ( 1u << 5u ) | ( 1u << 8u );
 				return { flat, normal, false };
 			}
@@ -117,7 +101,7 @@ namespace p2boost {
 			if( _stricmp( shader, "VertexLitGeneric" ) == 0 ) {
 				// sampler 11 is the self-illumination mask. preserving it keeps the
 				// emissive shape while the flattened base keeps its exact alpha too.
-				constexpr std::uint32_t flat   = ( 1u << 0u ) | ( 1u << 2u ) | ( 1u << 4u ) | ( 1u << 9u );
+				constexpr std::uint32_t flat   = 1u << 0u;
 				constexpr std::uint32_t normal = 1u << 3u;
 				return { flat, normal, false };
 			}
@@ -125,10 +109,9 @@ namespace p2boost {
 			if( _stricmp( shader, "WorldTwoTextureBlend" ) == 0 )
 				return { ( 1u << 0u ) | ( 1u << 3u ), 1u << 4u, false };
 
-			// unknown material shaders may distribute authored textures across any
-			// sampler. render/depth targets were rejected at creation, so every tracked
-			// 2D texture in this fallback is safe to flatten.
-			return { 0xffffu, 0, false };
+			// unknown shaders may carry video frames, particle masks, or lookup tables.
+			// preserving them is safer than guessing that every sampler is albedo.
+			return { };
 		}
 
 		// memcpy avoids unaligned reads and writes in compressed blocks.
@@ -549,7 +532,8 @@ namespace p2boost {
 
 		const Address shader{ GetModuleHandleW( L"shaderapivk.dll" ) };
 		const Address materials{ GetModuleHandleW( L"materialsystem.dll" ) };
-		if( !shader || !materials )
+		const Address engine{ GetModuleHandleW( L"engine.dll" ) };
+		if( !shader || !materials || !engine )
 			return false;
 
 		// the unique CreateDevice-success sequence stores DXVK's live D3D9
@@ -561,10 +545,14 @@ namespace p2boost {
 			return false;
 
 		using CreateInterfaceFn = sdk::CreateInterfaceFn;
-		auto factory			= reinterpret_cast< CreateInterfaceFn >( GetProcAddress( materials.as< HMODULE >( ), "CreateInterface" ) );
-		m_material_system		= factory ? static_cast< sdk::MaterialSystem* >( factory( "VMaterialSystem080", nullptr ) ) : nullptr;
-		if( !m_material_system ) {
-			m_device = nullptr;
+		auto material_factory	= reinterpret_cast< CreateInterfaceFn >( GetProcAddress( materials.as< HMODULE >( ), "CreateInterface" ) );
+		auto engine_factory		= reinterpret_cast< CreateInterfaceFn >( GetProcAddress( engine.as< HMODULE >( ), "CreateInterface" ) );
+		m_material_system		= material_factory ? static_cast< sdk::MaterialSystem* >( material_factory( "VMaterialSystem080", nullptr ) ) : nullptr;
+		m_render_view			= engine_factory ? static_cast< sdk::RenderView* >( engine_factory( "VEngineRenderView013", nullptr ) ) : nullptr;
+		if( !m_material_system || !m_render_view ) {
+			m_render_view	  = nullptr;
+			m_material_system = nullptr;
+			m_device		  = nullptr;
 			return false;
 		}
 
@@ -574,12 +562,17 @@ namespace p2boost {
 		const Address reload{ m_material_system->method( portal2::vmt::reload_materials ) };
 		const Address get_render_context{ m_material_system->method( portal2::vmt::get_render_context ) };
 		const Address material_end = materials.add( static_cast< std::ptrdiff_t >( pattern::image_size( materials ) ) );
+		const Address vgui_paint{ m_render_view->method( portal2::vmt::render_view_vgui_paint ) };
+		const Address engine_end = engine.add( static_cast< std::ptrdiff_t >( pattern::image_size( engine ) ) );
 		if( reload_textures.as< std::uintptr_t >( ) < materials.as< std::uintptr_t >( ) ||
 			reload_textures.as< std::uintptr_t >( ) >= material_end.as< std::uintptr_t >( ) ||
 			reload.as< std::uintptr_t >( ) < materials.as< std::uintptr_t >( ) ||
 			reload.as< std::uintptr_t >( ) >= material_end.as< std::uintptr_t >( ) ||
 			get_render_context.as< std::uintptr_t >( ) < materials.as< std::uintptr_t >( ) ||
-			get_render_context.as< std::uintptr_t >( ) >= material_end.as< std::uintptr_t >( ) ) {
+			get_render_context.as< std::uintptr_t >( ) >= material_end.as< std::uintptr_t >( ) ||
+			vgui_paint.as< std::uintptr_t >( ) < engine.as< std::uintptr_t >( ) ||
+			vgui_paint.as< std::uintptr_t >( ) >= engine_end.as< std::uintptr_t >( ) ) {
+			m_render_view	  = nullptr;
 			m_material_system = nullptr;
 			m_device		  = nullptr;
 			return false;
@@ -587,6 +580,7 @@ namespace p2boost {
 
 		sdk::RenderContext* render_context = m_material_system->GetRenderContext( );
 		if( !render_context ) {
+			m_render_view	  = nullptr;
 			m_material_system = nullptr;
 			m_device		  = nullptr;
 			return false;
@@ -597,6 +591,7 @@ namespace p2boost {
 			bind.as< std::uintptr_t >( ) >= material_end.as< std::uintptr_t >( ) ) {
 			render_context->Release( );
 			m_render_context_vmt = nullptr;
+			m_render_view		 = nullptr;
 			m_material_system	 = nullptr;
 			m_device			 = nullptr;
 			return false;
@@ -605,27 +600,22 @@ namespace p2boost {
 		auto** device_vmt	 = *reinterpret_cast< void*** >( m_device );
 		m_instance			 = this;
 		const bool installed = m_bind_material.install( m_render_context_vmt + portal2::vmt::render_context_bind, reinterpret_cast< void* >( &BindMaterial ) ) &&
+							   m_vgui_paint.install( m_render_view->methods( ) + portal2::vmt::render_view_vgui_paint, reinterpret_cast< void* >( &VguiPaint ) ) &&
 							   m_create_texture.install( device_vmt + portal2::vmt::d3d9_create_texture, reinterpret_cast< void* >( &CreateTexture ) ) &&
 							   m_update_surface.install( device_vmt + portal2::vmt::d3d9_update_surface, reinterpret_cast< void* >( &UpdateSurface ) ) &&
 							   m_update_texture.install( device_vmt + portal2::vmt::d3d9_update_texture, reinterpret_cast< void* >( &UpdateTexture ) ) &&
-							   m_set_texture.install( device_vmt + portal2::vmt::d3d9_set_texture, reinterpret_cast< void* >( &SetTexture ) ) &&
-							   m_draw_primitive.install( device_vmt + portal2::vmt::d3d9_draw_primitive, reinterpret_cast< void* >( &DrawPrimitive ) ) &&
-							   m_draw_indexed_primitive.install( device_vmt + portal2::vmt::d3d9_draw_indexed_primitive, reinterpret_cast< void* >( &DrawIndexedPrimitive ) ) &&
-							   m_draw_primitive_up.install( device_vmt + portal2::vmt::d3d9_draw_primitive_up, reinterpret_cast< void* >( &DrawPrimitiveUp ) ) &&
-							   m_draw_indexed_primitive_up.install( device_vmt + portal2::vmt::d3d9_draw_indexed_primitive_up, reinterpret_cast< void* >( &DrawIndexedPrimitiveUp ) );
+							   m_set_texture.install( device_vmt + portal2::vmt::d3d9_set_texture, reinterpret_cast< void* >( &SetTexture ) );
 		render_context->Release( );
 		if( !installed ) {
-			m_draw_indexed_primitive_up.remove( );
-			m_draw_primitive_up.remove( );
-			m_draw_indexed_primitive.remove( );
-			m_draw_primitive.remove( );
 			m_set_texture.remove( );
 			m_update_texture.remove( );
 			m_update_surface.remove( );
 			m_create_texture.remove( );
+			m_vgui_paint.remove( );
 			m_bind_material.remove( );
 			m_render_context_vmt = nullptr;
 			m_instance			 = nullptr;
+			m_render_view		 = nullptr;
 			m_material_system	 = nullptr;
 			m_device			 = nullptr;
 			return false;
@@ -637,14 +627,11 @@ namespace p2boost {
 	void FlatTextures::remove( ) {
 		// disable selection before any companion object can be released.
 		m_enabled.store( false, std::memory_order_relaxed );
-		m_draw_indexed_primitive_up.remove( );
-		m_draw_primitive_up.remove( );
-		m_draw_indexed_primitive.remove( );
-		m_draw_primitive.remove( );
 		m_set_texture.remove( );
 		m_update_texture.remove( );
 		m_update_surface.remove( );
 		m_create_texture.remove( );
+		m_vgui_paint.remove( );
 		m_bind_material.remove( );
 		m_render_context_vmt = nullptr;
 		release_all_companions( );
@@ -657,6 +644,7 @@ namespace p2boost {
 		m_get_surface_level.remove( );
 		m_release_texture.remove( );
 		m_texture_vmt	  = nullptr;
+		m_render_view	  = nullptr;
 		m_material_system = nullptr;
 		m_device		  = nullptr;
 		m_substitutions.store( 0, std::memory_order_relaxed );
@@ -1159,6 +1147,8 @@ namespace p2boost {
 		auto		  original = instance ? reinterpret_cast< SetTextureFn >( instance->m_set_texture.previous( ) ) : nullptr;
 		if( !original )
 			return D3DERR_INVALIDCALL;
+		if( g_vgui_paint_depth )
+			return original( device, stage, texture );
 
 		IDirect3DBaseTexture9* selected = texture;
 		if( texture && stage < 32u && !g_material_excluded && instance->enabled( ) ) {
@@ -1185,30 +1175,6 @@ namespace p2boost {
 		}
 
 		return original( device, stage, selected );
-	}
-
-	HRESULT __stdcall FlatTextures::DrawPrimitive( IDirect3DDevice9* device, D3DPRIMITIVETYPE type, unsigned int start_vertex, unsigned int primitive_count ) {
-		FlatTextures* instance = m_instance;
-		auto		  original = instance ? reinterpret_cast< DrawPrimitiveFn >( instance->m_draw_primitive.previous( ) ) : nullptr;
-		return draw_material_pass( original, device, type, start_vertex, primitive_count );
-	}
-
-	HRESULT __stdcall FlatTextures::DrawIndexedPrimitive( IDirect3DDevice9* device, D3DPRIMITIVETYPE type, int base_vertex, unsigned int minimum_vertex, unsigned int vertex_count, unsigned int start_index, unsigned int primitive_count ) {
-		FlatTextures* instance = m_instance;
-		auto		  original = instance ? reinterpret_cast< DrawIndexedPrimitiveFn >( instance->m_draw_indexed_primitive.previous( ) ) : nullptr;
-		return draw_material_pass( original, device, type, base_vertex, minimum_vertex, vertex_count, start_index, primitive_count );
-	}
-
-	HRESULT __stdcall FlatTextures::DrawPrimitiveUp( IDirect3DDevice9* device, D3DPRIMITIVETYPE type, unsigned int primitive_count, const void* vertices, unsigned int stride ) {
-		FlatTextures* instance = m_instance;
-		auto		  original = instance ? reinterpret_cast< DrawPrimitiveUpFn >( instance->m_draw_primitive_up.previous( ) ) : nullptr;
-		return draw_material_pass( original, device, type, primitive_count, vertices, stride );
-	}
-
-	HRESULT __stdcall FlatTextures::DrawIndexedPrimitiveUp( IDirect3DDevice9* device, D3DPRIMITIVETYPE type, unsigned int minimum_vertex, unsigned int vertex_count, unsigned int primitive_count, const void* indices, D3DFORMAT index_format, const void* vertices, unsigned int stride ) {
-		FlatTextures* instance = m_instance;
-		auto		  original = instance ? reinterpret_cast< DrawIndexedPrimitiveUpFn >( instance->m_draw_indexed_primitive_up.previous( ) ) : nullptr;
-		return draw_material_pass( original, device, type, minimum_vertex, vertex_count, primitive_count, indices, index_format, vertices, stride );
 	}
 
 	ULONG __stdcall FlatTextures::ReleaseTexture( IDirect3DTexture9* texture ) {
@@ -1506,14 +1472,29 @@ namespace p2boost {
 		original( context, material, proxy_data );
 		--g_material_bind_depth;
 
-		// an inner Bind returns control to its outer material; a top-level Bind stays
-		// active until one of the D3D draw hooks closes the pass.
+		// an inner Bind returns control to its outer material. a top-level Bind stays
+		// active until the next material or the dedicated VGui_Paint boundary.
 		if( nested_bind ) {
 			g_material_excluded	   = previous_excluded;
 			g_flat_sampler_mask	   = previous_flat_mask;
 			g_normal_sampler_mask  = previous_normal_mask;
 			g_material_pass_active = previous_active;
 		}
+	}
+
+	void __fastcall FlatTextures::VguiPaint( void* render_view, void*, int mode ) {
+		FlatTextures* instance = m_instance;
+		auto		  original = instance ? reinterpret_cast< VguiPaintFn >( instance->m_vgui_paint.previous( ) ) : nullptr;
+		if( !original )
+			return;
+
+		// VGui_Paint owns menus, console, HUD, cursor, and third-party overlays.
+		// bypassing substitution for the whole boundary requires no material names.
+		++g_vgui_paint_depth;
+		clear_material_pass( );
+		original( render_view, mode );
+		clear_material_pass( );
+		--g_vgui_paint_depth;
 	}
 
 }
