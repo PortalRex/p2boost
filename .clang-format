@@ -19,8 +19,8 @@ BinPackArguments: false
 BinPackParameters: false
 AllowAllArgumentsOnNextLine: false
 AlignAfterOpenBracket: DontAlign
-AlignConsecutiveAssignments: Consecutive
-AlignConsecutiveDeclarations: Consecutive
+AlignConsecutiveAssignments: None
+AlignConsecutiveDeclarations: None
 DerivePointerAlignment: false
 PointerAlignment: Left
 ReferenceAlignment: Left

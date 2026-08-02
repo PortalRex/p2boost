@@ -1,9 +1,9 @@
 #include "address.h"
-#include "build_fingerprint.h"
-#include "frame_pacer.h"
+#include "frame_limiter.h"
+#include "frame_metrics.h"
 #include "hook.h"
-#include "metrics.h"
 #include "pattern.h"
+#include "runtime_verification.h"
 #include "stack.h"
 #include "x86.h"
 
@@ -17,7 +17,7 @@
 #include <vector>
 
 namespace {
-	volatile int				hook_marker = 0;
+	volatile int hook_marker = 0;
 	__declspec( noinline ) void original( ) {
 		hook_marker = 1;
 	}
@@ -26,7 +26,7 @@ namespace {
 	}
 
 	bool test_hook_chain( ) {
-		void*					table[ 1 ] = { reinterpret_cast< void* >( &original ) };
+		void* table[ 1 ] = { reinterpret_cast< void* >( &original ) };
 		p2boost::VtableSlotHook hook;
 		if( !hook.install( &table[ 0 ], reinterpret_cast< void* >( &replacement ) ) )
 			return false;
@@ -45,16 +45,16 @@ namespace {
 		frame[ 2 ] = 0x12345678u;
 
 		const p2boost::Address address( frame );
-		const p2boost::Stack   stack( address );
+		const p2boost::Stack stack( address );
 		return address.add( sizeof( std::uintptr_t ) ).to< std::uintptr_t >( ) == frame[ 1 ] &&
 			   stack.ReturnAddress( ).as< void* >( ) == reinterpret_cast< void* >( &original ) &&
 			   stack.arg( 0 ).to< std::uintptr_t >( ) == frame[ 2 ] && stack.next( ).as< std::uintptr_t >( ) == frame[ 0 ];
 	}
 
 	bool test_relative_call_encoding( ) {
-		std::uint8_t		   instruction[ 5 ]{ };
+		std::uint8_t instruction[ 5 ]{ };
 		const p2boost::Address call( instruction );
-		const auto			   encoded = p2boost::x86::relative_call( call, call.add( 0x105 ) );
+		const auto encoded = p2boost::x86::relative_call( call, call.add( 0x105 ) );
 		if( encoded.size( ) != 5 || encoded[ 0 ] != 0xe8 )
 			return false;
 		std::int32_t displacement = 0;
@@ -65,8 +65,8 @@ namespace {
 
 	bool test_pattern_scanner( ) {
 		const std::uint8_t bytes[]{ 0x10, 0x48, 0x8b, 0x42, 0x20, 0x90 };
-		const auto		   signature = p2boost::pattern::parse( "48 8B ? 20" );
-		const auto		   match	 = p2boost::pattern::find( p2boost::Address( bytes ), sizeof( bytes ), signature );
+		const auto signature = p2boost::pattern::parse( "48 8B ? 20" );
+		const auto match = p2boost::pattern::find( p2boost::Address( bytes ), sizeof( bytes ), signature );
 
 		// malformed tokens must fail closed instead of weakening a signature.
 		if( match.as< const std::uint8_t* >( ) != bytes + 1 || !p2boost::pattern::parse( "48 nope 20" ).empty( ) )
@@ -74,13 +74,13 @@ namespace {
 
 		// construct a minimal mapped PE image to exercise uniqueness checks.
 		std::vector< std::uint8_t > image( 512 );
-		auto*						dos = reinterpret_cast< IMAGE_DOS_HEADER* >( image.data( ) );
-		dos->e_magic					= IMAGE_DOS_SIGNATURE;
-		dos->e_lfanew					= sizeof( IMAGE_DOS_HEADER );
-		auto* nt						= reinterpret_cast< IMAGE_NT_HEADERS32* >( image.data( ) + dos->e_lfanew );
-		nt->Signature					= IMAGE_NT_SIGNATURE;
-		nt->OptionalHeader.Magic		= IMAGE_NT_OPTIONAL_HDR32_MAGIC;
-		nt->OptionalHeader.SizeOfImage	= static_cast< DWORD >( image.size( ) );
+		auto* dos = reinterpret_cast< IMAGE_DOS_HEADER* >( image.data( ) );
+		dos->e_magic = IMAGE_DOS_SIGNATURE;
+		dos->e_lfanew = sizeof( IMAGE_DOS_HEADER );
+		auto* nt = reinterpret_cast< IMAGE_NT_HEADERS32* >( image.data( ) + dos->e_lfanew );
+		nt->Signature = IMAGE_NT_SIGNATURE;
+		nt->OptionalHeader.Magic = IMAGE_NT_OPTIONAL_HDR32_MAGIC;
+		nt->OptionalHeader.SizeOfImage = static_cast< DWORD >( image.size( ) );
 
 		const std::uint8_t unique_bytes[]{ 0xde, 0xad, 0x11, 0xef };
 		std::memcpy( image.data( ) + 256, unique_bytes, sizeof( unique_bytes ) );
@@ -100,9 +100,9 @@ namespace {
 		const std::vector< std::uint8_t > expected{ 0xff, 0x15, 1, 2, 3, 4 };
 		std::memcpy( memory, expected.data( ), expected.size( ) );
 		p2boost::CallSitePatch patch;
-		const bool			   installed = patch.install( memory, expected, reinterpret_cast< void* >( &replacement ) );
-		const bool			   encoded	 = installed && memory[ 0 ] == 0xe8 && memory[ 5 ] == 0x90;
-		const bool			   removed	 = patch.remove( ) && std::memcmp( memory, expected.data( ), expected.size( ) ) == 0;
+		const bool installed = patch.install( memory, expected, reinterpret_cast< void* >( &replacement ) );
+		const bool encoded = installed && memory[ 0 ] == 0xe8 && memory[ 5 ] == 0x90;
+		const bool removed = patch.remove( ) && std::memcmp( memory, expected.data( ), expected.size( ) ) == 0;
 		VirtualFree( memory, 0, MEM_RELEASE );
 		return installed && encoded && removed;
 	}
@@ -112,10 +112,10 @@ namespace {
 		if( !memory )
 			return false;
 		const std::vector< std::uint8_t > expected{ 0xff, 0x15, 1, 2, 3, 4 };
-		const std::uint8_t				  later_owner[]{ 0xe9, 5, 6, 7, 8, 0x90 };
+		const std::uint8_t later_owner[]{ 0xe9, 5, 6, 7, 8, 0x90 };
 		std::memcpy( memory, expected.data( ), expected.size( ) );
 		p2boost::CallSitePatch patch;
-		const bool			   installed = patch.install( memory, expected, reinterpret_cast< void* >( &replacement ) );
+		const bool installed = patch.install( memory, expected, reinterpret_cast< void* >( &replacement ) );
 
 		// A later owner must survive p2boost removal byte-for-byte.
 		std::memcpy( memory, later_owner, sizeof( later_owner ) );
@@ -129,12 +129,12 @@ namespace {
 		if( !memory )
 			return false;
 		std::vector< std::uint8_t > expected{ 0xb8, 0, 0, 0, 0 };
-		const auto					original_pointer = static_cast< std::uint32_t >( reinterpret_cast< std::uintptr_t >( &original ) );
+		const auto original_pointer = static_cast< std::uint32_t >( reinterpret_cast< std::uintptr_t >( &original ) );
 		std::memcpy( expected.data( ) + 1, &original_pointer, sizeof( original_pointer ) );
 		std::memcpy( memory, expected.data( ), expected.size( ) );
 		p2boost::PointerImmediatePatch patch;
-		const bool					   installed = patch.install( memory, expected, 1, reinterpret_cast< void* >( &replacement ) );
-		std::uint32_t				   encoded	 = 0;
+		const bool installed = patch.install( memory, expected, 1, reinterpret_cast< void* >( &replacement ) );
+		std::uint32_t encoded = 0;
 		std::memcpy( &encoded, memory + 1, sizeof( encoded ) );
 		const bool points_to_replacement = installed &&
 										   encoded == static_cast< std::uint32_t >( reinterpret_cast< std::uintptr_t >( &replacement ) ) &&
@@ -149,11 +149,11 @@ namespace {
 		if( !memory )
 			return false;
 		std::vector< std::uint8_t > expected{ 0xb8, 0, 0, 0, 0 };
-		const auto					original_pointer = static_cast< std::uint32_t >( reinterpret_cast< std::uintptr_t >( &original ) );
+		const auto original_pointer = static_cast< std::uint32_t >( reinterpret_cast< std::uintptr_t >( &original ) );
 		std::memcpy( expected.data( ) + 1, &original_pointer, sizeof( original_pointer ) );
 		std::memcpy( memory, expected.data( ), expected.size( ) );
 		p2boost::PointerImmediatePatch patch;
-		const bool					   installed = patch.install( memory, expected, 1, reinterpret_cast< void* >( &replacement ) );
+		const bool installed = patch.install( memory, expected, 1, reinterpret_cast< void* >( &replacement ) );
 
 		const std::uint8_t later_owner[]{ 0xb8, 9, 8, 7, 6 };
 		std::memcpy( memory, later_owner, sizeof( later_owner ) );
@@ -169,9 +169,9 @@ namespace {
 		const std::vector< std::uint8_t > expected{ 0xa1, 1, 2, 3, 4 };
 		std::memcpy( memory, expected.data( ), expected.size( ) );
 		p2boost::InlineDetour hook;
-		const bool			  installed = hook.install( memory, expected, reinterpret_cast< void* >( &replacement ) );
-		const bool			  encoded	= installed && memory[ 0 ] == 0xe9 && hook.previous( ) != nullptr;
-		const bool			  removed	= hook.remove( ) && std::memcmp( memory, expected.data( ), expected.size( ) ) == 0;
+		const bool installed = hook.install( memory, expected, reinterpret_cast< void* >( &replacement ) );
+		const bool encoded = installed && memory[ 0 ] == 0xe9 && hook.previous( ) != nullptr;
+		const bool removed = hook.remove( ) && std::memcmp( memory, expected.data( ), expected.size( ) ) == 0;
 		VirtualFree( memory, 0, MEM_RELEASE );
 		return installed && encoded && removed;
 	}
@@ -183,7 +183,7 @@ namespace {
 		const std::vector< std::uint8_t > expected{ 0xa1, 1, 2, 3, 4 };
 		std::memcpy( memory, expected.data( ), expected.size( ) );
 		p2boost::InlineDetour hook;
-		const bool			  installed = hook.install( memory, expected, reinterpret_cast< void* >( &replacement ) );
+		const bool installed = hook.install( memory, expected, reinterpret_cast< void* >( &replacement ) );
 
 		// The trampoline intentionally stays mapped while a later owner may
 		// still chain through it; only the contested entry bytes are asserted.
@@ -197,60 +197,48 @@ namespace {
 	bool test_known_hash( ) {
 		wchar_t path[ MAX_PATH ]{ };
 		GetModuleFileNameW( nullptr, path, MAX_PATH );
-		const std::string first	 = p2boost::sha256_file( path );
+		const std::string first = p2boost::sha256_file( path );
 		const std::string second = p2boost::sha256_file( path );
 		return first.size( ) == 64 && first == second;
 	}
 
 	bool test_metrics( ) {
-		auto metrics = std::make_unique< p2boost::Metrics >( );
+		auto metrics = std::make_unique< p2boost::FrameMetrics >( );
 		metrics->set_tracing( true );
-		p2boost::RenderWorkerMetrics worker{ };
-		worker.m_begin_qpc	  = 100;
-		worker.m_end_qpc	  = 200;
-		worker.m_cycles		  = 75;
-		worker.m_queued_calls = 4;
-		metrics->record_render_worker( worker );
 		metrics->set_simulating( true );
-		metrics->frame( );
+		metrics->set_focused( true );
+		metrics->record_frame( );
+		Sleep( 1 );
+		metrics->record_shadow_update( 0.25, true );
+		metrics->record_frame( );
 		metrics->set_simulating( false );
-		metrics->frame( );
+		Sleep( 1 );
+		metrics->record_frame( );
 		const std::string path = "p2boost-test-metrics.csv";
 		if( !metrics->dump( path ) )
 			return false;
 		std::ifstream input( path );
-		std::string	  line;
-		int			  lines = 0;
+		std::string line;
+		int lines = 0;
 		while( std::getline( input, line ) )
 			++lines;
 		input.close( );
-		std::ifstream workers( "p2boost-test-metrics_render_workers.csv" );
-		int			  worker_lines = 0;
-		while( std::getline( workers, line ) )
-			++worker_lines;
-		workers.close( );
 		DeleteFileA( path.c_str( ) );
-		DeleteFileA( "p2boost-test-metrics_render_workers.csv" );
-		return lines == 3 && worker_lines == 2;
+		return lines == 3;
 	}
 
-	bool test_overlay_worker_metrics( ) {
-		auto metrics = std::make_unique< p2boost::Metrics >( );
+	bool test_overlay_metrics( ) {
+		auto metrics = std::make_unique< p2boost::FrameMetrics >( );
 		metrics->set_overlay_collection( true );
 		metrics->set_simulating( true );
-		metrics->frame( );
-
-		// Model one real worker interval between consecutive render frames.
-		p2boost::RenderWorkerMetrics worker{ };
-		worker.m_begin_qpc = p2boost::Qpc::now( );
+		metrics->record_frame( );
 		Sleep( 1 );
-		worker.m_end_qpc = p2boost::Qpc::now( );
-		metrics->record_render_worker( worker );
-		metrics->frame( );
+		metrics->record_shadow_update( 0.1, true );
+		metrics->record_frame( );
 
 		const p2boost::OverlayMetrics result = metrics->overlay_metrics( );
-		return result.m_average_ms > 0.0 && result.m_render_worker_count == 1 && result.m_render_worker_percent > 0.0 &&
-			   std::isfinite( result.m_render_tail_p99_ms );
+		return result.m_average_ms > 0.0 && result.m_shadow_updates == 1 && result.m_shadow_hits == 1 && result.m_graph_count == 1 &&
+			   std::isfinite( result.m_p99_ms );
 	}
 
 	bool test_frame_phase_carry( ) {
@@ -262,7 +250,7 @@ namespace {
 	}
 
 	bool test_qpc( ) {
-		const auto				 ticks = p2boost::Qpc::ticks( 2.5 );
+		const auto ticks = p2boost::Qpc::ticks( 2.5 );
 		const p2boost::Stopwatch disabled{ false };
 		return std::abs( p2boost::Qpc::milliseconds( ticks ) - 2.5 ) < 0.001 && disabled.elapsed( ) == 0;
 	}
@@ -270,21 +258,21 @@ namespace {
 }
 
 int main( ) {
-	const bool address		  = test_address_and_stack_frame( );
-	const bool relative_call  = test_relative_call_encoding( );
-	const bool pattern		  = test_pattern_scanner( );
-	const bool hook			  = test_hook_chain( );
-	const bool callsite		  = test_call_site_patch( );
+	const bool address = test_address_and_stack_frame( );
+	const bool relative_call = test_relative_call_encoding( );
+	const bool pattern = test_pattern_scanner( );
+	const bool hook = test_hook_chain( );
+	const bool callsite = test_call_site_patch( );
 	const bool callsite_chain = test_call_site_chain( );
-	const bool pointer		  = test_pointer_immediate_patch( );
-	const bool pointer_chain  = test_pointer_immediate_chain( );
-	const bool inline_detour  = test_inline_detour( );
-	const bool inline_chain	  = test_inline_detour_chain( );
-	const bool hash			  = test_known_hash( );
-	const bool metrics		  = test_metrics( );
-	const bool overlay		  = test_overlay_worker_metrics( );
-	const bool phase		  = test_frame_phase_carry( );
-	const bool qpc			  = test_qpc( );
+	const bool pointer = test_pointer_immediate_patch( );
+	const bool pointer_chain = test_pointer_immediate_chain( );
+	const bool inline_detour = test_inline_detour( );
+	const bool inline_chain = test_inline_detour_chain( );
+	const bool hash = test_known_hash( );
+	const bool metrics = test_metrics( );
+	const bool overlay = test_overlay_metrics( );
+	const bool phase = test_frame_phase_carry( );
+	const bool qpc = test_qpc( );
 	std::printf( "address=%s rel32=%s pattern=%s hook_chain=%s callsite=%s callsite_chain=%s "
 				 "pointer=%s pointer_chain=%s inline=%s inline_chain=%s hash=%s "
 				 "metrics=%s overlay=%s "

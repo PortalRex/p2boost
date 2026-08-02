@@ -1,8 +1,8 @@
 # Third-party notices
 
 p2boost contains no Valve, SAR, Ghidra, PresentMon, or JDK binaries and no
-proprietary Source code. The bootstrap script downloads tools from their
-official public distributions.
+proprietary Source code. The only vendored binary is NVIDIA's public x86 NVAPI
+import library under its MIT license.
 
 - Portal 2 and Source are trademarks of Valve Corporation. Shipped Portal 2
   binaries are analyzed locally and are never redistributed.
@@ -14,3 +14,5 @@ official public distributions.
 - Ghidra is Apache-2.0 software from the NSA.
 - PresentMon is MIT-licensed software from Intel.
 - Eclipse Temurin is GPLv2 with the Classpath Exception.
+- NVIDIA's public NVAPI headers and x86 import library are MIT-licensed. Their
+  complete license is included at `third_party/nvapi/LICENSE`.

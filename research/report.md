@@ -1,5 +1,10 @@
 # Reverse-engineering report
 
+> Archived native-D3D9 research: the Vulkan-only release does not compile any
+> renderer probe described below. Its source now lives under
+> `research/runtime/native_d3d9`; rejected experiments remain here so they
+> cannot be mistaken for shipping optimizations.
+
 ## Scope and fingerprints
 
 Portal 2 Steam build `23973718`, Windows x86, native Microsoft D3D9:

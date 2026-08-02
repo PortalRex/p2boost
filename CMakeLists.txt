@@ -1,15 +1,10 @@
 cmake_minimum_required(VERSION 3.24)
-project(p2boost VERSION 0.5.0 LANGUAGES CXX)
+project(p2boost VERSION 0.6.0 LANGUAGES CXX)
 
-option(P2BOOST_RESEARCH_DRAW_TRACE "Instrument native D3D9 draw calls for research captures" OFF)
-option(P2BOOST_RESEARCH_WORLD_TRACE "Instrument BSP world-surface construction for research captures" OFF)
-option(P2BOOST_RESEARCH_VISIBILITY_TRACE "Instrument only engine/client visibility construction" OFF)
-option(P2BOOST_RESEARCH_PVS_TRACE "Instrument compressed PVS expansion" OFF)
-option(P2BOOST_RESEARCH_RENDERABLE_TRACE "Instrument client renderable-list construction" OFF)
-option(P2BOOST_RESEARCH_SHADOW_TRACE "Record projected-shadow entry byte changes" OFF)
+option(P2BOOST_BUILD_RESEARCH_TOOLS "Build offline profiling tools from research/" OFF)
 
 if(NOT WIN32)
-  message(FATAL_ERROR "p2boost currently targets Portal 2 for Windows")
+  message(FATAL_ERROR "p2boost targets Portal 2 for Windows")
 endif()
 if(CMAKE_SIZEOF_VOID_P EQUAL 8)
   message(FATAL_ERROR "Portal 2 is 32-bit; configure with -A Win32")
@@ -19,62 +14,43 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
-set(P2BOOST_CORE_SOURCES
-  src/build_fingerprint.cpp
-  src/activation_trace.cpp
-  src/frame_pacer.cpp
-  src/hook.cpp
-  src/metrics.cpp
-  src/portal_trace.cpp
-  src/profiler_overlay.cpp
-  src/renderer_research.cpp
-  src/renderer_trace.cpp
-  src/shadow_trace.cpp
-  src/server_trace.cpp
-  src/world_trace.cpp
+set(P2BOOST_INCLUDE_DIRECTORIES
+  src/core
+  src/engine
+  src/memory
+  src/platform
 )
 
-# Compile the implementation once, then link the same objects into the plugin
-# and its tests. This keeps CI fast and prevents test-only build differences.
-add_library(p2boost_core STATIC ${P2BOOST_CORE_SOURCES})
-target_include_directories(p2boost_core PUBLIC src)
+# The release library contains only the two benchmark-proven fixes and their
+# shared runtime support. Native-D3D9 probes are archived under research/ and
+# are never compiled into p2boost.dll.
+add_library(p2boost_core STATIC
+  src/core/frame_limiter.cpp
+  src/core/frame_metrics.cpp
+  src/core/projected_shadow_cache.cpp
+  src/core/profiler_overlay.cpp
+  src/core/runtime_verification.cpp
+  src/memory/hook.cpp
+)
+target_include_directories(p2boost_core PUBLIC ${P2BOOST_INCLUDE_DIRECTORIES})
 target_compile_definitions(p2boost_core PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_compile_options(p2boost_core PRIVATE /W4 /WX /permissive- /Zc:__cplusplus /guard:cf)
-if(P2BOOST_RESEARCH_DRAW_TRACE)
-  target_compile_definitions(p2boost_core PUBLIC P2BOOST_RESEARCH_DRAW_TRACE=1)
-endif()
-if(P2BOOST_RESEARCH_WORLD_TRACE)
-  # Plugin startup is compiled in the consuming DLL target and must see this
-  # flag so it actually installs the research-only core hooks.
-  target_compile_definitions(p2boost_core PUBLIC P2BOOST_RESEARCH_WORLD_TRACE=1
-    P2BOOST_RESEARCH_VISIBILITY_ANY=1 P2BOOST_RESEARCH_VISIBILITY_METRICS=1)
-endif()
-if(P2BOOST_RESEARCH_VISIBILITY_TRACE)
-  target_compile_definitions(p2boost_core PUBLIC P2BOOST_RESEARCH_VISIBILITY_TRACE=1
-    P2BOOST_RESEARCH_VISIBILITY_ANY=1 P2BOOST_RESEARCH_VISIBILITY_METRICS=1)
-endif()
-if(P2BOOST_RESEARCH_PVS_TRACE)
-  target_compile_definitions(p2boost_core PUBLIC P2BOOST_RESEARCH_PVS_TRACE=1
-    P2BOOST_RESEARCH_VISIBILITY_ANY=1 P2BOOST_RESEARCH_VISIBILITY_METRICS=1)
-endif()
-if(P2BOOST_RESEARCH_RENDERABLE_TRACE)
-  target_compile_definitions(p2boost_core PUBLIC P2BOOST_RESEARCH_RENDERABLE_TRACE=1
-    P2BOOST_RESEARCH_VISIBILITY_ANY=1 P2BOOST_RESEARCH_VISIBILITY_METRICS=1)
-endif()
-if(P2BOOST_RESEARCH_SHADOW_TRACE)
-  target_compile_definitions(p2boost_core PUBLIC P2BOOST_RESEARCH_SHADOW_TRACE=1)
-endif()
+target_link_libraries(p2boost_core PRIVATE bcrypt)
 
 add_library(p2boost SHARED
-  src/console.cpp
-  src/console_commands.cpp
-  src/plugin.cpp
+  src/core/plugin.cpp
+  src/engine/console.cpp
+  src/engine/console_commands.cpp
 )
-target_include_directories(p2boost PRIVATE src)
-target_compile_definitions(p2boost PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX P2BOOST_VERSION="${PROJECT_VERSION}")
+target_include_directories(p2boost PRIVATE ${P2BOOST_INCLUDE_DIRECTORIES})
+target_compile_definitions(p2boost PRIVATE
+  WIN32_LEAN_AND_MEAN
+  NOMINMAX
+  P2BOOST_VERSION="${PROJECT_VERSION}"
+)
 target_compile_options(p2boost PRIVATE /W4 /WX /permissive- /Zc:__cplusplus /guard:cf)
 target_link_options(p2boost PRIVATE /DEF:${CMAKE_CURRENT_SOURCE_DIR}/src/p2boost.def /guard:cf /DEBUG:FULL)
-target_link_libraries(p2boost PRIVATE p2boost_core bcrypt)
+target_link_libraries(p2boost PRIVATE p2boost_core bcrypt shell32)
 set_target_properties(p2boost PROPERTIES
   OUTPUT_NAME p2boost
   PREFIX ""
@@ -82,19 +58,29 @@ set_target_properties(p2boost PROPERTIES
   PDB_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/$<CONFIG>"
 )
 
+# This small pre-launch helper uses NVIDIA's public DRS API to apply only the
+# two per-application DXVK presentation values. It records and restores the
+# prior user overrides; no global driver profile is modified.
+add_executable(p2boost_driver tools/p2boost_driver.cpp)
+target_include_directories(p2boost_driver SYSTEM PRIVATE third_party/nvapi/include)
+target_compile_definitions(p2boost_driver PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_options(p2boost_driver PRIVATE /W4 /WX /permissive- /Zc:__cplusplus /external:W0)
+target_link_options(p2boost_driver PRIVATE /guard:cf)
+target_link_libraries(p2boost_driver PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party/nvapi/x86/nvapi.lib)
+
 enable_testing()
-add_executable(p2boost_tests
-  tests/test_main.cpp
-)
-target_include_directories(p2boost_tests PRIVATE src)
+add_executable(p2boost_tests tests/test_main.cpp)
+target_include_directories(p2boost_tests PRIVATE ${P2BOOST_INCLUDE_DIRECTORIES})
 target_compile_definitions(p2boost_tests PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
-target_compile_options(p2boost_tests PRIVATE /W4 /WX /permissive-)
+target_compile_options(p2boost_tests PRIVATE /W4 /WX /permissive- /Zc:__cplusplus)
 target_link_libraries(p2boost_tests PRIVATE p2boost_core bcrypt)
 add_test(NAME p2boost_tests COMMAND p2boost_tests)
 
-add_executable(p2profile tools/p2profile.cpp)
-target_include_directories(p2profile PRIVATE src)
-target_compile_definitions(p2profile PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
-target_compile_options(p2profile PRIVATE /W4 /WX /permissive- /Zc:__cplusplus)
-target_link_options(p2profile PRIVATE /guard:cf)
-target_link_libraries(p2profile PRIVATE dbghelp)
+if(P2BOOST_BUILD_RESEARCH_TOOLS)
+  add_executable(p2profile research/tools/p2profile.cpp)
+  target_include_directories(p2profile PRIVATE ${P2BOOST_INCLUDE_DIRECTORIES})
+  target_compile_definitions(p2profile PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+  target_compile_options(p2profile PRIVATE /W4 /WX /permissive- /Zc:__cplusplus)
+  target_link_options(p2profile PRIVATE /guard:cf)
+  target_link_libraries(p2profile PRIVATE dbghelp)
+endif()

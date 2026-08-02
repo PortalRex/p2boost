@@ -38,13 +38,11 @@ jobs:
       - name: Build
         shell: pwsh
         run: |
-          # Build the large test translation unit after the DLL. Running both
-          # targets concurrently exhausts the hosted runner's compiler heap.
           cmake --build --preset release --target p2boost -- /m
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          cmake --build --preset release --target p2boost_tests -- /m
+          cmake --build --preset release --target p2boost_driver -- /m
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          cmake --build --preset release --target p2profile -- /m
+          cmake --build --preset release --target p2boost_tests -- /m
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Test

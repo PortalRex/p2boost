@@ -1,463 +1,92 @@
-# Benchmark report
-
-## Environment
-
-- Intel Core i7-14700KF, NVIDIA RTX 4070 Super
-- Portal 2 build 23973718, Windows x86, native Microsoft D3D9
-- 2560x1440, 359 Hz, hardware independent flip for fullscreen pacing tests
-- SAR 1.15.3 loaded before p2boost
-- PresentMon 2.5.1, fixed-camera captures
-- Current-user profile kept intact, including `r_portal_use_pvs_optimization 0`
-  and SAR's heavy-entity option
-
-## Final pacing A/B
-
-| Scenario | Variant | Average FPS | Median ms | p95 ms | p99 ms | 1% low FPS |
-|---|---:|---:|---:|---:|---:|---:|
-| SP, 360 target | unpatched | 352.24 | 2.8449 | 3.4416 | 3.7375 | 267.56 |
-| SP, 360 target | patched | 360.12 | 2.7804 | 3.3667 | 3.6549 | 273.61 |
-| SP, 500 target | unpatched | 483.93 | 2.0607 | 2.5680 | 2.8272 | 353.71 |
-| SP, 500 target | patched | 499.88 | 1.9955 | 2.4980 | 2.8269 | 353.74 |
-| SP, 999 target | unpatched | 937.17 | 1.0457 | 1.3773 | 1.6460 | 607.53 |
-| SP, 999 target, 10% carry | patched | 968.06 | 1.0167 | 1.3238 | 1.7044 | 586.72 |
-
-The correction removes the systematic 2-6% limiter drift at attainable caps.
-At 360 it improves p99 by 2.2%; at 500 it improves average throughput by 3.3%
-without changing p99. A 999 target is close to renderer throughput in this
-scene: median and p95 improve, but p99 does not. This is reported as a limit,
-not hidden behind a lower forced cap.
-
-In local split-screen with two placed portals at a 999 target, the patch raised
-average throughput from 892.66 to 934.55 FPS, while p99 varied from 1.8334 to
-1.8721 ms. The portal-stencil routine itself averaged 0.0549 ms per call and
-6.12% of traced CPU time; removing its calls would remove required camera work.
-
-## Co-op lobby with visible linked portals
-
-The added deterministic lobby harness runs two active local players and keeps
-both linked portal interiors on screen in both halves. Its proof image is
-saved beside every capture. Four portal-view calls occur per rendered frame:
-two visible portals times two player views. The current lobby trace averages
-0.0815 ms per portal-stencil call.
-
-At `fps_max 999`, linked portals increased median frame time from 1.7085 ms to
-2.0676 ms versus the identical view after both portals were fizzled, a roughly
-21% throughput cost. Sampling and Ghidra decompilation attribute the work to
-distinct client view/world visibility passes; no equivalent-camera duplicate
-was found. Temporarily disabling `r_occlusion` did not materially improve p99,
-so that cvar remains untouched.
-
-At a 360 target with the linked portals visible, the pacing correction raised
-average presentation rate from 350.56 to 358.05 FPS and reduced display
-intervals above 4 ms from 7.80% to 6.67%. CPU p99 remained about 3.9 ms, so the
-co-op smoothness gate is still open. A 60-second throughput-limited 999 A/B was
-neutral within run-order/thermal variance (median 2.1269 ms unpatched and
-2.1618 ms patched); the limiter correctly does not hide renderer cost there.
-
-### Projected-shadow cache A/B
-
-VProf and byte-for-byte state tracing proved that the lobby's static projected
-light rebuilt its receiver projection every rendered frame. The v0.5.0 cache
-removes only identical rebuilds while retaining shadow-depth rendering and all
-visual settings.
-
-| Target | Variant | Average FPS | Median ms | p99 ms | Maximum ms | 1% low FPS |
-|---|---|---:|---:|---:|---:|---:|
-| 999 | unpatched | 414.23 | 2.3789 | 3.1668 | 4.6796 | 315.78 |
-| 999 | patched | 538.14 | 1.8310 | 2.6190 | 4.8432 | 381.83 |
-| 360 | unpatched | 350.56 | 2.8395 | 3.7745 | 5.5016 | 264.94 |
-| 360 | patched | 360.06 | 2.7692 | 3.6634 | 4.0343 | 272.97 |
-
-At the throughput-limited target this is a 29.9% average-FPS increase, 23.0%
-median frame-time reduction, 17.3% p99 reduction, and 20.9% improvement in 1%
-low FPS. At 360 FPS, display repeats fell from 0.114% to 0.028%. GPU-busy time
-was unchanged (approximately 0.89 ms median), confirming a CPU-only saving.
-
-Paused 2560x1440 lossless TGA comparisons measured 44.42 dB PSNR between
-patched/unpatched frames versus 43.93 dB between two unpatched control frames;
-the patch difference is within the scene's real-time material/particle noise.
-Focus testing also confirmed that each resource reacquisition invalidated the
-cache and executed a fresh projection before cache hits resumed.
-
-The packaged v0.5.0 build received a final five-second smoke A/B after its
-cache storage was reduced to observed handles only. It measured 392.73 versus
-518.62 FPS (+32.1%), 1% low 283.94 versus 350.25 FPS (+23.4%), and p99 3.5219
-versus 2.8551 ms. The patched maximum was 3.8876 ms with no frame above 8.3 ms.
-Both SAR-to-p2boost and p2boost-to-SAR runtime load orders retained a validated
-shadow-cache hook and native-D3D9 status.
-
-The current automated lifecycle repeat strengthens that smoke evidence. Three
-cycles constructed both orders, unloaded/reloaded p2boost six times, reloaded
-SAR six times, and tested each survivor before restoring the normal SAR-first
-order. All p2boost build/native-D3D9/pacer/shadow/SAR fields and every
-`sar_about` response passed with zero warnings or signature mismatches.
-
-## Short real-gameplay coverage
-
-Fresh-process playback of the 40.9-second `sp_a2_trust_fling` demo exercises
-movement, portal placement and traversal rather than a fixed camera. At
-`fps_max 999`, v0.5.0 measured 944.29 average FPS, 624.41 1% low FPS, and
-1.6015 ms p99, versus 900.39 FPS, 586.96 FPS, and 1.7037 ms unpatched. This is
-a 4.9% throughput gain and 6.0% p99 reduction. Both variants retained a
-roughly 12.4 ms deterministic maximum, which triggered the queued-render
-investigation documented in the research report; the residual fence hitch is
-not represented as fixed.
-
-After reducing that investigation to its low-overhead trace hooks, three
-10-second patched smoke captures covered Trust Fling, co-op repulsion-gel
-gameplay, and co-op tractor-beam gameplay. They respectively recorded 9,157,
-9,597, and 9,695 presented frames. Their maximum frame times were 4.5652,
-3.4945, and 3.8973 ms, with no frame above 8.3 ms. These short runs validate
-the packaged hook lifecycle across more varied gameplay; they are not used as
-an A/B performance claim because demo segments and transient state were not
-identical across those three scenarios.
-
-The automated matched-segment runner was then added and exercised with its
-five-second defaults. It restarts each demo at the same tick range for both
-variants and verifies the demo header's map before capture:
-
-| Gameplay segment | Variant | Average FPS | p99 ms | Maximum ms |
-|---|---:|---:|---:|---:|
-| Trust Fling | unpatched | 922.09 | 2.3476 | 4.1779 |
-| Trust Fling | patched | 970.14 | 1.3738 | 4.6162 |
-| Co-op repulsion gel | unpatched | 937.49 | 2.1810 | 3.1529 |
-| Co-op repulsion gel | patched | 978.02 | 2.1300 | 5.5801 |
-| Co-op tractor beam | unpatched | 816.83 | 2.6477 | 10.0561 |
-| Co-op tractor beam | patched | 845.59 | 2.7361 | 9.3846 |
-
-Average throughput improved by 3.5-5.2% in all three short pairs. Trust Fling
-p99 improved materially and repulsion-gel p99 improved slightly; tractor-beam
-p99 regressed by 3.3%, while its maximum improved. Separate repetitions caught
-occasional 9-31 ms queued-worker events in both portal and co-op gameplay.
-This variance is why the runner is retained and why the explicit GPU-fence
-path remains an open smoothness issue rather than being hidden by averages.
-
-After adding research-only draw/command classification, the normal Release
-build received another five-second patched-only pass through all three demos:
-
-| Gameplay segment | Average FPS | p99 ms | Maximum ms | Frames >8.3 ms |
-|---|---:|---:|---:|---:|
-| Trust Fling | 962.71 | 1.6099 | 7.0009 | 0 |
-| Co-op repulsion gel | 972.20 | 2.1623 | 10.7736 | 1 |
-| Co-op tractor beam | 949.77 | 1.4803 | 11.2378 | 1 |
-
-The two co-op maxima confirm that the remaining hitch classes are still
-observable in short real gameplay. The release does not claim them as fixed;
-the draw trace attributes the paint burst to native D3D9 submission while
-separate captures attribute the tractor/fence class to explicit native D3D9
-serialization. A tentative dynamic-light list-node interpretation was rejected
-after disassembly proved its assumed functor ABI wrong.
-
-A later exact-functor trace separated map setup from steady gameplay. The
-2,310-surface callback burst is `R_RedownloadAllLightmaps` during map/demo
-initialization, not a steady dynamic-light pass. With tracing delayed until
-after initialization, a 360 FPS cold process still contained one 9.8429 ms
-worker batch whose longest native draw was 6.6628 ms. Replaying the identical
-segment in that process reduced the maximum batch to 4.5257 ms and the longest
-draw to 0.8742 ms. This is retained as a first-use native-driver/resource cost;
-the project does not hide it with dummy prewarming.
-
-## Short live-gameplay A/B
-
-The new live-input runner replaces demo playback for the primary smoke matrix.
-It drives normal movement, jumping, and portal-gun input while linked portal
-interiors remain visible. Single-player uses Trust Fling; co-op uses two active
-local players in the lobby. Each variant below is a five-second native-D3D9
-capture with the user's visual configuration left intact.
-
-| Target | Scene | Variant | Average FPS | p99 ms | Maximum ms | 1% low FPS |
-|---:|---|---:|---:|---:|---:|---:|
-| 999 | SP Trust Fling | unpatched | 897.09 | 2.3865 | 3.9488 | 419.02 |
-| 999 | SP Trust Fling | patched | 943.68 | 2.1110 | 3.9090 | 473.71 |
-| 999 | Co-op lobby | unpatched | 469.58 | 4.2633 | 5.9362 | 234.56 |
-| 999 | Co-op lobby | patched | 546.38 | 3.1407 | 5.2133 | 318.40 |
-| 360 | SP Trust Fling | unpatched | 351.05 | 4.0257 | 6.0486 | 248.40 |
-| 360 | SP Trust Fling | patched | 360.12 | 3.8569 | 4.5146 | 259.28 |
-| 360 | Co-op lobby | unpatched | 335.98 | 4.9299 | 6.2144 | 202.84 |
-| 360 | Co-op lobby | patched | 359.84 | 3.7853 | 4.1052 | 264.18 |
-
-At the throughput-limited 999 target, the patch improves SP average FPS by
-5.2% and SP p99 by 11.5%. Co-op average FPS improves by 16.4%, p99 by 26.3%,
-and 1% low FPS by 35.7%. At the 360 target, co-op p99 improves by 23.2% and
-1% low FPS by 30.2%. None of the eight live captures contains a frame above
-8.3 ms. The 999 co-op sample clears the original 35% 1%-low target once, but
-the release gate remains provisional until repeated longer runs reproduce it.
-
-A clean reinstall then ran the combined co-op-to-SP 360 matrix end to end. The
-patched co-op repeat measured 359.55 FPS, 3.7712 ms p99, and 4.2334 ms maximum;
-the patched SP repeat measured 360.06 FPS, 3.9090 ms p99, and 4.3959 ms maximum.
-Again, neither scene produced a frame above 8.3 ms.
-
-The analyzer now removes PresentMon's undefined first interval separately for
-each process/swap chain. A trace beginning between presents previously produced
-one artificial interval approximately equal to the complete capture duration;
-that boundary row is not a game frame. No interior or final samples are trimmed.
-
-## Focus and portal results
-
-The original timestamped native-D3D9 harness completed 30 minimize/restore/
-portal-placement cycles. It reported:
-
-- median worst frame: 2.1289 ms;
-- p95 worst frame: 2.6520 ms;
-- absolute worst frame: 2.8055 ms;
-- frames above 8.3 ms: 0.
-
-That portal result is now rejected. The old helper queued `wait_for` commands
-before losing focus and converted their nominal 60 Hz ticks directly to QPC.
-Device restoration paused simulation, shifting the real shots away from those
-estimated timestamps. The corrected helper first verifies restore and only
-then schedules both portal inputs.
-
-Three corrected patched cycles measured 21.0945 ms median and 26.7104 ms worst
-post-connected-portal frames; all exceeded 8.3 ms. A matched patch-off control
-measured 22.3531 ms median and 34.0130 ms worst, also with all three failures.
-A second patched trace reproduced 21.9258 ms median and 22.0775 ms worst.
-The corresponding queued workers consumed 20.5790--21.0216 ms and were
-followed by 16.8300--17.9684 ms native `Present` calls. Portal CPU work and the
-explicit Source fence were small. The focus patch improves the reset path but
-does not eliminate the post-reset native-D3D9 first-use submission cost.
-
-In the portal-visible co-op lobby, the unpatched resource reacquisition
-averaged about 564 ms. Sampling isolated two redundant CPU static-lighting
-cache rebuilds inside that interval. With the focus synchronization and both
-scoped lighting skips enabled, three direct restores measured 245.36, 246.31,
-and 261.11 ms (250.93 ms average), a 55.5% reduction. A subsequent 30-cycle
-stability run averaged 258.75 ms, with 296.06 ms p95 and 297.02 ms maximum.
-No static-lighting work appeared in the two seconds after the reacquisition
-interval, so the removed work itself was not deferred.
-
-Frozen-camera before/after-focus image differences were within the temporal
-and JPEG noise of a no-focus control pair. A complete lossless fixed-tick image
-equivalence suite is still outstanding. The remaining roughly 250-280 ms is
-genuine D3D/studio-render resource recreation and driver work; p2boost does not
-skip, defer, or prewarm those callbacks.
-
-An additional 20-second portal-visible lobby throughput A/B at `fps_max 999`
-was neutral: 472.47 FPS unpatched versus 470.38 FPS patched (-0.44%). Median
-frame time was 2.0321 versus 2.0335 ms and p99 was 3.1350 versus 3.1899 ms.
-This is within the 2% throughput-regression gate and expected because the new
-hooks are inactive outside focus reacquisition.
-
-The final v0.4.0 binary received another portal-visible 20-second smoke A/B
-after packaging changes. It measured 467.02 FPS unpatched and 466.18 FPS
-patched (-0.18%). Patched p99 improved from 3.3256 to 3.2363 ms, 1% low from
-300.70 to 308.99 FPS, and display repeats from 0.45% to 0.19%. A single
-8.4888 ms patched frame remains; this result confirms no throughput regression
-but does not claim that ordinary steady-state hitches are solved.
-
-## Synchronized ETW hitch capture
-
-A 15-second GeneralProfile trace of the deterministic two-player lobby with a
-linked portal pair visible recorded 6,623 frames:
-
-| Metric | Result |
-|---|---:|
-| Average FPS | 441.82 |
-| Median | 2.1692 ms |
-| p95 | 3.1012 ms |
-| p99 | 3.5445 ms |
-| Maximum | 8.4279 ms |
-| 1% low | 282.13 FPS |
-| p99 / median | 1.634 |
-
-There was one frame above 8.3 ms and none above 16.7 ms. That frame contained
-only 1.59 ms of GPU-busy work and no coincident Portal asset read. ETW samples
-place its main-thread work in client renderable filtering and engine BSP
-visibility traversal. This confirms a remaining intermittent CPU visibility
-burst, but not a redundant call: each local player and each portal has distinct
-view state. A permanent cache or skip would therefore be speculative and is
-not included in the current binary.
-
-## Elevated live ETW validation
-
-Fresh administrator GeneralProfile captures synchronized CPU sampling with
-PresentMon in both live linked-portal scenes:
-
-| Scene | Frames | Average FPS | p99 ms | Maximum ms | GPU-busy p99 ms | Frames >8.3 ms |
-|---|---:|---:|---:|---:|---:|---:|
-| SP Trust Fling | 14,371 | 958.46 | 1.7480 | 2.6934 | 0.5579 | 0 |
-| Two-player lobby | 8,442 | 562.96 | 2.7079 | 3.6233 | 0.9055 | 0 |
-
-Both are CPU-limited at the high target and neither contains a measured hitch
-or coincident gameplay-asset read. A separate current-build five-second SP A/B
-with real movement and portal-gun input measured 922.27 to 961.05 average FPS
-and 1.8892 to 1.8109 ms p99, with no frame above 8.3 ms in either variant.
-
-`capture-etw.ps1` now cancels any interrupted WPR session before starting a
-fresh file-mode trace. `analyze-etw.ps1` rejects an ETL that contains no Portal
-2 CPU samples, preventing an apparently successful but empty hotspot report.
-
-## Gate status
-
-- Post-focus portal frame <=8.3 ms: **not met**; corrected post-restore
-  scheduling reproduced 19--34 ms frames in every patched and unpatched smoke
-  cycle.
-- Co-op 1% low improvement >=35%: **provisional**; the short live 999 run
-  improves by 35.7%, but longer repeated live runs are still required.
-- p99 <=1.25x median at 360: **not met**; the live SP and co-op ratios are
-  1.3898 and 1.3648 respectively, though both cadence and p99 improve.
-- <=2% SP throughput regression: **met**; measured throughput improves.
-- 100 map/focus cycles and lossless visual/state equivalence: **not yet completed**.
-  The focus runner now has a real-input `-QuickLifecycle` mode that reduces the
-  100-cycle wall time without replacing focus or portal events; the full run
-  and fixed-tick lossless comparison remain outstanding.
-
-No release should claim the full original acceptance plan is complete.
-
-## Current-build audit (2026-07-28)
-
-The current production source was rebuilt and installed before repeating the
-full 24-second grounded Laser Relays route at `fps_max 360`. The route rode the
-elevator, crossed the main room, and fired both portal colors. Steady output
-averaged 358.48 FPS with a 2.7758 ms median, but the cold connected-portal
-interval produced 21.9744, 32.1475, and 24.2058 ms CPU-busy frames while GPU
-busy remained 0.54--0.74 ms. The p99/median ratio was 1.4417. This is a failed
-current-build portal/pacing gate and matches the separately traced native-D3D9
-first-use submission path.
-
-The focus helper previously trusted an unchecked foreground request. Windows
-could reject that request and leave PresentMon with only the frames before the
-first alt-tab. The helper now joins the relevant input queues temporarily and
-verifies every focus-away/restore transition. Its first five current-build
-cycles still used the invalid pre-restore tick estimate and are superseded by
-the corrected post-restore results above.
-
-Clean-profile co-op tests temporarily used Portal 2's default
-`r_portal_use_pvs_optimization 1`; the stored user value remained untouched.
-A moving ten-second pair initially appeared to clear the 35% 1%-low gate when
-unpatched ran first, but reversing the order reversed the result because the
-second map load inherited warm native-driver state. That pair is rejected as
-an acceptance claim.
-
-The fixed two-camera lobby harness avoids the map reload between variants and
-now supports both orders. With patched first, both linked portal interiors
-visible, and identical driver state, patched measured 607.94 FPS average,
-418.10 FPS 1% low, and 2.3918 ms p99; unpatched measured 436.34 FPS,
-322.39 FPS 1% low, and 3.1018 ms p99. Average throughput improved 39.3% and
-1% low improved 29.7%. A normal-order repeat measured 561.61 versus
-430.31 FPS and 387.04 versus 319.63 FPS 1% low. These are material co-op wins,
-but neither order proves the requested 35% 1%-low gate.
-
-Trace timing of the cached projected-light path shows its mandatory two-tree
-dirty-list cleanup costs 0.0002 ms median and 0.0004 ms p99. Removing it could
-leave renderables incorrectly marked dirty and cannot materially improve the
-remaining tail, so the cleanup stays.
-
-The same 1,250-frame fixed-view trace was used to audit additional
-multithreading. Its existing ordered material worker measured 1.4967 ms
-median and 1.8057 ms p99 against 1.7229 ms and 2.7408 ms whole-frame timing.
-Portal rendering measured 0.2484 ms median. Whole-frame correlation was only
-0.1685 for worker time and 0.2969 for portal time, so the p99 tail is not a
-single unthreaded render block. The worker starts 0.0388 ms median before the
-preceding frame marker and ends 0.2499 ms median before the current one,
-confirming that Source already overlaps it with main-thread construction. The
-post-worker main tail reaches 1.2407 ms p99. Ghidra analysis also found shared
-mutable current-view, render-flag, BSP-generation, and output-list state in
-the player/portal visibility builders. Parallelizing those calls without a
-per-view engine-state rewrite would change or race visibility, so no unsafe
-threading hook is included.
-
-Static analysis of the actual D3D9 device constructor also rejects a generic
-driver-threading flag as an optimization. Portal 2 creates the device with
-behavior flags `0x42` or `0x52` on the hardware path and `0x22` on fallback:
-`D3DCREATE_FPU_PRESERVE`, one vertex-processing mode, and optional pure-device
-support. `D3DCREATE_MULTITHREADED` is absent because the queued material worker
-already owns ordered device submission. That flag would add runtime locking;
-it would not parallelize the measured draw or `Present` stalls.
-
-A subsequent uncapped production run repeated the grounded Laser Relays route
-with the elevator, both portal shots, and a linked portal interior on screen.
-It averaged 873.31 FPS with a 1.0699 ms median, but cold portal activation
-contained 21.6935, 36.3260, and 24.5148 ms frames. Their queued render batches
-took 19.3305, 36.3047, and 24.4925 ms, respectively; the largest batch spent
-35.6328 ms in native D3D9 `Present` and only 0.0014 ms in the Source hardware
-fence. Post-worker main tails were below 0.48 ms and measured portal CPU work
-was below 0.17 ms.
-
-The identical warm fizzle-and-reopen sequence averaged 940.09 FPS, measured a
-1.0363 ms median, 1.7860 ms p99, 3.5742 ms maximum, and had no frame above
-8.3 ms. The first-use gate therefore remains **not met**: the remaining cold
-event is a native-driver submission/presentation cost. It is not reported as
-fixed, and p2boost does not hide it by pre-rendering a dummy portal or moving
-the same wait into loading.
-
-Static inspection found no normal-path managed-resource purge to remove.
-`EvictManagedResources` is dispatched only as allocation recovery after
-`CreateTexture` reports D3D or system out-of-memory, and the successful test
-loads do not take that branch.
-
-The installed shared-core build then received a fresh-process intro3 playback.
-At the successful portal event it reproduced 57.9831 and 61.9770 ms queued
-render frames followed by a 22.2276 ms wait-bearing frame. Portal CPU work was
-only 0.1621--0.3851 ms. This is a regression confirmation of the existing
-driver-first-use attribution, not a claimed improvement.
-
-A five-second linked-portal split-screen smoke A/B ran patched-first in a fresh
-process. Patched measured 556.13 FPS average, 291.94 FPS 1% low, 3.4254 ms p99,
-and 5.3270 ms maximum. Unpatched measured 403.42 FPS average, 243.24 FPS 1% low,
-4.1111 ms p99, and 5.7950 ms maximum. The short run shows a 37.9% throughput
-increase and no frame above 8.3 ms in either variant; its 20.0% 1%-low gain is
-supporting smoke evidence rather than the unresolved 35% acceptance claim.
-
-The next co-op hypothesis was duplicate compressed-PVS expansion for the two
-nearby players. A research build recorded decompressor time, exact input keys,
-and output hashes. Initial zero-call captures were invalid because the
-research definition did not propagate to the DLL startup translation unit;
-the build wiring and component isolation were corrected before retesting.
-
-The valid linked-portal transition recorded 34,705 calls costing 12.0914 ms
-across 3,210 active frames. Of those, 26,147 repeated an exact key in the same
-frame and produced identical bytes. A perfect cache could save at most about
-0.0028 ms per active frame, so no PVS cache was promoted to production.
-
-The grounded Laser Relays renderable-list trace recorded 20,341 simulating
-frames. List construction occupied 10.55% of sampled frame time, including
-2.54% in view filtering and 2.81% in occlusion filtering. The occlusion stage
-received 19,155,694 candidates; 74.5% were genuinely eligible for the
-view-dependent test, although none were removed on that route. Consequently,
-the loop is not an exact no-op that can be skipped, and its shared query state
-precludes safe generic parallel evaluation.
-
-The production rebuild with all visibility research storage compiled out was
-then installed and tested in both modes. A patched-first five-second linked-
-portal lobby A/B measured 582.70 versus 420.57 average FPS and 295.83 versus
-239.46 FPS 1% low. Neither variant produced a frame above 8.3 ms. The 38.6%
-throughput and 23.5% 1%-low improvements confirm the existing patch remained
-active; the short run still does not satisfy the original 35% 1%-low gate.
-
-A fresh-process playback of the exact 22-second intro3 demo completed through
-the successful portal placement. Excluding the separate 1,122 ms demo/map
-startup boundary, the cold portal sequence still contained 52.4673, 58.0249,
-and 22.4148 ms render-worker frames. Portal CPU work was only
-0.1517--0.5268 ms. The research refactor introduced no production regression,
-but the native-driver first-use gate remains unresolved and is not claimed as
-fixed.
-
-The current fixed-lobby runner now stores a status record around every A/B
-interval and requests PresentMon QPC timestamps. A normal-order production
-repeat measured 546.00 versus 413.45 average FPS, 335.32 versus 238.99 FPS
-1% low, and 2.9822 versus 4.1842 ms p99 for patched versus unpatched. A
-reverse-order repeat measured 594.25 versus 431.07 average FPS, 324.81 versus
-286.89 FPS 1% low, and 3.0787 versus 3.4856 ms p99. Neither repeat exceeded
-8.3 ms.
-
-Runtime counters prove that the cache skipped 2,861 and 3,120 exact rebuilds
-in the two enabled intervals and zero in both disabled intervals. A separate
-research build compared all 276 input bytes for 11,241 consecutive calls and
-found zero changes. This confirms that the shipped full-state key is neither
-missing changing state nor silently inactive. Average and median gains are
-repeatable in both orders; the five-second reverse-order 1%-low gain is only
-13.2%, so the 35% 1%-low acceptance gate remains **not met**.
-
-A subsequent fresh-process intro3 draw trace stored the exact x86 ASLR module
-map with the capture. The portal sequence measured 64.8056, 58.7467, and
-29.9648 ms presented frames. The first queued worker spent 29.5717 ms in
-native indexed draws and 10.1698 ms in Present. Only 0.2346 ms came from all
-first-seen resources and shader pairs in that worker.
-
-The slowest draw resolves through the shipped `PortalStaticOverlay` standard
-shader and the normal MaterialSystem/ShaderAPI mesh path. It uses an
-already-seen pipeline and managed texture, so asynchronous Source allocation
-or shader creation is not available to overlap. The remaining gate is still
-**not met**; p2boost does not remove the overlay or render it during loading.
+# Vulkan validation report
+
+## Target
+
+- Portal 2 Windows x86 build `23973718`
+- Portal 2's shipped `shaderapivk.dll` and `DXVK_D3D9.DLL`
+- NVIDIA RTX 4070 Super, 2560x1440 at 359/360 Hz
+- SAR loaded alongside p2boost
+
+## Backend and driver profile
+
+A live module snapshot verified `shaderapivk.dll`, `DXVK_D3D9.DLL`, and
+`vulkan-1.dll` in the same Portal 2 process. `p2boost_status` then reported
+`supported=1`, `dxvk_vulkan=1`, and both release hooks installed.
+
+The NVIDIA helper initially read the effective defaults:
+
+```text
+present_method=0x00000002
+present_flags=0x00000000
+```
+
+An elevated apply changed only the `portal2.exe` profile to `0x00000001` and
+`0x000802A5`. A complete restore/status/reapply test returned to both defaults,
+then reapplied and verified both target values. The backup recorded that neither
+setting previously had an application-profile override.
+
+## Intro3 PortalGun demo
+
+The Vulkan runner uses
+`a/PortalGun_2243_76561198795823814_348449.dem`, verifies the embedded
+`sp_a1_intro3` header, and reports the 12-18 second interval around the actual
+successful portal placement. Initial fresh-process captures confirmed normal
+playback and no native-D3D9-scale 50-60 ms submission/fence stall. Their order
+was affected by Vulkan pipeline warming, so they are retained as smoke data,
+not as a patched/unpatched throughput claim.
+
+## Frame limiter A/B
+
+Each process played the complete PortalGun demo once before measurement, then
+captured the same 12-18 second interval at `fps_max 360`. Both A/B orders were
+run in separate processes:
+
+| Order | Variant | Average FPS | p99 ms | Maximum ms | Frames >=8.3 ms |
+|---|---|---:|---:|---:|---:|
+| off then on | off | 352.15 | 3.3831 | 4.7448 | 0 |
+| off then on | on | 360.01 | 3.2819 | 3.9403 | 0 |
+| on then off | on | 359.98 | 3.4796 | 4.1899 | 0 |
+| on then off | off | 352.07 | 3.3243 | 4.5309 | 0 |
+
+The correction removes the same deterministic 2.2% limiter drift in both
+orders under DXVK/Vulkan. Tail differences are small and mixed in the reverse
+pair, so the claim is the repeatable cap accuracy/throughput result rather than
+an unsupported p99 improvement.
+
+## Projected-shadow cache A/B
+
+The deterministic local split-screen lobby used two fixed cameras with a
+linked portal pair visible. Five-second captures ran both A/B orders at
+`fps_max 999`:
+
+| Order | Variant | Average FPS | Median ms | p99 ms | Maximum ms |
+|---|---|---:|---:|---:|---:|
+| off then on | off | 177.51 | 4.8511 | 15.9581 | 18.1776 |
+| off then on | on | 188.80 | 4.5720 | 15.4510 | 20.0518 |
+| on then off | on | 504.35 | 1.8970 | 3.1472 | 3.9733 |
+| on then off | off | 473.16 | 2.0367 | 3.2264 | 4.7116 |
+
+The first pair still contained substantial Vulkan/display warm-up, which is
+why its absolute rate differs from the later reverse pair. The candidate gains
+6.36% and 6.59% average FPS respectively despite the order reversal. The clean
+reverse pair also improves median frame time by 6.9%. Trace metrics recorded
+continuous cache hits, and Vulkan GPU-busy time stayed approximately 1.75-1.77
+ms median in the reverse pair, consistent with a CPU-only saving.
+
+## Focus, portals, and lifecycle
+
+With the NVIDIA profile active, the fullscreen Laser Relays harness completed
+five focus-loss/restores and fired both real portal-gun inputs after every
+verified restore. Every connected-portal event window contained presented
+frames, the game remained responsive through the run, and no black-screen
+recovery failure occurred.
+
+The 100 ms post-portal windows measured 10.7291 ms median worst-frame and
+11.0915 ms absolute worst-frame; three of five cycles exceeded 8.3 ms. This is
+far below the earlier native-D3D9 50-60 ms submission/fence stall but is not
+reported as a perfect hitch-free gate.
+
+A final uninstall/apply lifecycle restored both NVIDIA defaults, removed all
+p2boost files and the managed autoexec block, then reinstalled the release,
+reapplied both values, matched the installed DLL hash to the Release build, and
+restored the active `plugin_load p2boost` line.

@@ -1,0 +1,3 @@
+# Preserve NVIDIA's vendored SDK files exactly as published.
+third_party/nvapi/** -whitespace
+third_party/nvapi/x86/*.lib binary
