@@ -1,4 +1,5 @@
 #include "address.h"
+#include "flat_textures.h"
 #include "frame_limiter.h"
 #include "frame_metrics.h"
 #include "hook.h"
@@ -255,6 +256,62 @@ namespace {
 		return std::abs( p2boost::Qpc::milliseconds( ticks ) - 2.5 ) < 0.001 && disabled.elapsed( ) == 0;
 	}
 
+	bool test_flat_texture_alpha( ) {
+		// A8R8G8B8 stores BGRA bytes. Flattening must replace only BGR.
+		const std::uint8_t argb_source[]{ 245, 246, 247, 0x19, 238, 239, 240, 0xc7 };
+		std::uint8_t argb_flat[ sizeof( argb_source ) ]{ };
+		const p2boost::FlatColor argb_color = p2boost::classify_flat_texture( D3DFMT_A8R8G8B8, argb_source, sizeof( argb_source ), 2, 1 );
+		if( argb_color.m_red != 241 || argb_color.m_green != 240 || argb_color.m_blue != 239 ||
+			!p2boost::write_flat_texture( D3DFMT_A8R8G8B8,
+				argb_flat,
+				sizeof( argb_flat ),
+				argb_source,
+				sizeof( argb_source ),
+				2,
+				1,
+				argb_color ) ||
+			argb_flat[ 3 ] != argb_source[ 3 ] || argb_flat[ 7 ] != argb_source[ 7 ] )
+			return false;
+
+		// DXT1 index 3 is transparent only in the three-color mode. Preserve
+		// that exact mask while collapsing every opaque index to one endpoint.
+		std::uint8_t dxt1_source[ 8 ]{ };
+		const std::uint16_t black = 0;
+		const std::uint16_t white = 0xffffu;
+		const std::uint32_t source_indices = 3u | ( 2u << 2u ) | ( 1u << 4u );
+		std::memcpy( dxt1_source, &black, sizeof( black ) );
+		std::memcpy( dxt1_source + 2, &white, sizeof( white ) );
+		std::memcpy( dxt1_source + 4, &source_indices, sizeof( source_indices ) );
+		std::uint8_t dxt1_flat[ sizeof( dxt1_source ) ]{ };
+		if( !p2boost::write_flat_texture( D3DFMT_DXT1,
+				dxt1_flat,
+				sizeof( dxt1_flat ),
+				dxt1_source,
+				sizeof( dxt1_source ),
+				4,
+				4,
+				{ 255, 255, 255 } ) )
+			return false;
+		std::uint32_t flat_indices{ };
+		std::memcpy( &flat_indices, dxt1_flat + 4, sizeof( flat_indices ) );
+		if( ( flat_indices & 3u ) != 3u || ( ( flat_indices >> 2u ) & 3u ) != 0u || ( ( flat_indices >> 4u ) & 3u ) != 0u )
+			return false;
+
+		// DXT5's first eight bytes contain the complete alpha block. They must
+		// survive byte-for-byte even though its color block is rewritten.
+		std::uint8_t dxt5_source[ 16 ]{ 0x20, 0xe0, 1, 2, 3, 4, 5, 6, 0xff, 0xff, 0, 0, 0x1b, 0xe4, 0x39, 0x4e };
+		std::uint8_t dxt5_flat[ sizeof( dxt5_source ) ]{ };
+		return p2boost::write_flat_texture( D3DFMT_DXT5,
+				   dxt5_flat,
+				   sizeof( dxt5_flat ),
+				   dxt5_source,
+				   sizeof( dxt5_source ),
+				   4,
+				   4,
+				   { 0, 0, 0 } ) &&
+			   std::memcmp( dxt5_flat, dxt5_source, 8 ) == 0 && std::memcmp( dxt5_flat + 8, dxt5_source + 8, 8 ) != 0;
+	}
+
 }
 
 int main( ) {
@@ -273,10 +330,11 @@ int main( ) {
 	const bool overlay = test_overlay_metrics( );
 	const bool phase = test_frame_phase_carry( );
 	const bool qpc = test_qpc( );
+	const bool flat_alpha = test_flat_texture_alpha( );
 	std::printf( "address=%s rel32=%s pattern=%s hook_chain=%s callsite=%s callsite_chain=%s "
 				 "pointer=%s pointer_chain=%s inline=%s inline_chain=%s hash=%s "
 				 "metrics=%s overlay=%s "
-				 "phase=%s qpc=%s\n",
+				 "phase=%s qpc=%s flat_alpha=%s\n",
 		address ? "ok" : "FAIL",
 		relative_call ? "ok" : "FAIL",
 		pattern ? "ok" : "FAIL",
@@ -291,9 +349,10 @@ int main( ) {
 		metrics ? "ok" : "FAIL",
 		overlay ? "ok" : "FAIL",
 		phase ? "ok" : "FAIL",
-		qpc ? "ok" : "FAIL" );
+		qpc ? "ok" : "FAIL",
+		flat_alpha ? "ok" : "FAIL" );
 	return address && relative_call && pattern && hook && callsite && callsite_chain && pointer && pointer_chain && inline_detour &&
-				   inline_chain && hash && metrics && overlay && phase && qpc
+				   inline_chain && hash && metrics && overlay && phase && qpc && flat_alpha
 			   ? 0
 			   : 1;
 }

@@ -323,6 +323,10 @@ public class ExportP2Analysis extends GhidraScript {
             addFunctionAndCallers(targets, 0x1002b490L, 2);
         }
         if (base.equalsIgnoreCase("materialsystem.dll")) {
+            // The optional flat-texture mode must retain the base texture's
+            // alpha test. Export the built-in debug branch before deciding
+            // whether it is safe to expose through the production plugin.
+            addFunctionsReferencingString(targets, "mat_drawflat", 4);
             addFunctionAndCallers(targets, 0x10011230L, 2);
             addFunctionAndCallers(targets, 0x10027610L, 1);
             addFunctionAndCallers(targets, 0x1001bd70L, 1);

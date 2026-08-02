@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(p2boost VERSION 0.6.0 LANGUAGES CXX)
+project(p2boost VERSION 0.7.0 LANGUAGES CXX)
 
 option(P2BOOST_BUILD_RESEARCH_TOOLS "Build offline profiling tools from research/" OFF)
 
@@ -17,6 +17,7 @@ set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 set(P2BOOST_INCLUDE_DIRECTORIES
   src/core
   src/engine
+  src/features
   src/memory
   src/platform
 )
@@ -25,6 +26,7 @@ set(P2BOOST_INCLUDE_DIRECTORIES
 # shared runtime support. Native-D3D9 probes are archived under research/ and
 # are never compiled into p2boost.dll.
 add_library(p2boost_core STATIC
+  src/features/flat_textures.cpp
   src/core/frame_limiter.cpp
   src/core/frame_metrics.cpp
   src/core/projected_shadow_cache.cpp

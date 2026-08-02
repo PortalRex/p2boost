@@ -1,5 +1,6 @@
 #include "console.h"
 #include "console_commands.h"
+#include "flat_textures.h"
 #include "frame_limiter.h"
 #include "frame_metrics.h"
 #include "profiler_overlay.h"
@@ -42,6 +43,7 @@ namespace p2boost {
 			if( !m_commands.connect( interface_factory ) ||
 				!m_commands.add( "p2boost_status", "Print p2boost runtime state.", &CommandThunk ) ||
 				!m_commands.add( "p2boost_enable", "Enable or disable verified fixes.", &CommandThunk ) ||
+				!m_commands.add( "p2boost_flat_textures", "Enable or disable alpha-safe flat textures.", &CommandThunk ) ||
 				!m_commands.add( "p2boost_trace", "Enable or disable frame tracing.", &CommandThunk ) ||
 				!m_commands.add( "p2boost_overlay", "Enable or disable the frame profiler.", &CommandThunk ) ||
 				!m_commands.add( "p2boost_dump_metrics", "Write frame metrics to CSV.", &CommandThunk ) ||
@@ -58,6 +60,8 @@ namespace p2boost {
 				m_verification.m_errors.emplace_back( "frame-limiter signature mismatch" );
 			if( m_verification.m_supported && !m_shadow_cache.install( &m_metrics ) )
 				m_verification.m_errors.emplace_back( "projected-shadow signature mismatch" );
+			if( m_verification.m_supported && !m_flat_textures.install( ) )
+				m_verification.m_errors.emplace_back( "optional flat-texture hooks unavailable" );
 
 			m_enabled = can_enable( );
 			apply_enabled_state( );
@@ -75,6 +79,7 @@ namespace p2boost {
 
 		void Unload( ) override {
 			m_commands.disconnect( );
+			m_flat_textures.remove( );
 			m_overlay.set_enabled( false, m_metrics );
 			m_overlay.disconnect( );
 			m_shadow_cache.remove( );
@@ -98,6 +103,7 @@ namespace p2boost {
 		}
 
 		void LevelInit( const char* ) override {
+			m_flat_textures.set_rendering_active( false );
 			m_shadow_cache.invalidate( );
 		}
 
@@ -107,6 +113,7 @@ namespace p2boost {
 
 		void GameFrame( bool simulating ) override {
 			m_metrics.set_simulating( simulating );
+			m_flat_textures.set_rendering_active( simulating );
 
 			const bool focused = process_is_foreground( );
 			m_metrics.set_focused( focused );
@@ -123,6 +130,8 @@ namespace p2boost {
 		void LevelShutdown( ) override {
 			m_metrics.set_simulating( false );
 			m_metrics.set_coop( false );
+			m_flat_textures.set_rendering_active( false );
+			m_flat_textures.release_level_textures( );
 			m_shadow_cache.invalidate( );
 		}
 
@@ -153,7 +162,8 @@ namespace p2boost {
 			if( _stricmp( command, "p2boost_status" ) == 0 ) {
 				console_print( "[p2boost] build=23973718 supported=%d dxvk_vulkan=%d enabled=%d "
 							   "limiter=%d shadow_cache=%d shadow_hits=%u tracing=%d overlay=%d overlay_available=%d "
-							   "sar=%d samples=%zu root=%s\n",
+							   "flat_available=%d flat=%d flat_textures=%zu flat_ready=%zu flat_binds=%llu "
+							   "flat_uploads=%llu/%llu/%llu sar=%d samples=%zu root=%s\n",
 					m_verification.m_supported,
 					m_verification.m_dxvk_vulkan,
 					m_enabled,
@@ -163,9 +173,32 @@ namespace p2boost {
 					m_metrics.tracing( ),
 					m_overlay.enabled( ),
 					m_overlay.available( ),
+					m_flat_textures.available( ),
+					m_flat_textures.enabled( ),
+					m_flat_textures.texture_count( ),
+					m_flat_textures.ready_texture_count( ),
+					static_cast< unsigned long long >( m_flat_textures.substitution_count( ) ),
+					static_cast< unsigned long long >( m_flat_textures.texture_upload_count( ) ),
+					static_cast< unsigned long long >( m_flat_textures.surface_upload_count( ) ),
+					static_cast< unsigned long long >( m_flat_textures.device_upload_count( ) ),
 					GetModuleHandleW( L"sar.dll" ) != nullptr,
 					m_metrics.count( ),
 					m_verification.m_game_root.c_str( ) );
+				return sdk::Stop;
+			}
+
+			if( _stricmp( command, "p2boost_flat_textures" ) == 0 ) {
+				if( args.ArgC( ) != 2 || ( std::strcmp( args.Arg( 1 ), "0" ) != 0 && std::strcmp( args.Arg( 1 ), "1" ) != 0 ) ) {
+					console_print( "usage: p2boost_flat_textures 0|1\n" );
+					return sdk::Stop;
+				}
+
+				const bool enabled = std::strcmp( args.Arg( 1 ), "1" ) == 0;
+				if( !m_flat_textures.set_enabled( enabled ) )
+					console_print( "[p2boost] flat textures unavailable on this renderer/build\n" );
+				else
+					console_print( "[p2boost] flat textures %s; RGB is solid and source alpha is preserved\n",
+						enabled ? "enabled" : "disabled" );
 				return sdk::Stop;
 			}
 
@@ -286,6 +319,7 @@ namespace p2boost {
 		FrameMetrics m_metrics;
 		FrameLimiter m_frame_limiter;
 		ProjectedShadowCache m_shadow_cache;
+		FlatTextures m_flat_textures;
 		ProfilerOverlay m_overlay;
 		ConsoleCommandRegistry m_commands;
 		bool m_enabled{ };
