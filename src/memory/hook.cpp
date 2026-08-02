@@ -9,23 +9,23 @@
 namespace p2boost {
 	namespace {
 
-		enum class WriteResult {
+		enum class write_result_t {
 			written,
 			mismatch,
 			protection_failed
 		};
 
 		// write only while the caller still owns the expected bytes.
-		WriteResult write_bytes( void* address, const void* expected, const void* replacement, size_t size, DWORD protection ) {
+		write_result_t write_bytes( void* address, const void* expected, const void* replacement, size_t size, DWORD protection ) {
 			DWORD old_protection{ };
 			if( !VirtualProtect( address, size, protection, &old_protection ) )
-				return WriteResult::protection_failed;
+				return write_result_t::protection_failed;
 
-			WriteResult result{ WriteResult::mismatch };
+			write_result_t result{ write_result_t::mismatch };
 			if( std::memcmp( address, expected, size ) == 0 ) {
 				std::memcpy( address, replacement, size );
 				FlushInstructionCache( GetCurrentProcess( ), address, size );
-				result = WriteResult::written;
+				result = write_result_t::written;
 			}
 
 			DWORD ignored{ };
@@ -34,7 +34,7 @@ namespace p2boost {
 		}
 
 		// write one VMT entry with the same ownership rule.
-		WriteResult write_method( void** method, void* expected, void* replacement ) {
+		write_result_t write_method( void** method, void* expected, void* replacement ) {
 			return write_bytes( method, &expected, &replacement, sizeof( replacement ), PAGE_READWRITE );
 		}
 
@@ -52,7 +52,7 @@ namespace p2boost {
 		m_method	  = method;
 		m_previous	  = *method;
 		m_replacement = replacement;
-		m_installed	  = write_method( m_method, m_previous, m_replacement ) == WriteResult::written;
+		m_installed	  = write_method( m_method, m_previous, m_replacement ) == write_result_t::written;
 
 		if( !m_installed ) {
 			m_method	  = nullptr;
@@ -68,12 +68,12 @@ namespace p2boost {
 			return true;
 
 		// restore only while our replacement still owns the entry.
-		WriteResult result{ write_method( m_method, m_replacement, m_previous ) };
+		write_result_t result{ write_method( m_method, m_replacement, m_previous ) };
 		m_installed	  = false;
 		m_method	  = nullptr;
 		m_previous	  = nullptr;
 		m_replacement = nullptr;
-		return result == WriteResult::written;
+		return result == write_result_t::written;
 	}
 
 	CallSitePatch::~CallSitePatch( ) {
@@ -92,7 +92,7 @@ namespace p2boost {
 			return false;
 
 		m_installed = write_bytes( m_address, m_original.data( ), m_patched.data( ), m_patched.size( ), PAGE_EXECUTE_READWRITE ) ==
-					  WriteResult::written;
+					  write_result_t::written;
 		if( !m_installed )
 			m_address = nullptr;
 
@@ -104,13 +104,13 @@ namespace p2boost {
 			return true;
 
 		// a later owner wins; never overwrite bytes changed after installation.
-		WriteResult result{ write_bytes( m_address, m_patched.data( ), m_original.data( ), m_original.size( ), PAGE_EXECUTE_READWRITE ) };
-		if( result == WriteResult::protection_failed )
+		write_result_t result{ write_bytes( m_address, m_patched.data( ), m_original.data( ), m_original.size( ), PAGE_EXECUTE_READWRITE ) };
+		if( result == write_result_t::protection_failed )
 			return false;
 
 		m_installed = false;
 		m_address	= nullptr;
-		return result == WriteResult::written;
+		return result == write_result_t::written;
 	}
 
 }

@@ -24,7 +24,7 @@ namespace p2boost {
 		}
 
 	private:
-		void draw_panel( const OverlayMetrics& sample, bool fixes_enabled, bool sar_loaded ) noexcept;
+		void draw_panel( const overlay_metrics_t& sample, bool fixes_enabled, bool sar_loaded ) noexcept;
 
 		sdk::DebugOverlay* m_debug_overlay{ };
 		Qpc::tick_t		   m_next_update{ };

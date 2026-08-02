@@ -15,29 +15,28 @@
 
 namespace p2boost {
 
-	// one solid sRGB color chosen from a texture's visible pixels.
-	struct FlatColor {
+	// one solid sRGB color chosen from a texture's dominant source tone.
+	struct flat_color_t {
 		std::uint8_t m_red{ 255 };
 		std::uint8_t m_green{ 255 };
 		std::uint8_t m_blue{ 255 };
 	};
 
-	// these helpers are public only so alpha preservation can be unit-tested
+	// public helpers let tests verify color selection and exact alpha preservation
 	// without loading Portal 2 or creating a D3D9 device.
-	bool	  flat_texture_format_supported( D3DFORMAT format ) noexcept;
-	FlatColor classify_flat_texture( D3DFORMAT format, const void* bits, int pitch, unsigned int width, unsigned int height ) noexcept;
-	bool	  write_flat_texture( D3DFORMAT	   format,
-								  void*		   destination,
-								  int		   destination_pitch,
-								  const void*  source,
-								  int		   source_pitch,
-								  unsigned int width,
-								  unsigned int height,
-								  FlatColor	   color ) noexcept;
+	bool		 flat_texture_format_supported( D3DFORMAT format ) noexcept;
+	flat_color_t classify_flat_texture( D3DFORMAT format, const void* bits, int pitch, unsigned int width, unsigned int height ) noexcept;
+	bool		 write_flat_texture( D3DFORMAT	  format,
+									 void*		  destination,
+									 int		  destination_pitch,
+									 const void*  source,
+									 int		  source_pitch,
+									 unsigned int width,
+									 unsigned int height,
+									 flat_color_t color ) noexcept;
 
-	// creates companion textures during Source uploads, then substitutes only
-	// diffuse sampler zero. the original texture is always retained, making the
-	// feature reversible without a game restart or lossy restoration.
+	// creates solid color companions during Source uploads and supplies one shared
+	// neutral normal map. originals remain resident for instant, lossless reversal.
 	class FlatTextures {
 	public:
 		~FlatTextures( );
@@ -52,11 +51,12 @@ namespace p2boost {
 		// reload Source materials so already-resident textures receive or discard
 		// companions immediately when the user changes the toggle.
 		bool set_enabled( bool enabled );
-		void set_rendering_active( bool active ) noexcept;
 		void release_level_textures( );
 
 		bool available( ) const noexcept {
-			return m_create_texture.installed( ) && m_set_texture.installed( ) && m_bind_material.installed( ) && m_material_system;
+			return m_create_texture.installed( ) && m_set_texture.installed( ) && m_draw_primitive.installed( ) &&
+				   m_draw_indexed_primitive.installed( ) && m_draw_primitive_up.installed( ) &&
+				   m_draw_indexed_primitive_up.installed( ) && m_bind_material.installed( ) && m_material_system;
 		}
 
 		bool enabled( ) const noexcept {
@@ -65,6 +65,7 @@ namespace p2boost {
 
 		size_t		  texture_count( ) const noexcept;
 		size_t		  ready_texture_count( ) const noexcept;
+		bool		  normal_ready( ) const noexcept;
 		std::uint64_t substitution_count( ) const noexcept {
 			return m_substitutions.load( std::memory_order_relaxed );
 		}
@@ -79,7 +80,7 @@ namespace p2boost {
 		}
 
 	private:
-		struct TextureRecord {
+		struct texture_record_t {
 			IDirect3DTexture9* m_flat{ };
 			D3DFORMAT		   m_format{ D3DFMT_UNKNOWN };
 			unsigned int	   m_width{ };
@@ -87,61 +88,68 @@ namespace p2boost {
 			unsigned int	   m_levels{ };
 			DWORD			   m_usage{ };
 			D3DPOOL			   m_pool{ D3DPOOL_DEFAULT };
-			FlatColor		   m_color;
+			flat_color_t	   m_color;
 			bool			   m_color_valid{ };
+			bool			   m_flat_texture{ };
+			bool			   m_normal_texture{ };
 		};
 
-		struct LockKey {
+		struct lock_key_t {
 			IDirect3DTexture9* m_texture{ };
 			unsigned int	   m_level{ };
 
-			bool operator==( const LockKey& other ) const noexcept {
+			bool operator==( const lock_key_t& other ) const noexcept {
 				return m_texture == other.m_texture && m_level == other.m_level;
 			}
 		};
 
-		struct LockKeyHash {
-			size_t operator( )( const LockKey& key ) const noexcept {
+		struct lock_key_hash_t {
+			size_t operator( )( const lock_key_t& key ) const noexcept {
 				const size_t texture = reinterpret_cast< size_t >( key.m_texture );
 				return ( texture >> 4 ) ^ ( static_cast< size_t >( key.m_level ) * 0x9e3779b9u );
 			}
 		};
 
-		struct LockedRegion {
+		struct locked_region_t {
 			D3DLOCKED_RECT m_source{ };
 			RECT		   m_rect{ };
 			DWORD		   m_flags{ };
 			bool		   m_has_rect{ };
 		};
 
-		struct SurfaceRecord {
+		struct surface_record_t {
 			IDirect3DTexture9* m_texture{ };
 			unsigned int	   m_level{ };
 		};
 
 		// short aliases keep the synchronized resource state readable.
-		using TextureMap   = std::unordered_map< IDirect3DTexture9*, TextureRecord >;
-		using TextureLocks = std::unordered_map< LockKey, LockedRegion, LockKeyHash >;
-		using SurfaceMap   = std::unordered_map< IDirect3DSurface9*, SurfaceRecord >;
-		using SurfaceLocks = std::unordered_map< IDirect3DSurface9*, LockedRegion >;
+		using texture_map_t	  = std::unordered_map< IDirect3DTexture9*, texture_record_t >;
+		using texture_locks_t = std::unordered_map< lock_key_t, locked_region_t, lock_key_hash_t >;
+		using surface_map_t	  = std::unordered_map< IDirect3DSurface9*, surface_record_t >;
+		using surface_locks_t = std::unordered_map< IDirect3DSurface9*, locked_region_t >;
 
 		// exact COM signatures for the D3D9 methods intercepted below.
-		using CreateTextureFn	= HRESULT( __stdcall* )( IDirect3DDevice9*, unsigned int, unsigned int, unsigned int, DWORD, D3DFORMAT, D3DPOOL, IDirect3DTexture9**, HANDLE* );
-		using UpdateSurfaceFn	= HRESULT( __stdcall* )( IDirect3DDevice9*, IDirect3DSurface9*, const RECT*, IDirect3DSurface9*, const POINT* );
-		using UpdateTextureFn	= HRESULT( __stdcall* )( IDirect3DDevice9*, IDirect3DBaseTexture9*, IDirect3DBaseTexture9* );
-		using SetTextureFn		= HRESULT( __stdcall* )( IDirect3DDevice9*, DWORD, IDirect3DBaseTexture9* );
-		using ReleaseTextureFn	= ULONG( __stdcall* )( IDirect3DTexture9* );
-		using GetSurfaceLevelFn = HRESULT( __stdcall* )( IDirect3DTexture9*, unsigned int, IDirect3DSurface9** );
-		using LockTextureFn		= HRESULT( __stdcall* )( IDirect3DTexture9*, unsigned int, D3DLOCKED_RECT*, const RECT*, DWORD );
-		using UnlockTextureFn	= HRESULT( __stdcall* )( IDirect3DTexture9*, unsigned int );
-		using ReleaseSurfaceFn	= ULONG( __stdcall* )( IDirect3DSurface9* );
-		using LockSurfaceFn		= HRESULT( __stdcall* )( IDirect3DSurface9*, D3DLOCKED_RECT*, const RECT*, DWORD );
-		using UnlockSurfaceFn	= HRESULT( __stdcall* )( IDirect3DSurface9* );
-		using BindMaterialFn	= void( __thiscall* )( void*, sdk::Material*, void* );
+		using CreateTextureFn		   = HRESULT( __stdcall* )( IDirect3DDevice9*, unsigned int, unsigned int, unsigned int, DWORD, D3DFORMAT, D3DPOOL, IDirect3DTexture9**, HANDLE* );
+		using UpdateSurfaceFn		   = HRESULT( __stdcall* )( IDirect3DDevice9*, IDirect3DSurface9*, const RECT*, IDirect3DSurface9*, const POINT* );
+		using UpdateTextureFn		   = HRESULT( __stdcall* )( IDirect3DDevice9*, IDirect3DBaseTexture9*, IDirect3DBaseTexture9* );
+		using SetTextureFn			   = HRESULT( __stdcall* )( IDirect3DDevice9*, DWORD, IDirect3DBaseTexture9* );
+		using DrawPrimitiveFn		   = HRESULT( __stdcall* )( IDirect3DDevice9*, D3DPRIMITIVETYPE, unsigned int, unsigned int );
+		using DrawIndexedPrimitiveFn   = HRESULT( __stdcall* )( IDirect3DDevice9*, D3DPRIMITIVETYPE, int, unsigned int, unsigned int, unsigned int, unsigned int );
+		using DrawPrimitiveUpFn		   = HRESULT( __stdcall* )( IDirect3DDevice9*, D3DPRIMITIVETYPE, unsigned int, const void*, unsigned int );
+		using DrawIndexedPrimitiveUpFn = HRESULT( __stdcall* )( IDirect3DDevice9*, D3DPRIMITIVETYPE, unsigned int, unsigned int, unsigned int, const void*, D3DFORMAT, const void*, unsigned int );
+		using ReleaseTextureFn		   = ULONG( __stdcall* )( IDirect3DTexture9* );
+		using GetSurfaceLevelFn		   = HRESULT( __stdcall* )( IDirect3DTexture9*, unsigned int, IDirect3DSurface9** );
+		using LockTextureFn			   = HRESULT( __stdcall* )( IDirect3DTexture9*, unsigned int, D3DLOCKED_RECT*, const RECT*, DWORD );
+		using UnlockTextureFn		   = HRESULT( __stdcall* )( IDirect3DTexture9*, unsigned int );
+		using ReleaseSurfaceFn		   = ULONG( __stdcall* )( IDirect3DSurface9* );
+		using LockSurfaceFn			   = HRESULT( __stdcall* )( IDirect3DSurface9*, D3DLOCKED_RECT*, const RECT*, DWORD );
+		using UnlockSurfaceFn		   = HRESULT( __stdcall* )( IDirect3DSurface9* );
+		using BindMaterialFn		   = void( __thiscall* )( void*, sdk::Material*, void* );
 
 		// install resource hooks lazily when the first object appears.
 		bool install_texture_hooks( IDirect3DTexture9* texture );
 		bool install_surface_hooks( IDirect3DSurface9* surface );
+		bool create_flat_normal( );
 		bool create_missing_companions( );
 		bool reload_textures( ) const;
 		bool reload_materials( ) const;
@@ -152,6 +160,10 @@ namespace p2boost {
 		static HRESULT __stdcall UpdateSurface( IDirect3DDevice9* device, IDirect3DSurface9* source, const RECT* source_rect, IDirect3DSurface9* destination, const POINT* destination_point );
 		static HRESULT __stdcall UpdateTexture( IDirect3DDevice9* device, IDirect3DBaseTexture9* source, IDirect3DBaseTexture9* destination );
 		static HRESULT __stdcall SetTexture( IDirect3DDevice9* device, DWORD stage, IDirect3DBaseTexture9* texture );
+		static HRESULT __stdcall DrawPrimitive( IDirect3DDevice9* device, D3DPRIMITIVETYPE type, unsigned int start_vertex, unsigned int primitive_count );
+		static HRESULT __stdcall DrawIndexedPrimitive( IDirect3DDevice9* device, D3DPRIMITIVETYPE type, int base_vertex, unsigned int minimum_vertex, unsigned int vertex_count, unsigned int start_index, unsigned int primitive_count );
+		static HRESULT __stdcall DrawPrimitiveUp( IDirect3DDevice9* device, D3DPRIMITIVETYPE type, unsigned int primitive_count, const void* vertices, unsigned int stride );
+		static HRESULT __stdcall DrawIndexedPrimitiveUp( IDirect3DDevice9* device, D3DPRIMITIVETYPE type, unsigned int minimum_vertex, unsigned int vertex_count, unsigned int primitive_count, const void* indices, D3DFORMAT index_format, const void* vertices, unsigned int stride );
 		static ULONG __stdcall ReleaseTexture( IDirect3DTexture9* texture );
 		static HRESULT __stdcall GetSurfaceLevel( IDirect3DTexture9* texture, unsigned int level, IDirect3DSurface9** surface );
 		static HRESULT __stdcall LockTexture( IDirect3DTexture9* texture, unsigned int level, D3DLOCKED_RECT* locked, const RECT* rect, DWORD flags );
@@ -167,12 +179,17 @@ namespace p2boost {
 		sdk::MaterialSystem* m_material_system{ };
 		void**				 m_render_context_vmt{ };
 		IDirect3DDevice9*	 m_device{ };
+		IDirect3DTexture9*	 m_flat_normal{ };
 		void**				 m_texture_vmt{ };
 		void**				 m_surface_vmt{ };
 		VmtHook				 m_create_texture;
 		VmtHook				 m_update_surface;
 		VmtHook				 m_update_texture;
 		VmtHook				 m_set_texture;
+		VmtHook				 m_draw_primitive;
+		VmtHook				 m_draw_indexed_primitive;
+		VmtHook				 m_draw_primitive_up;
+		VmtHook				 m_draw_indexed_primitive_up;
 		VmtHook				 m_release_texture;
 		VmtHook				 m_get_surface_level;
 		VmtHook				 m_lock_texture;
@@ -184,14 +201,13 @@ namespace p2boost {
 
 		// all resource maps share one lock because their lifetimes are coupled.
 		mutable std::shared_mutex m_mutex;
-		TextureMap				  m_textures;
-		TextureLocks			  m_locks;
-		SurfaceMap				  m_surfaces;
-		SurfaceLocks			  m_surface_locks;
+		texture_map_t			  m_textures;
+		texture_locks_t			  m_locks;
+		surface_map_t			  m_surfaces;
+		surface_locks_t			  m_surface_locks;
 
 		// hot-path flags and counters remain lock-free.
 		std::atomic_bool	 m_enabled{ };
-		std::atomic_bool	 m_rendering_active{ };
 		std::atomic_uint64_t m_substitutions{ };
 		std::atomic_uint64_t m_texture_uploads{ };
 		std::atomic_uint64_t m_surface_uploads{ };

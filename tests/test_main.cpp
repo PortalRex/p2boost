@@ -167,7 +167,7 @@ namespace {
 		metrics->record_shadow_update( 0.1, true );
 		metrics->record_frame( );
 
-		const p2boost::OverlayMetrics result = metrics->overlay_metrics( );
+		const p2boost::overlay_metrics_t result = metrics->overlay_metrics( );
 		return result.m_average_ms > 0.0 && result.m_shadow_updates == 1 && result.m_shadow_hits == 1 && result.m_graph_count == 1 &&
 			   std::isfinite( result.m_p99_ms );
 	}
@@ -188,10 +188,10 @@ namespace {
 
 	bool test_flat_texture_alpha( ) {
 		// A8R8G8B8 stores BGRA bytes. flattening must replace only BGR.
-		const std::uint8_t		 argb_source[]{ 245, 246, 247, 0x19, 238, 239, 240, 0xc7 };
-		std::uint8_t			 argb_flat[ sizeof( argb_source ) ]{ };
-		const p2boost::FlatColor argb_color = p2boost::classify_flat_texture( D3DFMT_A8R8G8B8, argb_source, sizeof( argb_source ), 2, 1 );
-		if( argb_color.m_red != 241 || argb_color.m_green != 240 || argb_color.m_blue != 239 ||
+		const std::uint8_t			argb_source[]{ 245, 246, 247, 0x19, 238, 239, 240, 0xc7 };
+		std::uint8_t				argb_flat[ sizeof( argb_source ) ]{ };
+		const p2boost::flat_color_t argb_color = p2boost::classify_flat_texture( D3DFMT_A8R8G8B8, argb_source, sizeof( argb_source ), 2, 1 );
+		if( argb_color.m_red != 240 || argb_color.m_green != 239 || argb_color.m_blue != 238 ||
 			!p2boost::write_flat_texture( D3DFMT_A8R8G8B8,
 										  argb_flat,
 										  sizeof( argb_flat ),
@@ -242,6 +242,26 @@ namespace {
 			   std::memcmp( dxt5_flat, dxt5_source, 8 ) == 0 && std::memcmp( dxt5_flat + 8, dxt5_source + 8, 8 ) != 0;
 	}
 
+	bool test_flat_texture_dominant_color( ) {
+		// a small saturated accent must not tint an otherwise neutral surface.
+		std::array< std::uint8_t, 10u * 4u > source{ };
+		for( size_t pixel = 0; pixel < 8; ++pixel ) {
+			source[ pixel * 4u ]	  = 48;
+			source[ pixel * 4u + 1u ] = 48;
+			source[ pixel * 4u + 2u ] = 48;
+			source[ pixel * 4u + 3u ] = 255;
+		}
+		for( size_t pixel = 8; pixel < 10; ++pixel ) {
+			source[ pixel * 4u ]	  = 255;
+			source[ pixel * 4u + 1u ] = 255;
+			source[ pixel * 4u + 2u ] = 0;
+			source[ pixel * 4u + 3u ] = 255;
+		}
+
+		const auto color = p2boost::classify_flat_texture( D3DFMT_A8R8G8B8, source.data( ), 40, 10, 1 );
+		return color.m_red == 48 && color.m_green == 48 && color.m_blue == 48;
+	}
+
 }
 
 int main( ) {
@@ -257,9 +277,10 @@ int main( ) {
 	const bool phase		  = test_frame_phase_carry( );
 	const bool qpc			  = test_qpc( );
 	const bool flat_alpha	  = test_flat_texture_alpha( );
+	const bool flat_color	  = test_flat_texture_dominant_color( );
 	std::printf( "address=%s rel32=%s pattern=%s hook_chain=%s callsite=%s callsite_chain=%s "
 				 "hash=%s metrics=%s overlay=%s "
-				 "phase=%s qpc=%s flat_alpha=%s\n",
+				 "phase=%s qpc=%s flat_alpha=%s flat_color=%s\n",
 				 address ? "ok" : "FAIL",
 				 relative_call ? "ok" : "FAIL",
 				 pattern ? "ok" : "FAIL",
@@ -271,8 +292,9 @@ int main( ) {
 				 overlay ? "ok" : "FAIL",
 				 phase ? "ok" : "FAIL",
 				 qpc ? "ok" : "FAIL",
-				 flat_alpha ? "ok" : "FAIL" );
-	return address && relative_call && pattern && hook && callsite && callsite_chain && hash && metrics && overlay && phase && qpc && flat_alpha
+				 flat_alpha ? "ok" : "FAIL",
+				 flat_color ? "ok" : "FAIL" );
+	return address && relative_call && pattern && hook && callsite && callsite_chain && hash && metrics && overlay && phase && qpc && flat_alpha && flat_color
 			   ? 0
 			   : 1;
 }

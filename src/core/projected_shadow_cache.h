@@ -32,7 +32,7 @@ namespace p2boost {
 		}
 
 	private:
-		struct CachedState {
+		struct cached_state_t {
 			std::uint16_t					  m_handle{ };
 			std::array< std::uint8_t, 0x114 > m_entry{ };
 			int								  m_flashlight_models{ };
@@ -45,13 +45,13 @@ namespace p2boost {
 
 		static ProjectedShadowCache* m_instance;
 
-		VmtHook					   m_update_projected;
-		FrameMetrics*			   m_metrics{ };
-		std::vector< CachedState > m_states;
-		int**					   m_flashlight_models_parent{ };
-		RemoveDirtyFn			   m_remove_dirty{ };
-		std::atomic_bool		   m_enabled{ };
-		std::atomic_uint		   m_hits{ };
+		VmtHook						  m_update_projected;
+		FrameMetrics*				  m_metrics{ };
+		std::vector< cached_state_t > m_states;
+		int**						  m_flashlight_models_parent{ };
+		RemoveDirtyFn				  m_remove_dirty{ };
+		std::atomic_bool			  m_enabled{ };
+		std::atomic_uint			  m_hits{ };
 	};
 
 }

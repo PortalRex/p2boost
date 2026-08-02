@@ -58,10 +58,10 @@ namespace p2boost {
 
 	}
 
-	const std::array< ModuleFingerprint, 4 >& supported_build_23973718( ) {
+	const std::array< module_fingerprint_t, 4 >& supported_build_23973718( ) {
 		// only modules that define hooked code or the required backend belong in
 		// the production fingerprint. Native-D3D9 research modules are excluded.
-		static const std::array< ModuleFingerprint, 4 > modules{ {
+		static const std::array< module_fingerprint_t, 4 > modules{ {
 			{ "engine.dll", "bin\\engine.dll", "5196eace78d5f2f47f8ce39a49b0efd15374a2b996b272642f0493ace42c24dc" },
 			{ "client.dll", "portal2\\bin\\client.dll", "2ff27c2878c258b2c16a0982e30b0d2f1bad9d213e42cc778dc2a2925c625137" },
 			{ "shaderapivk.dll", "bin\\shaderapivk.dll", "aaefa05d9c02049a0cca67a9181f71f5a7710fcc21474bd55c0e1deabba76e84" },
@@ -137,8 +137,8 @@ namespace p2boost {
 		return output.str( );
 	}
 
-	VerificationResult verify_runtime( ) {
-		VerificationResult result;
+	verification_result_t verify_runtime( ) {
+		verification_result_t result;
 
 		// derive the installation root from the module the loader actually mapped.
 		const HMODULE engine = GetModuleHandleW( L"engine.dll" );

@@ -23,8 +23,8 @@ namespace p2boost {
 
 		int module_anchor{ };
 
-		NvidiaProfileResult failure( const char* operation, int status ) noexcept {
-			return { NvidiaProfileState::failed, operation, status };
+		nvidia_profile_result_t failure( const char* operation, int status ) noexcept {
+			return { nvidia_profile_state_t::failed, operation, status };
 		}
 
 		// own the NVAPI and DRS lifetime for one startup check.
@@ -38,10 +38,10 @@ namespace p2boost {
 					NvAPI_Unload( );
 			}
 
-			bool open( NvidiaProfileResult& result ) noexcept {
+			bool open( nvidia_profile_result_t& result ) noexcept {
 				NvAPI_Status status = NvAPI_Initialize( );
 				if( status != NVAPI_OK ) {
-					result = { NvidiaProfileState::unavailable, "NvAPI_Initialize", status };
+					result = { nvidia_profile_state_t::unavailable, "NvAPI_Initialize", status };
 					return false;
 				}
 
@@ -168,12 +168,12 @@ namespace p2boost {
 			return NvAPI_DRS_SetSetting( session, profile, &setting );
 		}
 
-		NvidiaProfileResult configure_profile( const std::wstring& application_path ) noexcept {
+		nvidia_profile_result_t configure_profile( const std::wstring& application_path ) noexcept {
 			if( application_path.empty( ) )
 				return failure( "GetModuleFileNameW", static_cast< int >( GetLastError( ) ) );
 
-			NvidiaProfileResult result;
-			DrsSession			drs;
+			nvidia_profile_result_t result;
+			DrsSession				drs;
 			if( !drs.open( result ) )
 				return result;
 
@@ -198,7 +198,7 @@ namespace p2boost {
 				return failure( "NvAPI_DRS_GetSetting(flags)", status );
 
 			if( method == present_method_layered && flags == present_flags_dxvk_native )
-				return { NvidiaProfileState::configured, "none", NVAPI_OK };
+				return { nvidia_profile_state_t::configured, "none", NVAPI_OK };
 
 			if( method != present_method_layered ) {
 				status = set_setting( drs.get( ), profile, present_method_id, present_method_layered );
@@ -216,16 +216,16 @@ namespace p2boost {
 			if( status != NVAPI_OK )
 				return failure( "NvAPI_DRS_SaveSettings", status );
 
-			return { NvidiaProfileState::applied, "none", NVAPI_OK };
+			return { nvidia_profile_state_t::applied, "none", NVAPI_OK };
 		}
 
 	}
 
-	NvidiaProfileResult configure_nvidia_profile( ) noexcept {
+	nvidia_profile_result_t configure_nvidia_profile( ) noexcept {
 		return configure_profile( current_application_path( ) );
 	}
 
-	NvidiaProfileResult configure_nvidia_profile_elevated( ) noexcept {
+	nvidia_profile_result_t configure_nvidia_profile_elevated( ) noexcept {
 		wchar_t system_directory[ MAX_PATH ]{ };
 		if( !GetSystemDirectoryW( system_directory, MAX_PATH ) )
 			return failure( "GetSystemDirectoryW", static_cast< int >( GetLastError( ) ) );
@@ -257,21 +257,21 @@ namespace p2boost {
 		if( wait != WAIT_OBJECT_0 )
 			return failure( "WaitForSingleObject(rundll32)", static_cast< int >( wait ) );
 		if( exit_code == elevated_configured )
-			return { NvidiaProfileState::configured, "none", 0 };
+			return { nvidia_profile_state_t::configured, "none", 0 };
 		if( exit_code == elevated_applied )
-			return { NvidiaProfileState::applied, "none", 0 };
+			return { nvidia_profile_state_t::applied, "none", 0 };
 		return failure( "ApplyNvidiaProfile", static_cast< int >( exit_code ) );
 	}
 
-	const char* nvidia_profile_state_name( NvidiaProfileState state ) noexcept {
+	const char* nvidia_profile_state_name( nvidia_profile_state_t state ) noexcept {
 		switch( state ) {
-		case NvidiaProfileState::configured:
+		case nvidia_profile_state_t::configured:
 			return "configured";
-		case NvidiaProfileState::applied:
+		case nvidia_profile_state_t::applied:
 			return "applied";
-		case NvidiaProfileState::unavailable:
+		case nvidia_profile_state_t::unavailable:
 			return "unavailable";
-		case NvidiaProfileState::failed:
+		case nvidia_profile_state_t::failed:
 			return "failed";
 		default:
 			return "unknown";
@@ -280,10 +280,10 @@ namespace p2boost {
 
 	// rundll32 calls this export in the elevated process and returns one result.
 	extern "C" void CALLBACK ApplyNvidiaProfile( HWND, HINSTANCE, char*, int ) {
-		const NvidiaProfileResult result = configure_profile( installed_application_path( ) );
-		if( result.m_state == NvidiaProfileState::configured )
+		const nvidia_profile_result_t result = configure_profile( installed_application_path( ) );
+		if( result.m_state == nvidia_profile_state_t::configured )
 			ExitProcess( elevated_configured );
-		if( result.m_state == NvidiaProfileState::applied )
+		if( result.m_state == nvidia_profile_state_t::applied )
 			ExitProcess( elevated_applied );
 		ExitProcess( static_cast< DWORD >( result.m_status ) );
 	}

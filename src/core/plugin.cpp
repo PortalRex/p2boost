@@ -11,20 +11,21 @@
 
 #include <Windows.h>
 
+#include <cstdio>
 #include <cstring>
 #include <string>
 
 namespace p2boost {
 	namespace {
 
-		struct WindowSearch {
+		struct window_search_t {
 			DWORD m_process{ };
 			HWND  m_window{ };
 		};
 
 		// remember the first visible top-level window owned by Portal 2.
 		BOOL CALLBACK find_process_window( HWND window, LPARAM parameter ) {
-			auto* search = reinterpret_cast< WindowSearch* >( parameter );
+			auto* search = reinterpret_cast< window_search_t* >( parameter );
 			DWORD process{ };
 			GetWindowThreadProcessId( window, &process );
 			if( process != search->m_process || !IsWindowVisible( window ) || GetWindow( window, GW_OWNER ) )
@@ -36,7 +37,7 @@ namespace p2boost {
 
 		// resolve the window at the time it is needed instead of caching it.
 		HWND process_window( ) noexcept {
-			WindowSearch search{ GetCurrentProcessId( ) };
+			window_search_t search{ GetCurrentProcessId( ) };
 			EnumWindows( &find_process_window, reinterpret_cast< LPARAM >( &search ) );
 			return search.m_window;
 		}
@@ -51,7 +52,7 @@ namespace p2boost {
 						 MB_OK | MB_ICONINFORMATION | MB_SETFOREGROUND );
 
 			// Source ignores WM_CLOSE while its startup command buffer is active.
-			// No session exists yet, so an immediate exit cannot lose game state.
+			// no session exists yet, so an immediate exit cannot lose game state.
 			ExitProcess( 0 );
 		}
 
@@ -74,10 +75,10 @@ namespace p2boost {
 			m_verification = verify_runtime( );
 			if( m_verification.m_dxvk_vulkan ) {
 				m_nvidia_profile = configure_nvidia_profile( );
-				if( m_nvidia_profile.m_state == NvidiaProfileState::failed )
+				if( m_nvidia_profile.m_state == nvidia_profile_state_t::failed )
 					m_nvidia_profile = configure_nvidia_profile_elevated( );
 
-				if( m_nvidia_profile.m_state == NvidiaProfileState::applied ) {
+				if( m_nvidia_profile.m_state == nvidia_profile_state_t::applied ) {
 					m_instance = nullptr;
 					restart_after_profile_update( );
 					return false;
@@ -98,6 +99,7 @@ namespace p2boost {
 			}
 
 			m_overlay.connect( interface_factory );
+			m_engine_client = interface_factory ? static_cast< sdk::EngineClient* >( interface_factory( "VEngineClient015", nullptr ) ) : nullptr;
 
 			// each feature validates its own signatures and remains disabled on failure.
 			if( m_verification.m_supported && !m_frame_limiter.install( &m_metrics ) )
@@ -119,7 +121,7 @@ namespace p2boost {
 						   m_enabled ? "enabled" : "disabled" );
 			for( const auto& error : m_verification.m_errors )
 				console_print( "[p2boost] %s\n", error.c_str( ) );
-			if( m_nvidia_profile.m_state == NvidiaProfileState::unavailable || m_nvidia_profile.m_state == NvidiaProfileState::failed )
+			if( m_nvidia_profile.m_state == nvidia_profile_state_t::unavailable || m_nvidia_profile.m_state == nvidia_profile_state_t::failed )
 				console_print( "[p2boost] NVIDIA profile setup %s at %s (%d); no driver settings were changed\n",
 							   nvidia_profile_state_name( m_nvidia_profile.m_state ),
 							   m_nvidia_profile.m_operation,
@@ -133,6 +135,7 @@ namespace p2boost {
 			m_flat_textures.remove( );
 			m_overlay.set_enabled( false, m_metrics );
 			m_overlay.disconnect( );
+			m_engine_client = nullptr;
 			m_shadow_cache.remove( );
 			m_frame_limiter.remove( );
 			m_instance = nullptr;
@@ -154,7 +157,7 @@ namespace p2boost {
 		}
 
 		void LevelInit( const char* ) override {
-			m_flat_textures.set_rendering_active( false );
+			m_demo_marked = false;
 			m_shadow_cache.invalidate( );
 		}
 
@@ -163,9 +166,9 @@ namespace p2boost {
 		}
 
 		void GameFrame( bool simulating ) override {
-			// mirror only state needed by diagnostics and texture upload filtering.
+			// mirror only the state needed by diagnostics.
 			m_metrics.set_simulating( simulating );
-			m_flat_textures.set_rendering_active( simulating );
+			mark_recorded_demo( );
 
 			const bool focused = process_is_foreground( );
 			m_metrics.set_focused( focused );
@@ -183,7 +186,6 @@ namespace p2boost {
 			// release map-owned state before Source begins destroying its resources.
 			m_metrics.set_simulating( false );
 			m_metrics.set_coop( false );
-			m_flat_textures.set_rendering_active( false );
 			m_flat_textures.release_level_textures( );
 			m_shadow_cache.invalidate( );
 		}
@@ -267,7 +269,7 @@ namespace p2boost {
 		sdk::PluginResult StatusCommand( ) const {
 			console_print( "[p2boost] build=23973718 supported=%d dxvk_vulkan=%d nvidia_profile=%s nvidia_error=%s:%d enabled=%d "
 						   "limiter=%d shadow_cache=%d shadow_hits=%u tracing=%d overlay=%d overlay_available=%d "
-						   "flat_available=%d flat=%d flat_textures=%zu flat_ready=%zu flat_binds=%llu "
+						   "flat_available=%d flat=%d flat_textures=%zu flat_ready=%zu flat_normal=%d flat_binds=%llu "
 						   "flat_uploads=%llu/%llu/%llu sar=%d samples=%zu root=%s\n",
 						   m_verification.m_supported,
 						   m_verification.m_dxvk_vulkan,
@@ -285,6 +287,7 @@ namespace p2boost {
 						   m_flat_textures.enabled( ),
 						   m_flat_textures.texture_count( ),
 						   m_flat_textures.ready_texture_count( ),
+						   m_flat_textures.normal_ready( ),
 						   static_cast< unsigned long long >( m_flat_textures.substitution_count( ) ),
 						   static_cast< unsigned long long >( m_flat_textures.texture_upload_count( ) ),
 						   static_cast< unsigned long long >( m_flat_textures.surface_upload_count( ) ),
@@ -325,7 +328,8 @@ namespace p2boost {
 			if( !m_flat_textures.set_enabled( enabled ) )
 				console_print( "[p2boost] flat textures unavailable on this renderer/build\n" );
 			else
-				console_print( "[p2boost] flat textures %s; RGB is solid and source alpha is preserved\n", enabled ? "enabled" : "disabled" );
+				console_print( "[p2boost] flat textures %s; material textures are solid, normals are neutral, and alpha is preserved\n",
+							   enabled ? "enabled" : "disabled" );
 
 			return sdk::Stop;
 		}
@@ -374,6 +378,32 @@ namespace p2boost {
 			m_shadow_cache.set_enabled( m_enabled );
 		}
 
+		void mark_recorded_demo( ) {
+			if( !m_engine_client )
+				return;
+
+			const bool recording = m_engine_client->IsRecordingDemo( );
+			if( !recording ) {
+				m_demo_marked = false;
+				return;
+			}
+
+			if( m_demo_marked )
+				return;
+
+			// Source records ordinary console commands into the demo stream. playback
+			// therefore prints the exact build and state used by the recorder.
+			char command[ 192 ]{ };
+			std::snprintf( command,
+						   sizeof( command ),
+						   "echo \"p2boost %s (enabled=%d flat=%d backend=DXVK/Vulkan)\"",
+						   P2BOOST_VERSION,
+						   m_enabled,
+						   m_flat_textures.enabled( ) );
+			m_engine_client->ExecuteClientCmd( command );
+			m_demo_marked = true;
+		}
+
 		static void __cdecl CommandThunk( const sdk::CCommand& command ) {
 			// Source invokes a C callback, so forward through the live instance.
 			if( m_instance )
@@ -382,16 +412,18 @@ namespace p2boost {
 
 		static Plugin* m_instance;
 
-		VerificationResult	   m_verification;
-		NvidiaProfileResult	   m_nvidia_profile;
-		FrameMetrics		   m_metrics;
-		FrameLimiter		   m_frame_limiter;
-		ProjectedShadowCache   m_shadow_cache;
-		FlatTextures		   m_flat_textures;
-		ProfilerOverlay		   m_overlay;
-		ConsoleCommandRegistry m_commands;
-		bool				   m_enabled{ };
-		bool				   m_last_focused{ };
+		verification_result_t	m_verification;
+		nvidia_profile_result_t m_nvidia_profile;
+		FrameMetrics			m_metrics;
+		FrameLimiter			m_frame_limiter;
+		ProjectedShadowCache	m_shadow_cache;
+		FlatTextures			m_flat_textures;
+		ProfilerOverlay			m_overlay;
+		ConsoleCommandRegistry	m_commands;
+		sdk::EngineClient*		m_engine_client{ };
+		bool					m_enabled{ };
+		bool					m_last_focused{ };
+		bool					m_demo_marked{ };
 	};
 
 	Plugin* Plugin::m_instance{ };

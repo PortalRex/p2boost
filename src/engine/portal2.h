@@ -42,9 +42,11 @@ namespace p2boost::portal2 {
 	// VMT indices describe ABI layout rather than process addresses.
 	namespace vmt {
 		constexpr size_t update_projected{ 24 };
+		constexpr size_t engine_is_recording_demo{ 79 };
+		constexpr size_t engine_execute_client_cmd{ 104 };
 
 		// VMaterialSystem080 and public D3D9 ABI methods used by the optional
-		// flat-texture feature. These describe interface layout, not addresses.
+		// flat-texture feature. these describe interface layout, not addresses.
 		constexpr size_t reload_textures{ 79 };
 		constexpr size_t reload_materials{ 80 };
 		// Portal 2's current public interface layout. SAR independently uses the
@@ -58,6 +60,10 @@ namespace p2boost::portal2 {
 		constexpr size_t d3d9_update_surface{ 30 };
 		constexpr size_t d3d9_update_texture{ 31 };
 		constexpr size_t d3d9_set_texture{ 65 };
+		constexpr size_t d3d9_draw_primitive{ 81 };
+		constexpr size_t d3d9_draw_indexed_primitive{ 82 };
+		constexpr size_t d3d9_draw_primitive_up{ 83 };
+		constexpr size_t d3d9_draw_indexed_primitive_up{ 84 };
 		constexpr size_t d3d9_texture_release{ 2 };
 		constexpr size_t d3d9_texture_get_surface_level{ 18 };
 		constexpr size_t d3d9_texture_lock{ 19 };

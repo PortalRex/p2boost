@@ -10,7 +10,7 @@
 
 namespace p2boost {
 
-	struct OverlayMetrics {
+	struct overlay_metrics_t {
 		static constexpr size_t graph_capacity{ 64 };
 
 		double								 m_frame_ms{ };
@@ -63,12 +63,12 @@ namespace p2boost {
 		void record_frame( ) noexcept;
 		void record_shadow_update( double milliseconds, bool cache_hit ) noexcept;
 
-		OverlayMetrics overlay_metrics( ) const noexcept;
-		bool		   dump( const std::string& path ) const;
-		size_t		   count( ) const noexcept;
+		overlay_metrics_t overlay_metrics( ) const noexcept;
+		bool			  dump( const std::string& path ) const;
+		size_t			  count( ) const noexcept;
 
 	private:
-		struct Sample {
+		struct sample_t {
 			Qpc::tick_t	 m_qpc{ };
 			double		 m_frame_ms{ };
 			double		 m_shadow_ms{ };
@@ -79,11 +79,11 @@ namespace p2boost {
 			bool		 m_coop{ };
 		};
 
-		mutable std::mutex			   m_samples_mutex;
-		std::array< Sample, capacity > m_samples{ };
-		size_t						   m_cursor{ };
-		size_t						   m_count{ };
-		Qpc::tick_t					   m_last_qpc{ };
+		mutable std::mutex				 m_samples_mutex;
+		std::array< sample_t, capacity > m_samples{ };
+		size_t							 m_cursor{ };
+		size_t							 m_count{ };
+		Qpc::tick_t						 m_last_qpc{ };
 
 		mutable std::mutex m_pending_mutex;
 		double			   m_pending_shadow_ms{ };

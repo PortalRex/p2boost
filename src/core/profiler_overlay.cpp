@@ -85,7 +85,7 @@ namespace p2boost {
 		draw_panel( metrics.overlay_metrics( ), fixes_enabled, sar_loaded );
 	}
 
-	void ProfilerOverlay::draw_panel( const OverlayMetrics& sample, bool fixes_enabled, bool sar_loaded ) noexcept {
+	void ProfilerOverlay::draw_panel( const overlay_metrics_t& sample, bool fixes_enabled, bool sar_loaded ) noexcept {
 		static constexpr std::array< int, 4 > neutral{ 200, 220, 242, 255 };
 		static constexpr std::array< int, 4 > good{ 115, 242, 158, 255 };
 		static constexpr std::array< int, 4 > warning{ 255, 191, 64, 255 };
@@ -113,7 +113,7 @@ namespace p2boost {
 																						   : good;
 		draw_line( m_debug_overlay, 1, timing_color, line );
 
-		std::array< char, OverlayMetrics::graph_capacity + 3 > graph{ };
+		std::array< char, overlay_metrics_t::graph_capacity + 3 > graph{ };
 		graph[ 0 ] = '[';
 		for( size_t index = 0; index < sample.m_graph_count; ++index )
 			graph[ index + 1 ] = graph_character( sample.m_graph_ms[ index ] );

@@ -58,6 +58,18 @@ namespace p2boost::sdk {
 		}
 	};
 
+	// VEngineClient015 methods used to place provenance inside recorded demos.
+	class EngineClient final : public Interface {
+	public:
+		__forceinline bool IsRecordingDemo( ) {
+			return call< portal2::vmt::engine_is_recording_demo, bool >( );
+		}
+
+		__forceinline void ExecuteClientCmd( const char* command ) {
+			call< portal2::vmt::engine_execute_client_cmd, void >( command );
+		}
+	};
+
 	class Material final : public Interface {
 	public:
 		// expose only the material metadata needed by the classifier.

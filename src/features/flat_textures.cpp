@@ -14,30 +14,66 @@
 
 namespace p2boost {
 	namespace {
-		// BindMaterial and SetTexture run in one render-thread call chain.
-		thread_local bool g_material_known{ };
-		thread_local bool g_material_flattenable{ };
+		// bind metadata is consumed by SetTexture in the same render-thread call chain.
+		thread_local bool		   g_material_excluded{ };
+		thread_local std::uint32_t g_flat_sampler_mask{ };
+		thread_local std::uint32_t g_normal_sampler_mask{ };
+		thread_local unsigned int  g_material_bind_depth{ };
+		thread_local bool		   g_material_pass_active{ };
 
-		// internal RGB form used while decoding packed pixel formats.
-		struct Rgb {
+		// end the material pass after D3D receives its draw command. direct VGUI
+		// uploads that follow the draw must not inherit the world sampler roles.
+		void clear_material_pass( ) noexcept {
+			// most draws occur without a pending Bind, so keep this hook nearly free.
+			if( !g_material_pass_active )
+				return;
+
+			g_material_excluded	   = false;
+			g_flat_sampler_mask	   = 0;
+			g_normal_sampler_mask  = 0;
+			g_material_pass_active = false;
+		}
+
+		// every D3D draw variant closes the active Source material pass.
+		template < typename function_t, typename... arguments_t >
+		HRESULT draw_material_pass( function_t original, arguments_t... arguments ) noexcept {
+			if( !original ) {
+				clear_material_pass( );
+				return D3DERR_INVALIDCALL;
+			}
+
+			const HRESULT result = original( arguments... );
+			clear_material_pass( );
+			return result;
+		}
+
+		// unpacked color used only while classifying source pixels.
+		struct rgb_t {
 			std::uint8_t m_red{ };
 			std::uint8_t m_green{ };
 			std::uint8_t m_blue{ };
 		};
 
-		// accumulate visible color without losing precision on large textures.
-		struct ColorAccumulator {
-			std::uint64_t m_red{ };
-			std::uint64_t m_green{ };
-			std::uint64_t m_blue{ };
-			std::uint64_t m_weight{ };
+		// per-channel histograms select the dominant surface color without accent bias.
+		struct color_accumulator_t {
+			std::array< std::uint64_t, 256 > m_red{ };
+			std::array< std::uint64_t, 256 > m_green{ };
+			std::array< std::uint64_t, 256 > m_blue{ };
+			std::uint64_t					 m_samples{ };
 
-			void add( Rgb color, unsigned int alpha = 255 ) noexcept {
-				m_red += static_cast< std::uint64_t >( color.m_red ) * alpha;
-				m_green += static_cast< std::uint64_t >( color.m_green ) * alpha;
-				m_blue += static_cast< std::uint64_t >( color.m_blue ) * alpha;
-				m_weight += alpha;
+			void add( rgb_t color ) noexcept {
+				++m_red[ color.m_red ];
+				++m_green[ color.m_green ];
+				++m_blue[ color.m_blue ];
+				++m_samples;
 			}
+		};
+
+		// material classification describes flat, normal, and excluded samplers.
+		struct material_pass_t {
+			std::uint32_t m_flat_samplers{ };
+			std::uint32_t m_normal_samplers{ };
+			bool		  m_excluded{ };
 		};
 
 		// perform a case-insensitive substring check on engine-owned names.
@@ -52,10 +88,10 @@ namespace p2boost {
 			return false;
 		}
 
-		// admit only shaders whose first sampler contains base color.
-		bool material_is_flattenable( sdk::Material* material ) noexcept {
+		// identify texture roles from Valve's public shader implementations.
+		material_pass_t classify_material_pass( sdk::Material* material ) noexcept {
 			if( !material )
-				return false;
+				return { };
 
 			const char* name   = material->GetName( );
 			const char* group  = material->GetTextureGroup( );
@@ -66,12 +102,33 @@ namespace p2boost {
 			if( contains_text( name, "vgui/" ) || contains_text( name, "hud/" ) || contains_text( name, "sar/" ) ||
 				contains_text( group, "vgui" ) || contains_text( group, "hud" ) || contains_text( group, "sar" ) ||
 				contains_text( group, "render target" ) || contains_text( group, "lightmap" ) || contains_text( group, "cubemap" ) )
-				return false;
+				return { 0, 0, true };
 
-			// these shaders use sampler zero as their base-color texture. other
-			// shaders may place emissive masks, video, refraction, or UI there.
-			return shader && ( _stricmp( shader, "LightmappedGeneric" ) == 0 || _stricmp( shader, "VertexLitGeneric" ) == 0 ||
-							   _stricmp( shader, "WorldVertexTransition" ) == 0 || _stricmp( shader, "WorldTwoTextureBlend" ) == 0 );
+			if( !shader )
+				return { };
+
+			// lightmaps, framebuffer copies, flashlight maps, and shadow noise stay live.
+			if( _stricmp( shader, "LightmappedGeneric" ) == 0 || _stricmp( shader, "WorldVertexTransition" ) == 0 ) {
+				constexpr std::uint32_t flat   = ( 1u << 0u ) | ( 1u << 3u ) | ( 1u << 6u ) | ( 1u << 7u ) | ( 1u << 12u );
+				constexpr std::uint32_t normal = ( 1u << 4u ) | ( 1u << 5u ) | ( 1u << 8u );
+				return { flat, normal, false };
+			}
+
+			if( _stricmp( shader, "VertexLitGeneric" ) == 0 ) {
+				// sampler 11 is the self-illumination mask. preserving it keeps the
+				// emissive shape while the flattened base keeps its exact alpha too.
+				constexpr std::uint32_t flat   = ( 1u << 0u ) | ( 1u << 2u ) | ( 1u << 4u ) | ( 1u << 9u );
+				constexpr std::uint32_t normal = 1u << 3u;
+				return { flat, normal, false };
+			}
+
+			if( _stricmp( shader, "WorldTwoTextureBlend" ) == 0 )
+				return { ( 1u << 0u ) | ( 1u << 3u ), 1u << 4u, false };
+
+			// unknown material shaders may distribute authored textures across any
+			// sampler. render/depth targets were rejected at creation, so every tracked
+			// 2D texture in this fallback is safe to flatten.
+			return { 0xffffu, 0, false };
 		}
 
 		// memcpy avoids unaligned reads and writes in compressed blocks.
@@ -92,7 +149,7 @@ namespace p2boost {
 			return static_cast< std::uint8_t >( ( value * 255u + maximum / 2u ) / maximum );
 		}
 
-		Rgb decode_565( std::uint16_t value ) noexcept {
+		rgb_t decode_565( std::uint16_t value ) noexcept {
 			return {
 				expand_bits( ( value >> 11 ) & 31u, 31u ),
 				expand_bits( ( value >> 5 ) & 63u, 63u ),
@@ -100,7 +157,7 @@ namespace p2boost {
 			};
 		}
 
-		std::uint16_t encode_565( FlatColor color ) noexcept {
+		std::uint16_t encode_565( flat_color_t color ) noexcept {
 			const unsigned int red	 = ( static_cast< unsigned int >( color.m_red ) * 31u + 127u ) / 255u;
 			const unsigned int green = ( static_cast< unsigned int >( color.m_green ) * 63u + 127u ) / 255u;
 			const unsigned int blue	 = ( static_cast< unsigned int >( color.m_blue ) * 31u + 127u ) / 255u;
@@ -108,12 +165,12 @@ namespace p2boost {
 		}
 
 		// decode the shared RGB block used by DXT1, DXT3, and DXT5.
-		std::array< Rgb, 4 > dxt_palette( const std::uint8_t* color_block, bool dxt1 ) noexcept {
-			const std::uint16_t	 first_value  = read_value< std::uint16_t >( color_block );
-			const std::uint16_t	 second_value = read_value< std::uint16_t >( color_block + 2 );
-			const Rgb			 first		  = decode_565( first_value );
-			const Rgb			 second		  = decode_565( second_value );
-			std::array< Rgb, 4 > palette{ first, second };
+		std::array< rgb_t, 4 > dxt_palette( const std::uint8_t* color_block, bool dxt1 ) noexcept {
+			const std::uint16_t	   first_value	= read_value< std::uint16_t >( color_block );
+			const std::uint16_t	   second_value = read_value< std::uint16_t >( color_block + 2 );
+			const rgb_t			   first		= decode_565( first_value );
+			const rgb_t			   second		= decode_565( second_value );
+			std::array< rgb_t, 4 > palette{ first, second };
 
 			if( dxt1 && first_value <= second_value ) {
 				palette[ 2 ] = {
@@ -179,25 +236,31 @@ namespace p2boost {
 			return palette[ ( indices >> ( pixel * 3u ) ) & 7u ];
 		}
 
-		FlatColor finish_color( const ColorAccumulator& accumulator ) noexcept {
-			if( !accumulator.m_weight )
+		flat_color_t finish_color( const color_accumulator_t& accumulator ) noexcept {
+			if( !accumulator.m_samples )
 				return { };
 
-			// use the visible pixels' alpha-weighted average for every texture.
-			// alpha itself remains in the original texture and is copied unchanged.
-			return {
-				static_cast< std::uint8_t >( ( accumulator.m_red + accumulator.m_weight / 2u ) / accumulator.m_weight ),
-				static_cast< std::uint8_t >( ( accumulator.m_green + accumulator.m_weight / 2u ) / accumulator.m_weight ),
-				static_cast< std::uint8_t >( ( accumulator.m_blue + accumulator.m_weight / 2u ) / accumulator.m_weight ),
+			// the median rejects small emissive or team-colored accents while retaining
+			// the surface's actual dominant tone. alpha masks never bias the color.
+			auto median = [ target = ( accumulator.m_samples + 1u ) / 2u ]( const auto& histogram ) {
+				std::uint64_t samples{ };
+				for( size_t value = 0; value < histogram.size( ); ++value ) {
+					samples += histogram[ value ];
+					if( samples >= target )
+						return static_cast< std::uint8_t >( value );
+				}
+				return std::uint8_t{ };
 			};
+
+			return { median( accumulator.m_red ), median( accumulator.m_green ), median( accumulator.m_blue ) };
 		}
 
-		void accumulate_dxt( ColorAccumulator& accumulator,
-							 D3DFORMAT		   format,
-							 const void*	   bits,
-							 int			   pitch,
-							 unsigned int	   width,
-							 unsigned int	   height ) noexcept {
+		void accumulate_dxt( color_accumulator_t& accumulator,
+							 D3DFORMAT			  format,
+							 const void*		  bits,
+							 int				  pitch,
+							 unsigned int		  width,
+							 unsigned int		  height ) noexcept {
 			const auto*		   source	  = static_cast< const std::uint8_t* >( bits );
 			const unsigned int block_size = format == D3DFMT_DXT1 ? 8u : 16u;
 			const unsigned int blocks_x	  = std::max( 1u, ( width + 3u ) / 4u );
@@ -206,10 +269,10 @@ namespace p2boost {
 			for( unsigned int block_y = 0; block_y < blocks_y; ++block_y ) {
 				const auto* row = source + static_cast< size_t >( block_y ) * static_cast< size_t >( pitch );
 				for( unsigned int block_x = 0; block_x < blocks_x; ++block_x ) {
-					const auto*				   block	   = row + static_cast< size_t >( block_x ) * block_size;
-					const auto*				   color_block = block + ( format == D3DFMT_DXT1 ? 0u : 8u );
-					const std::array< Rgb, 4 > palette	   = dxt_palette( color_block, format == D3DFMT_DXT1 );
-					const std::uint32_t		   indices	   = read_value< std::uint32_t >( color_block + 4 );
+					const auto*					 block		 = row + static_cast< size_t >( block_x ) * block_size;
+					const auto*					 color_block = block + ( format == D3DFMT_DXT1 ? 0u : 8u );
+					const std::array< rgb_t, 4 > palette	 = dxt_palette( color_block, format == D3DFMT_DXT1 );
+					const std::uint32_t			 indices	 = read_value< std::uint32_t >( color_block + 4 );
 
 					for( unsigned int local_y = 0; local_y < 4u; ++local_y ) {
 						for( unsigned int local_x = 0; local_x < 4u; ++local_x ) {
@@ -219,14 +282,17 @@ namespace p2boost {
 								continue;
 							const unsigned int pixel	   = local_y * 4u + local_x;
 							const unsigned int color_index = ( indices >> ( pixel * 2u ) ) & 3u;
-							accumulator.add( palette[ color_index ], dxt_alpha( format, block, pixel ) );
+							// DXT1 index three is genuinely transparent; DXT3/5 alpha often
+							// carries material masks, so their RGB samples remain representative.
+							if( format != D3DFMT_DXT1 || dxt_alpha( format, block, pixel ) )
+								accumulator.add( palette[ color_index ] );
 						}
 					}
 				}
 			}
 		}
 
-		void flatten_dxt_color_block( std::uint8_t* destination, const std::uint8_t* source, FlatColor color, bool dxt1 ) noexcept {
+		void flatten_dxt_color_block( std::uint8_t* destination, const std::uint8_t* source, flat_color_t color, bool dxt1 ) noexcept {
 			const std::uint16_t target			 = encode_565( color );
 			const std::uint16_t source_first	 = read_value< std::uint16_t >( source );
 			const std::uint16_t source_second	 = read_value< std::uint16_t >( source + 2 );
@@ -292,12 +358,12 @@ namespace p2boost {
 		}
 	}
 
-	// derive one stable color from the visible pixels of a complete image.
-	FlatColor classify_flat_texture( D3DFORMAT format, const void* bits, int pitch, unsigned int width, unsigned int height ) noexcept {
+	// derive one stable majority tone from a complete source image.
+	flat_color_t classify_flat_texture( D3DFORMAT format, const void* bits, int pitch, unsigned int width, unsigned int height ) noexcept {
 		if( !bits || pitch <= 0 || !width || !height || !flat_texture_format_supported( format ) )
 			return { };
 
-		ColorAccumulator accumulator;
+		color_accumulator_t accumulator;
 		if( format == D3DFMT_DXT1 || format == D3DFMT_DXT3 || format == D3DFMT_DXT5 ) {
 			accumulate_dxt( accumulator, format, bits, pitch, width, height );
 			return finish_color( accumulator );
@@ -307,8 +373,7 @@ namespace p2boost {
 		for( unsigned int y = 0; y < height; ++y ) {
 			const auto* row = source + static_cast< size_t >( y ) * static_cast< size_t >( pitch );
 			for( unsigned int x = 0; x < width; ++x ) {
-				Rgb			 color{ };
-				unsigned int alpha = 255;
+				rgb_t color{ };
 				switch( format ) {
 				case D3DFMT_R8G8B8:
 					color = { row[ x * 3u + 2u ], row[ x * 3u + 1u ], row[ x * 3u ] };
@@ -316,12 +381,10 @@ namespace p2boost {
 				case D3DFMT_A8R8G8B8:
 				case D3DFMT_X8R8G8B8:
 					color = { row[ x * 4u + 2u ], row[ x * 4u + 1u ], row[ x * 4u ] };
-					alpha = format == D3DFMT_A8R8G8B8 ? row[ x * 4u + 3u ] : 255u;
 					break;
 				case D3DFMT_A8B8G8R8:
 				case D3DFMT_X8B8G8R8:
 					color = { row[ x * 4u ], row[ x * 4u + 1u ], row[ x * 4u + 2u ] };
-					alpha = format == D3DFMT_A8B8G8R8 ? row[ x * 4u + 3u ] : 255u;
 					break;
 				case D3DFMT_R5G6B5: {
 					color = decode_565( read_value< std::uint16_t >( row + x * 2u ) );
@@ -333,7 +396,6 @@ namespace p2boost {
 					color					  = { expand_bits( ( value >> 10 ) & 31u, 31u ),
 												  expand_bits( ( value >> 5 ) & 31u, 31u ),
 												  expand_bits( value & 31u, 31u ) };
-					alpha					  = format == D3DFMT_A1R5G5B5 && !( value & 0x8000u ) ? 0u : 255u;
 					break;
 				}
 				case D3DFMT_A4R4G4B4:
@@ -342,7 +404,6 @@ namespace p2boost {
 					color					  = { expand_bits( ( value >> 8 ) & 15u, 15u ),
 												  expand_bits( ( value >> 4 ) & 15u, 15u ),
 												  expand_bits( value & 15u, 15u ) };
-					alpha					  = format == D3DFMT_A4R4G4B4 ? expand_bits( ( value >> 12 ) & 15u, 15u ) : 255u;
 					break;
 				}
 				case D3DFMT_L8:
@@ -350,12 +411,11 @@ namespace p2boost {
 					break;
 				case D3DFMT_A8L8:
 					color = { row[ x * 2u ], row[ x * 2u ], row[ x * 2u ] };
-					alpha = row[ x * 2u + 1u ];
 					break;
 				default:
 					break;
 				}
-				accumulator.add( color, alpha );
+				accumulator.add( color );
 			}
 		}
 
@@ -370,7 +430,7 @@ namespace p2boost {
 							 int		  source_pitch,
 							 unsigned int width,
 							 unsigned int height,
-							 FlatColor	  color ) noexcept {
+							 flat_color_t color ) noexcept {
 		if( !destination || !source || destination_pitch <= 0 || source_pitch <= 0 || !width || !height ||
 			!flat_texture_format_supported( format ) )
 			return false;
@@ -548,9 +608,17 @@ namespace p2boost {
 							   m_create_texture.install( device_vmt + portal2::vmt::d3d9_create_texture, reinterpret_cast< void* >( &CreateTexture ) ) &&
 							   m_update_surface.install( device_vmt + portal2::vmt::d3d9_update_surface, reinterpret_cast< void* >( &UpdateSurface ) ) &&
 							   m_update_texture.install( device_vmt + portal2::vmt::d3d9_update_texture, reinterpret_cast< void* >( &UpdateTexture ) ) &&
-							   m_set_texture.install( device_vmt + portal2::vmt::d3d9_set_texture, reinterpret_cast< void* >( &SetTexture ) );
+							   m_set_texture.install( device_vmt + portal2::vmt::d3d9_set_texture, reinterpret_cast< void* >( &SetTexture ) ) &&
+							   m_draw_primitive.install( device_vmt + portal2::vmt::d3d9_draw_primitive, reinterpret_cast< void* >( &DrawPrimitive ) ) &&
+							   m_draw_indexed_primitive.install( device_vmt + portal2::vmt::d3d9_draw_indexed_primitive, reinterpret_cast< void* >( &DrawIndexedPrimitive ) ) &&
+							   m_draw_primitive_up.install( device_vmt + portal2::vmt::d3d9_draw_primitive_up, reinterpret_cast< void* >( &DrawPrimitiveUp ) ) &&
+							   m_draw_indexed_primitive_up.install( device_vmt + portal2::vmt::d3d9_draw_indexed_primitive_up, reinterpret_cast< void* >( &DrawIndexedPrimitiveUp ) );
 		render_context->Release( );
 		if( !installed ) {
+			m_draw_indexed_primitive_up.remove( );
+			m_draw_primitive_up.remove( );
+			m_draw_indexed_primitive.remove( );
+			m_draw_primitive.remove( );
 			m_set_texture.remove( );
 			m_update_texture.remove( );
 			m_update_surface.remove( );
@@ -569,7 +637,10 @@ namespace p2boost {
 	void FlatTextures::remove( ) {
 		// disable selection before any companion object can be released.
 		m_enabled.store( false, std::memory_order_relaxed );
-		m_rendering_active.store( false, std::memory_order_relaxed );
+		m_draw_indexed_primitive_up.remove( );
+		m_draw_primitive_up.remove( );
+		m_draw_indexed_primitive.remove( );
+		m_draw_primitive.remove( );
 		m_set_texture.remove( );
 		m_update_texture.remove( );
 		m_update_surface.remove( );
@@ -605,7 +676,7 @@ namespace p2boost {
 
 		// existing map textures predate the toggle. allocate their companions,
 		// then ask Source to resend the actual texture pixels through our hooks.
-		if( enabled && ( !create_missing_companions( ) || !reload_textures( ) ) ) {
+		if( enabled && ( !create_flat_normal( ) || !create_missing_companions( ) || !reload_textures( ) ) ) {
 			m_enabled.store( !enabled, std::memory_order_relaxed );
 			release_companions( );
 			return false;
@@ -621,10 +692,6 @@ namespace p2boost {
 		if( !enabled )
 			release_companions( );
 		return true;
-	}
-
-	void FlatTextures::set_rendering_active( bool active ) noexcept {
-		m_rendering_active.store( active, std::memory_order_relaxed );
 	}
 
 	void FlatTextures::release_level_textures( ) {
@@ -646,6 +713,11 @@ namespace p2boost {
 		return static_cast< size_t >( std::count_if( m_textures.begin( ), m_textures.end( ), []( const auto& pair ) {
 			return pair.second.m_flat && pair.second.m_color_valid;
 		} ) );
+	}
+
+	bool FlatTextures::normal_ready( ) const noexcept {
+		std::shared_lock lock{ m_mutex };
+		return m_flat_normal != nullptr;
 	}
 
 	bool FlatTextures::install_texture_hooks( IDirect3DTexture9* texture ) {
@@ -696,6 +768,45 @@ namespace p2boost {
 		return true;
 	}
 
+	bool FlatTextures::create_flat_normal( ) {
+		{
+			std::shared_lock lock{ m_mutex };
+			if( m_flat_normal )
+				return true;
+		}
+
+		auto create = reinterpret_cast< CreateTextureFn >( m_create_texture.previous( ) );
+		if( !create || !m_device )
+			return false;
+
+		// one RGBA texel is neutral for both ordinary RGB normals and Source's
+		// DXT5-style AG unpacking. every normal sampler can safely share it.
+		IDirect3DTexture9* normal{ };
+		if( FAILED( create( m_device, 1, 1, 1, 0, D3DFMT_A8R8G8B8, D3DPOOL_MANAGED, &normal, nullptr ) ) || !normal )
+			return false;
+
+		D3DLOCKED_RECT locked{ };
+		if( FAILED( normal->LockRect( 0, &locked, nullptr, 0 ) ) || !locked.pBits ) {
+			normal->Release( );
+			return false;
+		}
+
+		// little-endian A8R8G8B8 memory stores this value as B=255,G=128,R=128,A=128.
+		write_value( locked.pBits, std::uint32_t{ 0x808080ffu } );
+		normal->UnlockRect( 0 );
+		{
+			std::unique_lock lock{ m_mutex };
+			if( !m_flat_normal ) {
+				m_flat_normal = normal;
+				return true;
+			}
+		}
+
+		// another caller won the publication race while the driver allocated.
+		normal->Release( );
+		return true;
+	}
+
 	bool FlatTextures::create_missing_companions( ) {
 		auto create = reinterpret_cast< CreateTextureFn >( m_create_texture.previous( ) );
 		if( !create || !m_device )
@@ -703,7 +814,7 @@ namespace p2boost {
 
 		// snapshot records before entering DXVK. resource creation can invoke
 		// callbacks, so the map lock must never span the driver call.
-		std::vector< std::pair< IDirect3DTexture9*, TextureRecord > > pending;
+		std::vector< std::pair< IDirect3DTexture9*, texture_record_t > > pending;
 		{
 			std::shared_lock lock{ m_mutex };
 			pending.reserve( m_textures.size( ) );
@@ -715,8 +826,8 @@ namespace p2boost {
 
 		bool complete = true;
 		for( const auto& pair : pending ) {
-			const TextureRecord& record = pair.second;
-			IDirect3DTexture9*	 flat{ };
+			const texture_record_t& record = pair.second;
+			IDirect3DTexture9*		flat{ };
 			if( FAILED( create( m_device,
 								record.m_width,
 								record.m_height,
@@ -761,8 +872,11 @@ namespace p2boost {
 		// detach under the lock and perform COM releases after unlocking.
 		auto							  release = reinterpret_cast< ReleaseTextureFn >( m_release_texture.previous( ) );
 		std::vector< IDirect3DTexture9* > companions;
+		IDirect3DTexture9*				  flat_normal{ };
 		{
 			std::unique_lock lock{ m_mutex };
+			flat_normal	  = m_flat_normal;
+			m_flat_normal = nullptr;
 			companions.reserve( m_textures.size( ) );
 			for( auto& pair : m_textures ) {
 				if( pair.second.m_flat )
@@ -778,14 +892,19 @@ namespace p2boost {
 			for( IDirect3DTexture9* texture : companions )
 				release( texture );
 		}
+		if( flat_normal )
+			release ? release( flat_normal ) : flat_normal->Release( );
 	}
 
 	void FlatTextures::release_all_companions( ) {
 		// teardown also forgets original resources and outstanding locks.
 		auto							  release = reinterpret_cast< ReleaseTextureFn >( m_release_texture.previous( ) );
 		std::vector< IDirect3DTexture9* > companions;
+		IDirect3DTexture9*				  flat_normal{ };
 		{
 			std::unique_lock lock{ m_mutex };
+			flat_normal	  = m_flat_normal;
+			m_flat_normal = nullptr;
 			companions.reserve( m_textures.size( ) );
 			for( const auto& pair : m_textures ) {
 				if( pair.second.m_flat )
@@ -801,6 +920,8 @@ namespace p2boost {
 			for( IDirect3DTexture9* texture : companions )
 				release( texture );
 		}
+		if( flat_normal )
+			release ? release( flat_normal ) : flat_normal->Release( );
 	}
 
 	HRESULT __stdcall FlatTextures::CreateTexture( IDirect3DDevice9* device, unsigned int width, unsigned int height, unsigned int levels, DWORD usage, D3DFORMAT format, D3DPOOL pool, IDirect3DTexture9** texture, HANDLE* shared_handle ) {
@@ -809,12 +930,12 @@ namespace p2boost {
 		if( !original )
 			return D3DERR_INVALIDCALL;
 
-		// create the original first so the feature cannot change engine behavior.
+		// create the original first so the optional feature cannot break allocation.
 		const HRESULT result = original( device, width, height, levels, usage, format, pool, texture, shared_handle );
 		if( FAILED( result ) || !texture || !*texture )
 			return result;
 
-		// only sampled, lockable color textures can have safe companions.
+		// only sampled, lockable color textures can receive safe companions.
 		const DWORD excluded_usage = D3DUSAGE_RENDERTARGET | D3DUSAGE_DEPTHSTENCIL | D3DUSAGE_DYNAMIC | D3DUSAGE_AUTOGENMIPMAP;
 		const bool	sampled_pool   = pool == D3DPOOL_DEFAULT || pool == D3DPOOL_MANAGED;
 		if( usage & excluded_usage || !sampled_pool || !flat_texture_format_supported( format ) ||
@@ -829,7 +950,7 @@ namespace p2boost {
 		}
 
 		std::unique_lock lock{ instance->m_mutex };
-		instance->m_textures.emplace( *texture, TextureRecord{ flat, format, width, height, levels, usage, pool } );
+		instance->m_textures.emplace( *texture, texture_record_t{ flat, format, width, height, levels, usage, pool } );
 		return result;
 	}
 
@@ -849,7 +970,7 @@ namespace p2boost {
 			!destination_texture )
 			return result;
 
-		TextureRecord record;
+		texture_record_t record;
 		{
 			std::shared_lock lock{ instance->m_mutex };
 			auto			 found = instance->m_textures.find( destination_texture );
@@ -920,17 +1041,17 @@ namespace p2boost {
 		const bool complete_base = level == 0 && upload_source.left == 0 && upload_source.top == 0 && width == source_description.Width &&
 								   height == source_description.Height && upload_destination.x == 0 && upload_destination.y == 0 &&
 								   width == destination_description.Width && height == destination_description.Height;
-		const FlatColor color	= record.m_color_valid
-									  ? record.m_color
-									  : classify_flat_texture( record.m_format, source_bits.pBits, source_bits.Pitch, width, height );
-		const bool		written = write_flat_texture( record.m_format,
-													  destination_bits.pBits,
-													  destination_bits.Pitch,
-													  source_bits.pBits,
-													  source_bits.Pitch,
-													  width,
-													  height,
-													  color );
+		const flat_color_t color   = record.m_color_valid
+										 ? record.m_color
+										 : classify_flat_texture( record.m_format, source_bits.pBits, source_bits.Pitch, width, height );
+		const bool		   written = write_flat_texture( record.m_format,
+														 destination_bits.pBits,
+														 destination_bits.Pitch,
+														 source_bits.pBits,
+														 source_bits.Pitch,
+														 width,
+														 height,
+														 color );
 		if( written )
 			instance->m_device_uploads.fetch_add( 1, std::memory_order_relaxed );
 		flat_surface->UnlockRect( );
@@ -961,7 +1082,7 @@ namespace p2boost {
 			destination->GetType( ) != D3DRTYPE_TEXTURE )
 			return result;
 
-		TextureRecord record;
+		texture_record_t record;
 		{
 			std::shared_lock lock{ instance->m_mutex };
 			auto			 found = instance->m_textures.find( static_cast< IDirect3DTexture9* >( destination ) );
@@ -984,7 +1105,7 @@ namespace p2boost {
 
 		// Source uploads carry the complete texture, so derive one color from
 		// the full-resolution visible pixels and reuse it for every mip level.
-		const FlatColor color = classify_flat_texture( record.m_format, base_source.pBits, base_source.Pitch, base_description.Width, base_description.Height );
+		const flat_color_t color = classify_flat_texture( record.m_format, base_source.pBits, base_source.Pitch, base_description.Width, base_description.Height );
 		source_texture->UnlockRect( 0 );
 
 		bool complete = true;
@@ -1032,28 +1153,62 @@ namespace p2boost {
 	}
 
 	HRESULT __stdcall FlatTextures::SetTexture( IDirect3DDevice9* device, DWORD stage, IDirect3DBaseTexture9* texture ) {
-		// substitute only base-color sampler zero for an admitted material pass.
+		// learn each texture's role during ordinary draws. later override passes can
+		// then reuse the correct solid color or neutral-normal replacement.
 		FlatTextures* instance = m_instance;
 		auto		  original = instance ? reinterpret_cast< SetTextureFn >( instance->m_set_texture.previous( ) ) : nullptr;
 		if( !original )
 			return D3DERR_INVALIDCALL;
 
 		IDirect3DBaseTexture9* selected = texture;
-		if( stage == 0 && texture && g_material_known && g_material_flattenable && instance->enabled( ) &&
-			instance->m_rendering_active.load( std::memory_order_relaxed ) ) {
-			std::shared_lock lock{ instance->m_mutex };
+		if( texture && stage < 32u && !g_material_excluded && instance->enabled( ) ) {
+			const bool		 current_flat	= ( g_flat_sampler_mask & ( 1u << stage ) ) != 0;
+			const bool		 current_normal = ( g_normal_sampler_mask & ( 1u << stage ) ) != 0;
+			std::unique_lock lock{ instance->m_mutex };
 			auto			 found = instance->m_textures.find( static_cast< IDirect3DTexture9* >( texture ) );
-			// tiny sampler-zero images are overwhelmingly cursors/crosshairs. keep
-			// this final safety net even when a third-party overlay reports a generic
-			// material group instead of its own SAR/VGUI group.
-			if( found != instance->m_textures.end( ) && ( found->second.m_width > 64 || found->second.m_height > 64 ) &&
-				found->second.m_flat && found->second.m_color_valid ) {
+			if( found != instance->m_textures.end( ) ) {
+				// remember both roles so shadow and depth materials do not restore detail.
+				found->second.m_flat_texture   = found->second.m_flat_texture || current_flat;
+				found->second.m_normal_texture = found->second.m_normal_texture || current_normal;
+			}
+
+			const bool learned_normal = found != instance->m_textures.end( ) && found->second.m_normal_texture;
+			const bool learned_flat	  = found != instance->m_textures.end( ) && found->second.m_flat_texture;
+			if( ( current_normal || ( learned_normal && !learned_flat ) ) && instance->m_flat_normal ) {
+				selected = instance->m_flat_normal;
+				instance->m_substitutions.fetch_add( 1, std::memory_order_relaxed );
+			} else if( found != instance->m_textures.end( ) && ( current_flat || learned_flat ) && found->second.m_flat &&
+					   found->second.m_color_valid ) {
 				selected = found->second.m_flat;
 				instance->m_substitutions.fetch_add( 1, std::memory_order_relaxed );
 			}
 		}
 
 		return original( device, stage, selected );
+	}
+
+	HRESULT __stdcall FlatTextures::DrawPrimitive( IDirect3DDevice9* device, D3DPRIMITIVETYPE type, unsigned int start_vertex, unsigned int primitive_count ) {
+		FlatTextures* instance = m_instance;
+		auto		  original = instance ? reinterpret_cast< DrawPrimitiveFn >( instance->m_draw_primitive.previous( ) ) : nullptr;
+		return draw_material_pass( original, device, type, start_vertex, primitive_count );
+	}
+
+	HRESULT __stdcall FlatTextures::DrawIndexedPrimitive( IDirect3DDevice9* device, D3DPRIMITIVETYPE type, int base_vertex, unsigned int minimum_vertex, unsigned int vertex_count, unsigned int start_index, unsigned int primitive_count ) {
+		FlatTextures* instance = m_instance;
+		auto		  original = instance ? reinterpret_cast< DrawIndexedPrimitiveFn >( instance->m_draw_indexed_primitive.previous( ) ) : nullptr;
+		return draw_material_pass( original, device, type, base_vertex, minimum_vertex, vertex_count, start_index, primitive_count );
+	}
+
+	HRESULT __stdcall FlatTextures::DrawPrimitiveUp( IDirect3DDevice9* device, D3DPRIMITIVETYPE type, unsigned int primitive_count, const void* vertices, unsigned int stride ) {
+		FlatTextures* instance = m_instance;
+		auto		  original = instance ? reinterpret_cast< DrawPrimitiveUpFn >( instance->m_draw_primitive_up.previous( ) ) : nullptr;
+		return draw_material_pass( original, device, type, primitive_count, vertices, stride );
+	}
+
+	HRESULT __stdcall FlatTextures::DrawIndexedPrimitiveUp( IDirect3DDevice9* device, D3DPRIMITIVETYPE type, unsigned int minimum_vertex, unsigned int vertex_count, unsigned int primitive_count, const void* indices, D3DFORMAT index_format, const void* vertices, unsigned int stride ) {
+		FlatTextures* instance = m_instance;
+		auto		  original = instance ? reinterpret_cast< DrawIndexedPrimitiveUpFn >( instance->m_draw_indexed_primitive_up.previous( ) ) : nullptr;
+		return draw_material_pass( original, device, type, minimum_vertex, vertex_count, primitive_count, indices, index_format, vertices, stride );
 	}
 
 	ULONG __stdcall FlatTextures::ReleaseTexture( IDirect3DTexture9* texture ) {
@@ -1137,7 +1292,7 @@ namespace p2boost {
 		if( instance->m_textures.find( texture ) == instance->m_textures.end( ) )
 			return result;
 
-		LockedRegion region;
+		locked_region_t region;
 		region.m_source	  = *locked;
 		region.m_flags	  = flags;
 		region.m_has_rect = rect != nullptr;
@@ -1155,9 +1310,9 @@ namespace p2boost {
 		if( !original_unlock )
 			return D3DERR_INVALIDCALL;
 
-		TextureRecord record;
-		LockedRegion  region;
-		bool		  found_upload = false;
+		texture_record_t record;
+		locked_region_t	 region;
+		bool			 found_upload = false;
 		{
 			std::unique_lock lock{ instance->m_mutex };
 			auto			 texture_record = instance->m_textures.find( texture );
@@ -1175,7 +1330,7 @@ namespace p2boost {
 			const unsigned int level_height = mip_dimension( record.m_height, level );
 			const unsigned int width		= region.m_has_rect ? static_cast< unsigned int >( region.m_rect.right - region.m_rect.left ) : level_width;
 			const unsigned int height		= region.m_has_rect ? static_cast< unsigned int >( region.m_rect.bottom - region.m_rect.top ) : level_height;
-			FlatColor		   color		= record.m_color_valid
+			flat_color_t	   color		= record.m_color_valid
 												  ? record.m_color
 												  : classify_flat_texture( record.m_format, region.m_source.pBits, region.m_source.Pitch, width, height );
 
@@ -1247,7 +1402,7 @@ namespace p2boost {
 		if( texture == instance->m_textures.end( ) || !texture->second.m_flat )
 			return result;
 
-		LockedRegion region;
+		locked_region_t region;
 		region.m_source	  = *locked;
 		region.m_flags	  = flags;
 		region.m_has_rect = rect != nullptr;
@@ -1265,10 +1420,10 @@ namespace p2boost {
 		if( !original_unlock )
 			return D3DERR_INVALIDCALL;
 
-		SurfaceRecord surface_record;
-		TextureRecord texture_record;
-		LockedRegion  region;
-		bool		  found_upload = false;
+		surface_record_t surface_record;
+		texture_record_t texture_record;
+		locked_region_t	 region;
+		bool			 found_upload = false;
 		{
 			std::unique_lock lock{ instance->m_mutex };
 			auto			 mapped = instance->m_surfaces.find( surface );
@@ -1290,7 +1445,7 @@ namespace p2boost {
 			const unsigned int level_height = mip_dimension( texture_record.m_height, surface_record.m_level );
 			const unsigned int width		= region.m_has_rect ? static_cast< unsigned int >( region.m_rect.right - region.m_rect.left ) : level_width;
 			const unsigned int height		= region.m_has_rect ? static_cast< unsigned int >( region.m_rect.bottom - region.m_rect.top ) : level_height;
-			const FlatColor	   color		= texture_record.m_color_valid ? texture_record.m_color : classify_flat_texture( texture_record.m_format, region.m_source.pBits, region.m_source.Pitch, width, height );
+			const flat_color_t color		= texture_record.m_color_valid ? texture_record.m_color : classify_flat_texture( texture_record.m_format, region.m_source.pBits, region.m_source.Pitch, width, height );
 
 			IDirect3DSurface9* flat_surface{ };
 			if( SUCCEEDED( texture_record.m_flat->GetSurfaceLevel( surface_record.m_level, &flat_surface ) ) && flat_surface ) {
@@ -1335,11 +1490,30 @@ namespace p2boost {
 		if( !original )
 			return;
 
-		// set the pass classification before the real Bind call because immediate
-		// rendering can bind D3D textures from inside that method.
-		g_material_known	   = material != nullptr;
-		g_material_flattenable = material_is_flattenable( material );
+		// preserve the outer pass when the material system performs a nested Bind.
+		const bool			previous_excluded	 = g_material_excluded;
+		const std::uint32_t previous_flat_mask	 = g_flat_sampler_mask;
+		const std::uint32_t previous_normal_mask = g_normal_sampler_mask;
+		const bool			previous_active		 = g_material_pass_active;
+		const bool			nested_bind			 = g_material_bind_depth++ != 0;
+
+		// classification remains live through the deferred D3D texture binds.
+		const material_pass_t pass = classify_material_pass( material );
+		g_material_excluded		   = pass.m_excluded;
+		g_flat_sampler_mask		   = pass.m_flat_samplers;
+		g_normal_sampler_mask	   = pass.m_normal_samplers;
+		g_material_pass_active	   = true;
 		original( context, material, proxy_data );
+		--g_material_bind_depth;
+
+		// an inner Bind returns control to its outer material; a top-level Bind stays
+		// active until one of the D3D draw hooks closes the pass.
+		if( nested_bind ) {
+			g_material_excluded	   = previous_excluded;
+			g_flat_sampler_mask	   = previous_flat_mask;
+			g_normal_sampler_mask  = previous_normal_mask;
+			g_material_pass_active = previous_active;
+		}
 	}
 
 }
