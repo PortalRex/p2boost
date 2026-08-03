@@ -1,8 +1,39 @@
 # p2boost
 
-p2boost is a Windows x86 Source plugin for Portal 2 build `23973718`. Version
-0.8 is Vulkan-only and expects Portal 2's shipped DXVK renderer. Launch the game
-with `-vulkan`; native D3D9 is deliberately rejected.
+p2boost is an open-source Windows performance and display plugin for Portal 2.
+It targets Steam build `23973718`, requires the game's shipped DXVK renderer,
+and loads through the ordinary Source `plugin_load p2boost` command. Launch the
+game with `-vulkan`; native D3D9 is deliberately rejected.
+
+> [!WARNING]
+> **p2boost is not currently approved for Portal 2 speedrun submissions.** The
+> moderator agreement is that it remains disallowed until it has been fully
+> verified. Do not record a run with p2boost loaded if you may want to submit
+> it: a run made before a future approval remains ineligible even after the
+> plugin is approved. Unloading the plugin later does not make that recording
+> eligible.
+
+## Features
+
+- More consistent `fps_max` frame delivery without changing simulation, input,
+  VSync, fullscreen, or refresh-rate behavior.
+- A conservative projected-shadow cache that skips only identical receiver
+  rebuilds while preserving lighting and visual quality.
+- Working `mat_monitorgamma` and `mat_viewportscale` output on DXVK, including
+  independent local split-screen viewports and remote-view composition.
+- Optional alpha-safe flat textures through `p2boost_flat_textures`, disabled
+  by default and kept separate from the performance fixes.
+- A toggleable frame-time overlay and bounded CSV tracing for diagnosing real
+  hitches instead of relying only on average FPS.
+- Replay-visible demo provenance and compatibility with SAR in either plugin
+  load order.
+- Automatic NVIDIA application-profile setup for the Vulkan alt-tab black
+  screen. AMD, Intel, and other adapters are detected and skipped quietly.
+
+No cvars are forced. There is no mandatory graphics reduction, dummy prewarming,
+demo or simulation change, replacement game DLL, or D3D9 proxy.
+
+## Verified performance changes
 
 The release contains two independently measured, gameplay-neutral performance
 changes:
@@ -19,11 +50,8 @@ changes:
 The DXVK compatibility layer also restores two shipped display controls. A
 final gamma pass makes `mat_monitorgamma` functional, while the missing viewport
 transition expands `mat_viewportscale` before full-resolution UI is painted.
-Both paths remain dormant at their default values.
-
-No cvars are forced. There is no mandatory graphics reduction, dummy prewarming,
-demo or simulation change, replacement game DLL, or D3D9 proxy. The separate
-flat-texture command is an explicit visual option and is disabled by default.
+Both paths remain dormant at their default values. The separate flat-texture
+command is an explicit visual option rather than a claimed performance fix.
 
 ## Why Vulkan only
 
@@ -41,8 +69,9 @@ chain and no longer carries native renderer hooks.
 ## NVIDIA alt-tab profile
 
 Some NVIDIA systems show a black screen after alt-tabbing the Vulkan renderer.
-On plugin load, `p2boost.dll` checks these two values in the `portal2.exe`
-application profile:
+On plugin load, `p2boost.dll` reads the vendor of the adapter backing Portal 2's
+live DXVK device. It checks these two values in the `portal2.exe` application
+profile only when that adapter is NVIDIA:
 
 | NVIDIA setting | Value |
 |---|---:|
@@ -58,6 +87,11 @@ installed. The next launch sees the completed profile and continues without a
 prompt. If NVAPI remains unavailable or the elevated write fails, the plugin
 leaves the game open and reports the exact operation and status code through
 `p2boost_status`.
+
+AMD, Intel, software, and other non-NVIDIA adapters return `not_applicable`.
+They do not initialize NVAPI, request elevation, change a driver profile, or
+print a setup-failure warning. No documented AMD equivalent of these private
+NVIDIA profile values is applied.
 
 Because the setting is now owned directly by the DLL, uninstalling p2boost does
 not reset the Portal 2 application profile.
@@ -107,7 +141,9 @@ To remove the plugin:
 therefore incurs no extra pass. `mat_viewportscale` and `mat_viewportupscale`
 have only `FCVAR_CHEAT` removed, retain every other engine flag and bound, and
 are restored to their original flags when p2boost unloads. With upscaling
-enabled, the scaled 3D/HUD image is expanded before native-resolution VGUI.
+enabled, each scaled 3D view is expanded into its own full-resolution slot
+before native-resolution VGUI. This includes local split-screen and the remote
+view used by `+remote_view`.
 
 ## Compatibility and safety
 

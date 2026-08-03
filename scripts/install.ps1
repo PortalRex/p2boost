@@ -41,5 +41,5 @@ if ($text -match $managedPattern) {
     [IO.File]::WriteAllText($autoexec, $text + $suffix + $block + "`r`n", [Text.UTF8Encoding]::new($false))
 }
 
-Write-Host 'Installed the Vulkan-only p2boost DLL. Its first plugin load checks the NVIDIA DXVK profile.'
+Write-Host 'Installed the Vulkan-only p2boost DLL. NVIDIA profile setup runs only when Portal 2 uses an NVIDIA adapter.'
 Write-Host "Launch Portal 2 with -vulkan."

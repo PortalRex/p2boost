@@ -14,6 +14,18 @@ namespace p2boost {
 	// return the final-frame exponent relative to Source's neutral 2.2 curve.
 	float monitor_gamma_curve( float monitor_gamma ) noexcept;
 
+	// describe one low-resolution view and the slot it must fill. Portal 2
+	// preserves split-screen origins while scaling only each slot's dimensions.
+	struct viewport_scale_t {
+		RECT m_source{ };
+		RECT m_destination{ };
+	};
+
+	bool scaled_viewport_rect( const D3DVIEWPORT9&	  viewport,
+							   const D3DSURFACE_DESC& target,
+							   float				  scale,
+							   viewport_scale_t&	  result ) noexcept;
+
 	// restores two display controls that Portal 2's DXVK path does not finish:
 	// viewport scaling is expanded before VGUI, and monitor gamma is applied
 	// after every final UI draw.
@@ -46,9 +58,12 @@ namespace p2boost {
 		using SetViewportFn = HRESULT( __stdcall* )( IDirect3DDevice9*, const D3DVIEWPORT9* );
 
 		bool apply_gamma( IDirect3DDevice9* device );
-		bool apply_viewport_scale( IDirect3DDevice9* device );
+		bool apply_viewport_scale( IDirect3DDevice9* device, const viewport_scale_t& view );
 		bool rendering_to_back_buffer( IDirect3DDevice9* device, D3DSURFACE_DESC& description ) const;
-		bool copy_back_buffer( IDirect3DDevice9* device, const RECT* source, D3DTEXTUREFILTERTYPE filter );
+		bool copy_back_buffer( IDirect3DDevice9*	device,
+							   const RECT*			source,
+							   const RECT*			destination,
+							   D3DTEXTUREFILTERTYPE filter );
 		bool ensure_copy_target( IDirect3DDevice9* device, const D3DSURFACE_DESC& description );
 		bool ensure_gamma_resources( IDirect3DDevice9* device );
 		void release_resources( );
@@ -72,8 +87,8 @@ namespace p2boost {
 		unsigned int		   m_copy_width{ };
 		unsigned int		   m_copy_height{ };
 		D3DFORMAT			   m_copy_format{ D3DFMT_UNKNOWN };
-		bool				   m_viewport_applied{ };
-		bool				   m_scaled_view_seen{ };
+		viewport_scale_t	   m_scaled_view{ };
+		bool				   m_scaled_view_pending{ };
 		bool				   m_internal_viewport{ };
 		VmtHook				   m_present;
 		VmtHook				   m_reset;

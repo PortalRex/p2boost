@@ -23,6 +23,10 @@ namespace p2boost {
 		};
 
 		constexpr DWORD screen_vertex_format{ D3DFVF_XYZRHW | D3DFVF_TEX1 };
+
+		bool same_rect( const RECT& left, const RECT& right ) noexcept {
+			return left.left == right.left && left.top == right.top && left.right == right.right && left.bottom == right.bottom;
+		}
 	}
 
 	DisplayAdjustments*				  DisplayAdjustments::m_instance{ };
@@ -32,6 +36,31 @@ namespace p2boost {
 
 	float monitor_gamma_curve( float monitor_gamma ) noexcept {
 		return std::clamp( monitor_gamma, 1.6f, 2.6f ) / neutral_monitor_gamma;
+	}
+
+	bool scaled_viewport_rect( const D3DVIEWPORT9&	  viewport,
+							   const D3DSURFACE_DESC& target,
+							   float				  scale,
+							   viewport_scale_t&	  result ) noexcept {
+		if( scale <= 0.0f || scale >= 1.0f - gamma_epsilon || viewport.Width < 16 || viewport.Height < 16 )
+			return false;
+
+		const unsigned int width  = std::max( 1u, static_cast< unsigned int >( std::lround( viewport.Width / scale ) ) );
+		const unsigned int height = std::max( 1u, static_cast< unsigned int >( std::lround( viewport.Height / scale ) ) );
+		if( width <= viewport.Width || height <= viewport.Height )
+			return false;
+		if( viewport.X + width > target.Width + 1u || viewport.Y + height > target.Height + 1u )
+			return false;
+
+		result.m_source		 = { static_cast< LONG >( viewport.X ),
+								 static_cast< LONG >( viewport.Y ),
+								 static_cast< LONG >( viewport.X + viewport.Width ),
+								 static_cast< LONG >( viewport.Y + viewport.Height ) };
+		result.m_destination = { static_cast< LONG >( viewport.X ),
+								 static_cast< LONG >( viewport.Y ),
+								 static_cast< LONG >( viewport.X + width ),
+								 static_cast< LONG >( viewport.Y + height ) };
+		return true;
 	}
 
 	DisplayAdjustments::~DisplayAdjustments( ) {
@@ -91,13 +120,13 @@ namespace p2boost {
 		m_present.remove( );
 		m_reset.remove( );
 		release_resources( );
-		m_monitor_gamma		= nullptr;
-		m_viewport_scale	= nullptr;
-		m_viewport_upscale	= nullptr;
-		m_device			= nullptr;
-		m_viewport_applied	= false;
-		m_scaled_view_seen	= false;
-		m_internal_viewport = false;
+		m_monitor_gamma		  = nullptr;
+		m_viewport_scale	  = nullptr;
+		m_viewport_upscale	  = nullptr;
+		m_device			  = nullptr;
+		m_scaled_view		  = { };
+		m_scaled_view_pending = false;
+		m_internal_viewport	  = false;
 		if( m_instance == this )
 			m_instance = nullptr;
 	}
@@ -132,7 +161,10 @@ namespace p2boost {
 		return true;
 	}
 
-	bool DisplayAdjustments::copy_back_buffer( IDirect3DDevice9* device, const RECT* source, D3DTEXTUREFILTERTYPE filter ) {
+	bool DisplayAdjustments::copy_back_buffer( IDirect3DDevice9*	device,
+											   const RECT*			source,
+											   const RECT*			destination,
+											   D3DTEXTUREFILTERTYPE filter ) {
 		IDirect3DSurface9* back_buffer{ };
 		if( FAILED( device->GetBackBuffer( 0, 0, D3DBACKBUFFER_TYPE_MONO, &back_buffer ) ) || !back_buffer )
 			return false;
@@ -148,14 +180,15 @@ namespace p2boost {
 			return false;
 		}
 
-		const RECT destination{ 0, 0, static_cast< LONG >( description.Width ), static_cast< LONG >( description.Height ) };
-		const bool copied = SUCCEEDED( device->StretchRect( back_buffer, source, copy_surface, &destination, filter ) );
+		const RECT	full_target{ 0, 0, static_cast< LONG >( description.Width ), static_cast< LONG >( description.Height ) };
+		const RECT* copy_destination = destination ? destination : &full_target;
+		const bool	copied			 = SUCCEEDED( device->StretchRect( back_buffer, source, copy_surface, copy_destination, filter ) );
 		copy_surface->Release( );
 		back_buffer->Release( );
 		return copied;
 	}
 
-	bool DisplayAdjustments::apply_viewport_scale( IDirect3DDevice9* device ) {
+	bool DisplayAdjustments::apply_viewport_scale( IDirect3DDevice9* device, const viewport_scale_t& view ) {
 		if( !m_viewport_scale || !m_viewport_upscale || !m_viewport_upscale->value_integer( ) )
 			return false;
 
@@ -163,27 +196,18 @@ namespace p2boost {
 		if( scale >= 1.0f - gamma_epsilon )
 			return false;
 
-		IDirect3DSurface9* back_buffer{ };
-		if( FAILED( device->GetBackBuffer( 0, 0, D3DBACKBUFFER_TYPE_MONO, &back_buffer ) ) || !back_buffer )
-			return false;
-		D3DSURFACE_DESC description{ };
-		const bool		described = SUCCEEDED( back_buffer->GetDesc( &description ) );
-		back_buffer->Release( );
-		if( !described )
-			return false;
-
-		const RECT source{ 0,
-						   0,
-						   std::max< LONG >( 1, static_cast< LONG >( description.Width * scale ) ),
-						   std::max< LONG >( 1, static_cast< LONG >( description.Height * scale ) ) };
-		if( !copy_back_buffer( device, &source, D3DTEXF_LINEAR ) )
+		if( !copy_back_buffer( device, &view.m_source, &view.m_destination, D3DTEXF_LINEAR ) )
 			return false;
 
 		IDirect3DSurface9* copy_surface{ };
 		IDirect3DSurface9* destination{ };
 		const bool		   ready = SUCCEEDED( m_copy_texture->GetSurfaceLevel( 0, &copy_surface ) ) && copy_surface &&
 						   SUCCEEDED( device->GetBackBuffer( 0, 0, D3DBACKBUFFER_TYPE_MONO, &destination ) ) && destination;
-		const bool expanded = ready && SUCCEEDED( device->StretchRect( copy_surface, nullptr, destination, nullptr, D3DTEXF_NONE ) );
+		const bool expanded = ready && SUCCEEDED( device->StretchRect( copy_surface,
+																	   &view.m_destination,
+																	   destination,
+																	   &view.m_destination,
+																	   D3DTEXF_NONE ) );
 		if( destination )
 			destination->Release( );
 		if( copy_surface )
@@ -211,7 +235,7 @@ namespace p2boost {
 		const float monitor_gamma = std::clamp( m_monitor_gamma->value_float( ), 1.6f, 2.6f );
 		if( std::fabs( monitor_gamma - neutral_monitor_gamma ) <= gamma_epsilon )
 			return false;
-		if( !copy_back_buffer( device, nullptr, D3DTEXF_NONE ) || !ensure_gamma_resources( device ) || FAILED( m_state_block->Capture( ) ) )
+		if( !copy_back_buffer( device, nullptr, nullptr, D3DTEXF_NONE ) || !ensure_gamma_resources( device ) || FAILED( m_state_block->Capture( ) ) )
 			return false;
 
 		const float			  width	 = static_cast< float >( m_copy_width );
@@ -266,19 +290,33 @@ namespace p2boost {
 												   HWND				 window,
 												   const RGNDATA*	 dirty_region ) {
 		DisplayAdjustments* instance = m_instance;
+		if( instance && instance->m_scaled_view_pending ) {
+			const RECT&		   destination_rect = instance->m_scaled_view.m_destination;
+			IDirect3DSurface9* back_buffer{ };
+			D3DSURFACE_DESC	   description{ };
+			const bool		   described = SUCCEEDED( device->GetBackBuffer( 0, 0, D3DBACKBUFFER_TYPE_MONO, &back_buffer ) ) && back_buffer &&
+								   SUCCEEDED( back_buffer->GetDesc( &description ) );
+			if( back_buffer )
+				back_buffer->Release( );
+			const bool subview = described && ( destination_rect.left != 0 || destination_rect.top != 0 ||
+												destination_rect.right != static_cast< LONG >( description.Width ) ||
+												destination_rect.bottom != static_cast< LONG >( description.Height ) );
+			if( subview && instance->apply_viewport_scale( device, instance->m_scaled_view ) )
+				instance->m_viewport_passes.fetch_add( 1, std::memory_order_relaxed );
+			instance->m_scaled_view_pending = false;
+		}
 		if( instance && instance->apply_gamma( device ) )
 			instance->m_gamma_passes.fetch_add( 1, std::memory_order_relaxed );
-		if( instance )
-			instance->m_viewport_applied = false;
-		if( instance )
-			instance->m_scaled_view_seen = false;
 		return m_next_present ? m_next_present( device, source, destination, window, dirty_region ) : D3DERR_INVALIDCALL;
 	}
 
 	HRESULT __stdcall DisplayAdjustments::Reset( IDirect3DDevice9* device, D3DPRESENT_PARAMETERS* parameters ) {
 		DisplayAdjustments* instance = m_instance;
-		if( instance )
+		if( instance ) {
 			instance->release_resources( );
+			instance->m_scaled_view			= { };
+			instance->m_scaled_view_pending = false;
+		}
 		return m_next_reset ? m_next_reset( device, parameters ) : D3DERR_INVALIDCALL;
 	}
 
@@ -295,19 +333,23 @@ namespace p2boost {
 
 		D3DSURFACE_DESC description{ };
 		if( instance->rendering_to_back_buffer( device, description ) ) {
-			const unsigned int scaled_width		   = std::max( 1u, static_cast< unsigned int >( description.Width * scale ) );
-			const unsigned int scaled_height	   = std::max( 1u, static_cast< unsigned int >( description.Height * scale ) );
-			const bool		   inside_scaled_frame = viewport->X + viewport->Width <= scaled_width + 1u &&
-											 viewport->Y + viewport->Height <= scaled_height + 1u;
-			const bool full_frame = viewport->X == 0 && viewport->Y == 0 && viewport->Width == description.Width &&
-									viewport->Height == description.Height;
+			const RECT incoming{ static_cast< LONG >( viewport->X ),
+								 static_cast< LONG >( viewport->Y ),
+								 static_cast< LONG >( viewport->X + viewport->Width ),
+								 static_cast< LONG >( viewport->Y + viewport->Height ) };
 
-			if( inside_scaled_frame )
-				instance->m_scaled_view_seen = true;
-			if( full_frame && instance->m_scaled_view_seen && !instance->m_viewport_applied ) {
-				instance->m_viewport_applied = true;
-				if( instance->apply_viewport_scale( device ) )
+			// the next unscaled viewport marks the exact boundary between 3D and
+			// native-resolution HUD work for this split-screen slot.
+			if( instance->m_scaled_view_pending && same_rect( incoming, instance->m_scaled_view.m_destination ) ) {
+				if( instance->apply_viewport_scale( device, instance->m_scaled_view ) )
 					instance->m_viewport_passes.fetch_add( 1, std::memory_order_relaxed );
+				instance->m_scaled_view_pending = false;
+			}
+
+			viewport_scale_t candidate{ };
+			if( scaled_viewport_rect( *viewport, description, scale, candidate ) ) {
+				instance->m_scaled_view			= candidate;
+				instance->m_scaled_view_pending = true;
 			}
 		}
 

@@ -284,7 +284,7 @@ namespace p2boost {
 
 		// print one machine-readable snapshot for support and automated tests.
 		sdk::PluginResult StatusCommand( ) const {
-			console_print( "[p2boost] build=23973718 supported=%d dxvk_vulkan=%d nvidia_profile=%s nvidia_error=%s:%d enabled=%d "
+			console_print( "[p2boost] build=23973718 supported=%d dxvk_vulkan=%d nvidia_profile=%s nvidia_detail=%s:%d enabled=%d "
 						   "limiter=%d shadow_cache=%d shadow_hits=%u tracing=%d overlay=%d overlay_available=%d "
 						   "display_available=%d gamma_passes=%llu viewport_passes=%llu demo_marker=%d "
 						   "flat_available=%d flat=%d flat_textures=%zu flat_ready=%zu flat_normal=%d flat_binds=%llu "

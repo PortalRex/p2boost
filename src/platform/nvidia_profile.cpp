@@ -1,6 +1,11 @@
 #include "nvidia_profile.h"
 
+#include "address.h"
+#include "pattern.h"
+#include "portal2.h"
+
 #include <Windows.h>
+#include <d3d9.h>
 #include <shellapi.h>
 
 #include <nvapi.h>
@@ -22,6 +27,40 @@ namespace p2boost {
 		constexpr DWORD elevated_failed{ 20 };
 
 		int module_anchor{ };
+
+		// Read the adapter selected by Portal 2's live DXVK device. This avoids
+		// probing NVIDIA APIs on AMD, Intel, and software-rendered systems.
+		bool active_adapter_vendor( unsigned int& vendor_id ) noexcept {
+			const Address shader{ GetModuleHandleW( L"shaderapivk.dll" ) };
+			if( !shader )
+				return false;
+
+			const Address device_xref = pattern::find_unique( shader, portal2::signature::flat_texture_device );
+			if( !device_xref )
+				return false;
+
+			const Address device_global = device_xref.add( portal2::xref::flat_texture_device_global ).at< Address >( );
+			auto*		  device		= device_global.to< IDirect3DDevice9* >( );
+			if( !device )
+				return false;
+
+			D3DDEVICE_CREATION_PARAMETERS parameters{ };
+			if( FAILED( device->GetCreationParameters( &parameters ) ) )
+				return false;
+
+			IDirect3D9* direct3d{ };
+			if( FAILED( device->GetDirect3D( &direct3d ) ) || !direct3d )
+				return false;
+
+			D3DADAPTER_IDENTIFIER9 identifier{ };
+			const bool			   identified = SUCCEEDED( direct3d->GetAdapterIdentifier( parameters.AdapterOrdinal, 0, &identifier ) );
+			direct3d->Release( );
+			if( !identified )
+				return false;
+
+			vendor_id = identifier.VendorId;
+			return true;
+		}
 
 		nvidia_profile_result_t failure( const char* operation, int status ) noexcept {
 			return { nvidia_profile_state_t::failed, operation, status };
@@ -222,6 +261,12 @@ namespace p2boost {
 	}
 
 	nvidia_profile_result_t configure_nvidia_profile( ) noexcept {
+		unsigned int vendor_id{ };
+		if( active_adapter_vendor( vendor_id ) && !needs_nvidia_profile( vendor_id ) )
+			return { nvidia_profile_state_t::not_applicable, "non-NVIDIA adapter", static_cast< int >( vendor_id ) };
+
+		// Fall back to NVAPI when adapter discovery fails. This preserves support
+		// for hybrid systems whose NVIDIA device is visible before DXVK settles.
 		return configure_profile( current_application_path( ) );
 	}
 
@@ -265,6 +310,8 @@ namespace p2boost {
 
 	const char* nvidia_profile_state_name( nvidia_profile_state_t state ) noexcept {
 		switch( state ) {
+		case nvidia_profile_state_t::not_applicable:
+			return "not_applicable";
 		case nvidia_profile_state_t::configured:
 			return "configured";
 		case nvidia_profile_state_t::applied:

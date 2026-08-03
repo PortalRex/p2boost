@@ -4,6 +4,7 @@
 #include "frame_limiter.h"
 #include "frame_metrics.h"
 #include "hook.h"
+#include "nvidia_profile.h"
 #include "pattern.h"
 #include "runtime_verification.h"
 #include "stack.h"
@@ -271,6 +272,44 @@ namespace {
 		return std::fabs( neutral - 1.0f ) < 0.0001f && bright < neutral && dark > neutral;
 	}
 
+	bool test_viewport_scale_rects( ) {
+		const D3DSURFACE_DESC	  target{ D3DFMT_A8R8G8B8, D3DRTYPE_SURFACE, 0, D3DPOOL_DEFAULT, D3DMULTISAMPLE_NONE, 0, 2560, 1440 };
+		p2boost::viewport_scale_t result{ };
+
+		// Portal 2 keeps player one's origin at zero and scales its slot size.
+		const D3DVIEWPORT9 player_one{ 0, 0, 640, 720, 0.0f, 1.0f };
+		if( !p2boost::scaled_viewport_rect( player_one, target, 0.5f, result ) ||
+			result.m_source.left != 0 || result.m_source.right != 640 || result.m_destination.left != 0 || result.m_destination.right != 1280 ||
+			result.m_destination.bottom != 1440 )
+			return false;
+
+		// Player two retains the native half-screen origin instead of moving into
+		// a globally scaled coordinate space.
+		const D3DVIEWPORT9 player_two{ 1280, 0, 640, 720, 0.0f, 1.0f };
+		if( !p2boost::scaled_viewport_rect( player_two, target, 0.5f, result ) || result.m_source.left != 1280 ||
+			result.m_source.right != 1920 || result.m_destination.left != 1280 || result.m_destination.right != 2560 )
+			return false;
+
+		// Full-screen views use the same calculation and still fill the target.
+		const D3DVIEWPORT9 full_view{ 0, 0, 1280, 720, 0.0f, 1.0f };
+		if( !p2boost::scaled_viewport_rect( full_view, target, 0.5f, result ) || result.m_destination.right != 2560 ||
+			result.m_destination.bottom != 1440 )
+			return false;
+
+		// Tiny engine borders and rectangles that would leave the render target
+		// must never be mistaken for scaled gameplay views.
+		const D3DVIEWPORT9 border{ 0, 0, 1, 1440, 0.0f, 1.0f };
+		const D3DVIEWPORT9 outside{ 1920, 0, 640, 720, 0.0f, 1.0f };
+		return !p2boost::scaled_viewport_rect( border, target, 0.5f, result ) &&
+			   !p2boost::scaled_viewport_rect( outside, target, 0.5f, result );
+	}
+
+	bool test_nvidia_vendor_filter( ) {
+		// PCI vendor 10DE is NVIDIA; AMD, Intel, and unknown vendors are skipped.
+		return p2boost::needs_nvidia_profile( 0x10de ) && !p2boost::needs_nvidia_profile( 0x1002 ) &&
+			   !p2boost::needs_nvidia_profile( 0x8086 ) && !p2boost::needs_nvidia_profile( 0 );
+	}
+
 }
 
 int main( ) {
@@ -288,9 +327,11 @@ int main( ) {
 	const bool flat_alpha	  = test_flat_texture_alpha( );
 	const bool flat_color	  = test_flat_texture_dominant_color( );
 	const bool gamma_curve	  = test_monitor_gamma_curve( );
+	const bool viewport_scale = test_viewport_scale_rects( );
+	const bool nvidia_vendor  = test_nvidia_vendor_filter( );
 	std::printf( "address=%s rel32=%s pattern=%s hook_chain=%s callsite=%s callsite_chain=%s "
 				 "hash=%s metrics=%s overlay=%s "
-				 "phase=%s qpc=%s flat_alpha=%s flat_color=%s gamma_curve=%s\n",
+				 "phase=%s qpc=%s flat_alpha=%s flat_color=%s gamma_curve=%s viewport_scale=%s nvidia_vendor=%s\n",
 				 address ? "ok" : "FAIL",
 				 relative_call ? "ok" : "FAIL",
 				 pattern ? "ok" : "FAIL",
@@ -304,8 +345,11 @@ int main( ) {
 				 qpc ? "ok" : "FAIL",
 				 flat_alpha ? "ok" : "FAIL",
 				 flat_color ? "ok" : "FAIL",
-				 gamma_curve ? "ok" : "FAIL" );
-	return address && relative_call && pattern && hook && callsite && callsite_chain && hash && metrics && overlay && phase && qpc && flat_alpha && flat_color && gamma_curve
+				 gamma_curve ? "ok" : "FAIL",
+				 viewport_scale ? "ok" : "FAIL",
+				 nvidia_vendor ? "ok" : "FAIL" );
+	return address && relative_call && pattern && hook && callsite && callsite_chain && hash && metrics && overlay && phase && qpc && flat_alpha && flat_color && gamma_curve &&
+				   viewport_scale && nvidia_vendor
 			   ? 0
 			   : 1;
 }

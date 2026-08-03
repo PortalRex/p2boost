@@ -1018,3 +1018,34 @@ that gate remains provisional rather than being inferred from the stronger
 normal-order result. The runner also forces the candidate back on before its
 final diagnostic trace; previously `-CandidateFirst` left that trace
 describing the disabled baseline even though the A/B CSV files were correct.
+
+## DXVK viewport-scaling audit
+
+A temporary `IDirect3DDevice9::SetViewport` trace reproduced the broken
+2560x1440 local split-screen path at `mat_viewportscale 0.5`. Portal 2 does not
+place both players inside one globally scaled 1280x720 rectangle. Player one
+renders at `(0, 0, 640, 720)` and later selects its native HUD slot
+`(0, 0, 1280, 1440)`. Player two renders at `(1280, 0, 640, 720)` and later
+selects `(1280, 0, 1280, 1440)`. The X/Y origin is already expressed in native
+back-buffer coordinates; only each slot's width and height are scaled.
+
+The old whole-frame implementation therefore stretched player one across the
+back buffer and could never recognize player two. The release path now learns
+the exact low-resolution rectangle, waits for the same-origin native viewport,
+and expands only that slot. A pending subview is completed before presentation
+for the held remote camera path. Border viewports and out-of-target candidates
+are rejected, and device reset discards pending geometry.
+
+Headless client analysis identified the normal split rectangle helper at
+preferred address `0x101cc9f0`, its remote/aspect-cropped counterpart at
+`0x101cca90`, and the dispatcher at `0x101ccbf0`. These addresses remain
+research labels only; production code discovers the live DXVK device through
+the existing validated instruction signature and contains no client RVA hook.
+The reusable `TraceStringReferences.java` helper records focused string,
+global, and function xrefs for later builds.
+
+The final DLL was visually checked in the co-op lobby at scale 0.5. Both local
+player slots filled their independent halves, and a physically held
+`+remote_view` filled the complete lower-right panel rather than only its
+top-left quarter. The permanent geometry cases are also covered by the native
+test executable.

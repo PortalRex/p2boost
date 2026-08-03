@@ -36,7 +36,8 @@ public class ExportP2Analysis extends GhidraScript {
         "framerate", "fps_max", "frametime", "render target", "visibility",
         "pvs", "split screen", "splitscreen", "co-op", "coop", "video", "avi",
         "managed texture", "managedtexture", "shader compile", "shadercompile",
-        "shader count", "shadercount", "cacheusedmaterials", "preload"
+        "shader count", "shadercount", "cacheusedmaterials", "preload",
+        "remote_view", "remote_splitscreen", "viewportscale", "viewportupscale"
     };
 
     // A target may first be discovered with no caller depth and later with a
@@ -426,6 +427,9 @@ public class ExportP2Analysis extends GhidraScript {
             for (long address : startupReadTargets) addFunctionAndCallers(targets, address, 3);
         }
         if (base.equalsIgnoreCase("client.dll")) {
+            addFunctionsReferencingGlobal(targets, 0x1092f79cL, 3);
+            addFunctionsReferencingGlobal(targets, 0x109f5300L, 3);
+            addFunctionsReferencingString(targets, "cl_enable_remote_splitscreen", 3);
             addFunctionAndCallers(targets, 0x101ee590L, 2);
             addFunctionAndCallers(targets, 0x10272830L, 2);
             addFunctionAndCallers(targets, 0x10284300L, 2);

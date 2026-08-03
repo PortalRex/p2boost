@@ -5,11 +5,18 @@ namespace p2boost {
 	// describe whether the two Portal 2 application values need attention.
 	enum class nvidia_profile_state_t {
 		unknown,
+		not_applicable,
 		configured,
 		applied,
 		unavailable,
 		failed
 	};
+
+	// NVIDIA's DRS values apply only when DXVK created the game device on an
+	// NVIDIA adapter. Other vendors need neither NVAPI nor an elevation prompt.
+	constexpr bool needs_nvidia_profile( unsigned int vendor_id ) noexcept {
+		return vendor_id == 0x10de;
+	}
 
 	// retain the exact failing call and code for useful in-game diagnostics.
 	struct nvidia_profile_result_t {
