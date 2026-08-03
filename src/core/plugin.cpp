@@ -179,10 +179,18 @@ namespace p2boost {
 		}
 
 		void ServerActivate( sdk::edict_t*, int, int client_max ) override {
+			// The activated server owns a new receiver and entity lifetime.
+			m_shadow_cache.invalidate( );
 			m_metrics.set_coop( client_max > 1 );
 		}
 
 		void GameFrame( bool simulating ) override {
+			// Projected-light receiver membership can change without changing the
+			// private shadow bytes. Rebuild once after every simulation update, then
+			// allow exact reuse across the additional high-refresh render frames.
+			if( simulating )
+				m_shadow_cache.invalidate( );
+
 			// mirror only the state needed by diagnostics.
 			m_metrics.set_simulating( simulating );
 			m_demo_provenance.update( P2BOOST_VERSION, m_enabled, m_flat_textures.enabled( ) );
@@ -207,17 +215,24 @@ namespace p2boost {
 			m_shadow_cache.invalidate( );
 		}
 
-		// remaining callbacks intentionally preserve vanilla behavior.
 		void ClientFullyConnect( sdk::edict_t* ) override {
+			// A completed sign-on can replace the entire client entity set.
+			m_shadow_cache.invalidate( );
 		}
 
 		void ClientActive( sdk::edict_t* ) override {
+			// The active transition makes newly received renderables visible.
+			m_shadow_cache.invalidate( );
 		}
 
 		void ClientDisconnect( sdk::edict_t* ) override {
+			// Never retain receivers owned by a departing co-op player.
+			m_shadow_cache.invalidate( );
 		}
 
 		void ClientPutInServer( sdk::edict_t*, const char* ) override {
+			// A joining player introduces a new renderable hierarchy.
+			m_shadow_cache.invalidate( );
 		}
 
 		void SetCommandClient( int ) override {
@@ -258,9 +273,13 @@ namespace p2boost {
 		}
 
 		void OnEdictAllocated( sdk::edict_t* ) override {
+			// Handles may be reused, so allocation begins a new cache lifetime.
+			m_shadow_cache.invalidate( );
 		}
 
 		void OnEdictFreed( const sdk::edict_t* ) override {
+			// Receiver lists must not retain a pointer to a destroyed renderable.
+			m_shadow_cache.invalidate( );
 		}
 
 	private:

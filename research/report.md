@@ -246,11 +246,33 @@ state. Ghidra maps the Portal 2 routines to `client.dll` RVAs `0xf81a0`
 A trace-only vtable hook copied the full 0x114-byte Portal 2 shadow record
 before every call while always executing the original function. In five
 seconds, 2,237 of 2,238 records were byte-identical and the calls consumed
-1,199.066 ms total. The permanent fix therefore skips only a byte-identical
-projection rebuild. It still calls RVA `0xf5640` to preserve the public
-function's dirty-list removal. The exact state cache includes the relevant
-`r_flashlightmodels` value and invalidates on any state change, cvar change,
-map transition, focus transition, plugin toggle, load, or unload.
+1,199.066 ms total. The original permanent fix therefore skipped a
+byte-identical projection rebuild and still called RVA `0xf5640` to preserve
+the public function's dirty-list removal.
+
+Later real-world testing exposed an input missing from that design: receiver
+topology is not stored in the 0x114-byte shadow record. `BuildFlashlight`
+separately enumerates BSP leaves, client-leaf receivers, and the target
+renderable's child hierarchy. A co-op death or entity/PVS change can therefore
+require a rebuild while the compared bytes remain identical.
+
+Version 0.8.5 limits reuse to one simulation generation. The first update
+after every simulated frame follows the complete vanilla path; only duplicate
+high-refresh updates before the next simulation change may hit the cache.
+Client connect/disconnect, edict allocation/free, map, focus, plugin toggle,
+load, and unload transitions also invalidate it. Cache access and invalidation
+are synchronized so an entity-lifecycle callback cannot clear receiver state
+between comparison and the skipped rebuild.
+
+Three Steam minidumps from the reported online co-op failure all contain the
+same relocated client fault at `client.dll+0x1e9465`, followed by the same
+view-render stack. Ghidra places that instruction in material render-context
+cleanup after a visibility/query call. The dumps do not prove which earlier
+operation corrupted or invalidated the context, but their identical location,
+the concurrent missing-shadow report, and the SDK receiver-lifetime finding
+make cross-lifetime shadow reuse the attributable p2boost state removed by this
+change. Local validation then completed 20 partner-death cycles and five full
+map/entity rebuilds without a new Steam dump or SAR crash report.
 
 Changing `r_flashlightmodels` twice produced two measured cache misses, and
 each focus resource reacquisition produced an uncached rebuild before hits
@@ -1000,8 +1022,11 @@ consumed by the verified rebuild, plus the flashlight-model input. A
 research-only byte-difference probe observed 11,241 consecutive entry
 comparisons during the fixed two-camera lobby scene with both linked portal
 interiors visible. No byte changed and the flashlight model did not change.
-This independently validates the full-state cache key; narrowing it would add
-risk without finding another repeated-work class.
+This validates that the private light record is stable in that fixed scene,
+but it does not validate receiver topology: the SDK implementation constructs
+that topology from BSP/client-leaf and renderable-lifetime state held elsewhere.
+The cache is therefore simulation-scoped rather than treated as a complete
+long-lived state key.
 
 The lobby runner now records `p2boost_status` immediately before and after
 each variant. In normal order, the disabled interval added zero cache hits and

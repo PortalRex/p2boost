@@ -40,11 +40,11 @@ namespace p2boost {
 			return false;
 		m_remove_dirty = remove_dirty_call.rel32( 1 ).as< RemoveDirtyFn >( );
 
-		// flashlight-model membership changes generated receiver geometry even if
-		// the shadow entry itself is unchanged, so it is part of the cache key.
-		const Address models_xref  = pattern::find_unique( client, portal2::signature::flashlight_models );
-		m_flashlight_models_parent = models_xref.add( portal2::xref::flashlight_models_global ).at< Address >( ).as< int** >( );
-		if( !m_remove_dirty || !m_flashlight_models_parent || !*m_flashlight_models_parent )
+		// The private ConVar value controls model receiver projection even when
+		// the shadow entry is unchanged, so it remains part of the cache key.
+		const Address models_xref		= pattern::find_unique( client, portal2::signature::flashlight_models );
+		m_flashlight_models_cvar_parent = models_xref.add( portal2::xref::flashlight_models_global ).at< Address >( ).as< int** >( );
+		if( !m_remove_dirty || !m_flashlight_models_cvar_parent || !*m_flashlight_models_cvar_parent )
 			return false;
 
 		m_metrics = metrics;
@@ -63,9 +63,9 @@ namespace p2boost {
 	void ProjectedShadowCache::remove( ) {
 		m_update_projected.remove( );
 		invalidate( );
-		m_metrics				   = nullptr;
-		m_flashlight_models_parent = nullptr;
-		m_remove_dirty			   = nullptr;
+		m_metrics						= nullptr;
+		m_flashlight_models_cvar_parent = nullptr;
+		m_remove_dirty					= nullptr;
 		m_enabled.store( false, std::memory_order_relaxed );
 		m_hits.store( 0, std::memory_order_relaxed );
 
@@ -74,7 +74,11 @@ namespace p2boost {
 	}
 
 	void ProjectedShadowCache::invalidate( ) noexcept {
+		// A generation prevents a rebuild finishing during invalidation from
+		// publishing receiver state that belongs to the previous scene lifetime.
+		const std::lock_guard lock{ m_state_mutex };
 		m_states.clear( );
+		++m_generation;
 	}
 
 	void ProjectedShadowCache::set_enabled( bool enabled ) noexcept {
@@ -108,42 +112,72 @@ namespace p2boost {
 
 		const auto	index = static_cast< std::uint16_t >( handle & 0xffffu );
 		const auto* entry = entries + static_cast< size_t >( index ) * portal2::shadow::entry_size;
-		auto		prior = cache->m_states.end( );
+
+		// Read the reversed `r_flashlightmodels` ConVar value used by this path.
+		int* models_owner = *cache->m_flashlight_models_cvar_parent;
+		int	 models_value = 0;
+		if( models_owner ) {
+			auto* model_bytes = reinterpret_cast< std::uint8_t* >( models_owner );
+			models_value	  = *reinterpret_cast< int* >( model_bytes + portal2::shadow::flashlight_models );
+		}
+		const bool		collecting = cache->m_metrics && cache->m_metrics->collecting( );
+		const Stopwatch timer{ collecting };
+		std::uint64_t	generation{ };
+
+		{
+			// Invalidation and a cache hit must be one transaction. Otherwise an
+			// entity-lifecycle callback could clear the cache after comparison but
+			// before the engine receiver rebuild is skipped.
+			const std::lock_guard lock{ cache->m_state_mutex };
+			generation = cache->m_generation;
+
+			auto prior = cache->m_states.end( );
+			for( auto state = cache->m_states.begin( ); state != cache->m_states.end( ); ++state ) {
+				if( state->m_handle == index ) {
+					prior = state;
+					break;
+				}
+			}
+
+			const bool known_state = prior != cache->m_states.end( );
+			const bool same_models = known_state && prior->m_flashlight_models_value == models_value;
+			const bool same_entry  = known_state && std::memcmp( prior->m_entry.data( ), entry, prior->m_entry.size( ) ) == 0;
+
+			// BSP/client-leaf receiver membership is not stored in ClientShadow_t.
+			// Limiting reuse to one simulation generation keeps that hidden state
+			// stable while still removing duplicate rebuilds at high render rates.
+			if( cache->m_enabled.load( std::memory_order_relaxed ) && same_models && same_entry ) {
+				cache->m_remove_dirty( self, handle );
+				cache->m_hits.fetch_add( 1, std::memory_order_relaxed );
+				if( collecting )
+					cache->m_metrics->record_shadow_update( timer.elapsed_ms( ), true );
+				return;
+			}
+		}
+
+		// The first update in each generation always follows the vanilla path.
+		original( self, handle, force );
+		if( collecting )
+			cache->m_metrics->record_shadow_update( timer.elapsed_ms( ), false );
+
+		// The original call may run engine callbacks. Re-resolve the entry and
+		// reject the result if any callback advanced the scene generation.
+		const std::lock_guard lock{ cache->m_state_mutex };
+		if( cache->m_generation != generation )
+			return;
+
+		entries = *reinterpret_cast< std::uint8_t** >( static_cast< std::uint8_t* >( self ) + portal2::shadow::entries );
+		if( !entries )
+			return;
+
+		entry	   = entries + static_cast< size_t >( index ) * portal2::shadow::entry_size;
+		auto prior = cache->m_states.end( );
 		for( auto state = cache->m_states.begin( ); state != cache->m_states.end( ); ++state ) {
 			if( state->m_handle == index ) {
 				prior = state;
 				break;
 			}
 		}
-
-		// include flashlight receiver membership in the cache key.
-		int* models_owner = *cache->m_flashlight_models_parent;
-		int	 model_count  = 0;
-		if( models_owner ) {
-			auto* model_bytes = reinterpret_cast< std::uint8_t* >( models_owner );
-			model_count		  = *reinterpret_cast< int* >( model_bytes + portal2::shadow::flashlight_models );
-		}
-		const bool known_state = prior != cache->m_states.end( );
-		const bool same_models = known_state && prior->m_flashlight_models == model_count;
-		const bool same_entry  = known_state && std::memcmp( prior->m_entry.data( ), entry, prior->m_entry.size( ) ) == 0;
-		const bool identical   = same_models && same_entry;
-
-		const bool		collecting = cache->m_metrics && cache->m_metrics->collecting( );
-		const Stopwatch timer{ collecting };
-
-		// skip geometry rebuild only when every renderer-visible input is identical.
-		if( cache->m_enabled.load( std::memory_order_relaxed ) && identical ) {
-			cache->m_remove_dirty( self, handle );
-			cache->m_hits.fetch_add( 1, std::memory_order_relaxed );
-			if( collecting )
-				cache->m_metrics->record_shadow_update( timer.elapsed_ms( ), true );
-			return;
-		}
-
-		// changed state follows the untouched engine path before becoming cacheable.
-		original( self, handle, force );
-		if( collecting )
-			cache->m_metrics->record_shadow_update( timer.elapsed_ms( ), false );
 
 		if( prior == cache->m_states.end( ) ) {
 			cache->m_states.push_back( { } );
@@ -152,7 +186,7 @@ namespace p2boost {
 		}
 
 		std::memcpy( prior->m_entry.data( ), entry, prior->m_entry.size( ) );
-		prior->m_flashlight_models = model_count;
+		prior->m_flashlight_models_value = models_value;
 	}
 
 }

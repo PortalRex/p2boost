@@ -17,7 +17,7 @@ game with `-vulkan`; native D3D9 is deliberately rejected.
 
 - More consistent `fps_max` frame delivery without changing simulation, input,
   VSync, fullscreen, or refresh-rate behavior.
-- A conservative projected-shadow cache that skips only identical receiver
+- A simulation-scoped projected-shadow cache that skips duplicate high-refresh
   rebuilds while preserving lighting and visual quality.
 - Working `mat_monitorgamma` and `mat_viewportscale` output on DXVK, including
   independent local split-screen viewports and remote-view composition.
@@ -42,10 +42,11 @@ changes:
   discarding it every frame. It still resets phase after real renderer work or
   a hitch and continues to respect `fps_max`, VSync, fullscreen, and refresh
   settings.
-- The projected-shadow cache skips only byte-identical receiver-projection
-  rebuilds. It keeps the engine's dirty-list cleanup, shadow-depth rendering,
-  lighting, and all visual settings. The cache invalidates on map, focus,
-  plugin, and A/B state transitions.
+- The projected-shadow cache skips byte-identical receiver-projection rebuilds
+  only within one simulation generation. It keeps the engine's dirty-list
+  cleanup, shadow-depth rendering, lighting, and all visual settings. A full
+  vanilla rebuild follows every simulation, entity, map, focus, plugin, and
+  A/B state transition.
 
 The DXVK compatibility layer also restores two shipped display controls. A
 final gamma pass makes `mat_monitorgamma` functional, while the missing viewport

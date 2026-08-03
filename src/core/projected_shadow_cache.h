@@ -6,14 +6,15 @@
 #include <array>
 #include <atomic>
 #include <cstdint>
+#include <mutex>
 #include <vector>
 
 namespace p2boost {
 
 	class FrameMetrics;
 
-	// reuse a projected-shadow receiver list only when every renderer-visible
-	// input is byte-identical. Dirty-list cleanup still runs on every cache hit.
+	// Reuse a projected-shadow receiver list only within one simulation
+	// generation. Dirty-list cleanup still runs on every cache hit.
 	class ProjectedShadowCache {
 	public:
 		~ProjectedShadowCache( );
@@ -35,7 +36,7 @@ namespace p2boost {
 		struct cached_state_t {
 			std::uint16_t					  m_handle{ };
 			std::array< std::uint8_t, 0x114 > m_entry{ };
-			int								  m_flashlight_models{ };
+			int								  m_flashlight_models_value{ };
 		};
 
 		using UpdateProjectedFn = void( __thiscall* )( void*, unsigned int, bool );
@@ -48,7 +49,9 @@ namespace p2boost {
 		VmtHook						  m_update_projected;
 		FrameMetrics*				  m_metrics{ };
 		std::vector< cached_state_t > m_states;
-		int**						  m_flashlight_models_parent{ };
+		std::mutex					  m_state_mutex;
+		std::uint64_t				  m_generation{ };
+		int**						  m_flashlight_models_cvar_parent{ };
 		RemoveDirtyFn				  m_remove_dirty{ };
 		std::atomic_bool			  m_enabled{ };
 		std::atomic_uint			  m_hits{ };
