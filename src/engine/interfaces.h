@@ -77,6 +77,16 @@ namespace p2boost::sdk {
 	// VEngineRenderView013 exposes the optional VGui_Paint renderer guard.
 	class RenderView final : public Interface {};
 
+	// IShadowMgr exposes the immutable state associated with an engine shadow
+	// handle. The optimizer reads only the priority bit already consumed by
+	// Portal 2's active-depth-list implementation.
+	class ShadowManager final : public Interface {
+	public:
+		__forceinline const void* GetFlashlightState( unsigned short handle ) {
+			return call< portal2::vmt::shadow_get_flashlight_state, const void* >( handle );
+		}
+	};
+
 	class Material final : public Interface {
 	public:
 		// expose only the material metadata needed by the classifier.

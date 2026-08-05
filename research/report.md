@@ -286,6 +286,33 @@ byte-identical cache hits it costs 0.0002 ms median and 0.0004 ms p99.
 Eliding it cannot improve the remaining co-op tail and could leave a renderable
 incorrectly dirty, so the exact engine cleanup remains mandatory.
 
+### Projected shadow-depth selection
+
+Static analysis of build `23973718` also recovered the complete per-view depth
+selection at preferred client address `0x100f1650` and its sole production call
+from `CClientShadowMgr::ComputeShadowDepthTextures` at `0x100f1d04`. Portal 2
+first inverts each projected-light matrix into an axis-aligned world box, builds
+the current `CViewSetup` frustum, and calls the same box/frustum test found in
+Valve's public Source implementation. That test is conservative but loose: a
+rotated or long projected frustum can have an overlapping AABB while every
+point in its true convex volume remains outside the rendered view.
+
+Version 0.8.6 preserves the original selector and filters only its returned
+handles. It reconstructs the normalized `[0,1]` projected volume from the
+stored world-to-shadow matrix, reconstructs the finite camera volume from the
+exact `CViewSetup`, and applies the complete convex-polyhedron separating-axis
+test: both sets of face normals and every projected pair of edge directions.
+Only a separation larger than 0.25 world units is accepted; singular,
+non-finite, degenerate, and near-touching cases remain active. Because the hook
+runs inside every stock depth-list call, portal, split-screen, and remote views
+make their own decision rather than inheriting main-view visibility.
+
+The hook also recounts Portal 2's high-priority depth-cache reservation after
+compacting the handle list. It does not change shadow resolution, update rate,
+caster flags, light state, materials, receiver membership, or any cvar. This
+path was implemented from static analysis without an in-game A/B at the user's
+request, so no performance magnitude is claimed yet.
+
 `client.dll` RVA `0x1ee590` is the profiled
 `CViewRender::ViewDrawScene_PortalStencil` routine. Both verified callers (RVAs
 `0x285c91` and `0x2c57db`) are traced. With local split-screen and two active

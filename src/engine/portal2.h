@@ -16,6 +16,23 @@ namespace p2boost::portal2 {
 		constexpr auto shadow_manager = "50 57 53 B9 ? ? ? ? E8 ? ? ? ? 5F 5B 5E 5D C3";
 
 		constexpr auto flashlight_models = "6A 00 68 ? ? ? ? FF 15 ? ? ? ? 8B 0D ? ? ? ? 83 79 30 00 8D 86 A0 00 00 00";
+
+		// ComputeShadowDepthTextures calls the private active-list builder after
+		// preparing its 1024-handle output buffer. This is the only call site that
+		// owns the per-view shadow-depth selection used by the renderer.
+		constexpr auto active_shadow_depth_call =
+			"8D 4D EC 51 8D 95 88 F6 FF FF 52 68 00 04 00 00 50 8B CE C7 45 EC 00 00 00 00 E8 ? ? ? ? 8B 15";
+
+		// Portal 2's active-list implementation has a stack-aligned prologue due
+		// to its 1024-float sort workspace. Validating the target prevents a nearby
+		// private helper from ever being accepted as the selection function.
+		constexpr auto active_shadow_depth_list =
+			"53 8B DC 83 EC 08 83 E4 F0 83 C4 04 55 8B 6B 04 89 6C 24 04 8B EC B8 88 11 00 00";
+
+		// The selected-list loop resolves IShadowMgr before reading the retained
+		// FlashlightState_t. This xref gives the optimizer the public manager ABI
+		// without embedding the address of Portal 2's private global.
+		constexpr auto active_shadow_manager = "0F B7 3A 8B 0D ? ? ? ? 69 FF 14 01 00 00 03 7E 2C";
 	}
 
 	// operand offsets inside the unique signatures above.
@@ -24,6 +41,8 @@ namespace p2boost::portal2 {
 		constexpr std::ptrdiff_t flat_texture_device_global{ 17 };
 		constexpr std::ptrdiff_t shadow_manager_object{ 4 };
 		constexpr std::ptrdiff_t flashlight_models_global{ 15 };
+		constexpr std::ptrdiff_t active_shadow_depth_call{ 26 };
+		constexpr std::ptrdiff_t active_shadow_manager_global{ 5 };
 
 		// VEngineClient015::ClientCmd contains one direct Cbuf_AddText call. SAR's
 		// public Portal 2 10090 offsets independently identify this rel32 operand.
@@ -41,11 +60,27 @@ namespace p2boost::portal2 {
 		constexpr std::ptrdiff_t flashlight_models{ 0x30 };
 		constexpr size_t		 entry_size{ 0x114 };
 		constexpr std::ptrdiff_t remove_dirty_call{ 0x75 };
+		constexpr std::ptrdiff_t engine_handle{ 0x04 };
+		constexpr std::ptrdiff_t world_to_shadow{ 0x0c };
+		constexpr std::ptrdiff_t high_priority{ 0x94 };
+	}
+
+	// CViewSetup fields read by BuildActiveShadowDepthList in build 23973718.
+	// Keeping these verified fields together avoids pretending the much larger
+	// private Portal 2 structure is reproduced in the public SDK wrapper.
+	namespace view {
+		constexpr std::ptrdiff_t fov{ 0x68 };
+		constexpr std::ptrdiff_t origin{ 0x70 };
+		constexpr std::ptrdiff_t angles{ 0x7c };
+		constexpr std::ptrdiff_t near_z{ 0x88 };
+		constexpr std::ptrdiff_t far_z{ 0x8c };
+		constexpr std::ptrdiff_t aspect_ratio{ 0x98 };
 	}
 
 	// VMT indices describe ABI layout rather than process addresses.
 	namespace vmt {
 		constexpr size_t update_projected{ 24 };
+		constexpr size_t shadow_get_flashlight_state{ 20 };
 		constexpr size_t engine_client_cmd{ 7 };
 		constexpr size_t engine_is_recording_demo{ 79 };
 		constexpr size_t engine_execute_client_cmd{ 104 };

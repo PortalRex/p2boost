@@ -18,7 +18,8 @@ game with `-vulkan`; native D3D9 is deliberately rejected.
 - More consistent `fps_max` frame delivery without changing simulation, input,
   VSync, fullscreen, or refresh-rate behavior.
 - A simulation-scoped projected-shadow cache that skips duplicate high-refresh
-  rebuilds while preserving lighting and visual quality.
+  rebuilds, plus exact per-view frustum rejection for projected shadow maps
+  that cannot contribute to the main, portal, split-screen, or remote view.
 - Working `mat_monitorgamma` and `mat_viewportscale` output on DXVK, including
   independent local split-screen viewports and remote-view composition.
 - Optional alpha-safe flat textures through `p2boost_flat_textures`, disabled
@@ -36,7 +37,7 @@ demo or simulation change, replacement game DLL, or D3D9 proxy.
 ## Verified performance changes
 
 The release contains two independently measured, gameplay-neutral performance
-changes:
+changes and one conservative projected-shadow selection correction:
 
 - The frame limiter carries ordinary sub-frame deadline overshoot instead of
   discarding it every frame. It still resets phase after real renderer work or
@@ -47,6 +48,15 @@ changes:
   cleanup, shadow-depth rendering, lighting, and all visual settings. A full
   vanilla rebuild follows every simulation, entity, map, focus, plugin, and
   A/B state transition.
+- Portal 2's active shadow-depth list uses the axis-aligned box surrounding each
+  projected-light frustum. A long rotated box can overlap the camera box even
+  when the actual convex volumes do not intersect, causing a complete extra
+  shadow-depth scene render that cannot affect a pixel. p2boost retains all of
+  Portal 2's existing visibility, priority, split-screen, and shadow-limit
+  decisions, then applies a separating-axis test to the two finite frusta. It
+  keeps uncertain, singular, and near-touching cases. This implementation was
+  added from static analysis at the user's request and is intentionally not
+  presented as benchmark-verified until an in-game A/B capture is supplied.
 
 The DXVK compatibility layer also restores two shipped display controls. A
 final gamma pass makes `mat_monitorgamma` functional, while the missing viewport
@@ -121,8 +131,9 @@ To remove the plugin:
 ## Commands
 
 - `p2boost_status` prints the build fingerprint, DXVK/Vulkan and NVIDIA-profile
-  state, enabled fixes, display-pass counts, demo-marker readiness, SAR state,
-  overlay availability, and metric count.
+  state, enabled fixes, projected-shadow cache hits and exact-frustum culls,
+  display-pass counts, demo-marker readiness, SAR state, overlay availability,
+  and metric count.
 - `p2boost_enable 0|1` provides a reversible runtime A/B switch.
 - `p2boost_flat_textures 0|1` replaces proven color-bearing world/model samplers
   with their dominant tone and substitutes a valid neutral texture for normal/
