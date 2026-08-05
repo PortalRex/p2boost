@@ -1101,3 +1101,39 @@ player slots filled their independent halves, and a physically held
 `+remote_view` filled the complete lower-right panel rather than only its
 top-left quarter. The permanent geometry cases are also covered by the native
 test executable.
+
+## Remote co-op lifetime and overlay ownership
+
+The server-plugin callback model is asymmetric in online co-op. The host owns
+the listen server and receives `IServerPluginCallbacks::GameFrame`; Orange is a
+remote client and does not receive that callback as a local render heartbeat.
+Two features incorrectly depended on it: projected-shadow cache generations
+and profiler text scheduling.
+
+For projected shadows, that asymmetry allowed Orange to retain a cached
+receiver list across client entity replacement. A goo death replaces the
+remote player renderable with a client ragdoll during the network update. The
+new hook chains `VClient016::FrameStageNotify`, clears the old generation at
+`FRAME_NET_UPDATE_START`, and clears any intermediate receiver list again at
+`FRAME_NET_UPDATE_END` after all `OnDataChanged` work has completed. The first
+projected-light update used for rendering therefore follows Portal 2's full
+receiver rebuild against the final client entity set. This closes the stale
+receiver path directly; no ragdoll is hidden, delayed, or excluded from
+projected lighting.
+
+The public SDK ragdoll null-dereference proposal checks a failed physics-ragdoll
+allocation inside `ragdoll_shared.cpp`. The observed p2boost fault instead
+followed stale client renderable ownership in the projected-shadow path, so
+transplanting that unrelated guard into a shipped Portal 2 function would
+conceal the wrong failure boundary.
+
+For the profiler, SAR establishes the correct ownership model by drawing from
+the local client UI-paint path. p2boost now schedules its existing public
+`VDebugOverlay004` lines from `VEngineRenderView013::VGui_Paint` when UI panels
+are painted. This adjacent render hook runs on both co-op machines without
+claiming SAR's `CEngineVGui::Paint` slot, preserving either load order. Co-op
+state is read locally through `VEngineClient015::GetMaxClients`, so Orange does
+not depend on `ServerActivate` for the panel label either.
+
+These changes were implemented from static analysis at the user's request.
+No build or runtime test was performed for version 0.8.7 in this change set.

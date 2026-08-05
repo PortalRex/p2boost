@@ -80,8 +80,10 @@ namespace p2boost::portal2 {
 	// VMT indices describe ABI layout rather than process addresses.
 	namespace vmt {
 		constexpr size_t update_projected{ 24 };
+		constexpr size_t base_client_frame_stage_notify{ 35 };
 		constexpr size_t shadow_get_flashlight_state{ 20 };
 		constexpr size_t engine_client_cmd{ 7 };
+		constexpr size_t engine_get_max_clients{ 21 };
 		constexpr size_t engine_is_recording_demo{ 79 };
 		constexpr size_t engine_execute_client_cmd{ 104 };
 		constexpr size_t engine_active_split_screen_slot{ 127 };
@@ -111,6 +113,18 @@ namespace p2boost::portal2 {
 		constexpr size_t d3d9_surface_release{ 2 };
 		constexpr size_t d3d9_surface_lock{ 13 };
 		constexpr size_t d3d9_surface_unlock{ 14 };
+	}
+
+	// ClientFrameStage_t values recovered from VClient016 and independently
+	// matched against Valve's public Source SDK ordering.
+	namespace frame_stage {
+		constexpr int net_update_start{ 1 };
+		constexpr int net_update_end{ 4 };
+	}
+
+	// PaintMode_t is part of the public render-view ABI.
+	namespace paint_mode {
+		constexpr int ui_panels{ 1 << 0 };
 	}
 
 }

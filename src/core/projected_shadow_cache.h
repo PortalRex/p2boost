@@ -28,7 +28,7 @@ namespace p2boost {
 		void set_enabled( bool enabled ) noexcept;
 
 		bool installed( ) const noexcept {
-			return m_update_projected.installed( ) && m_build_active_depth.installed( );
+			return m_update_projected.installed( ) && m_build_active_depth.installed( ) && m_frame_stage.installed( );
 		}
 
 		unsigned int hit_count( ) const noexcept {
@@ -49,15 +49,18 @@ namespace p2boost {
 		using UpdateProjectedFn	 = void( __thiscall* )( void*, unsigned int, bool );
 		using RemoveDirtyFn		 = void( __thiscall* )( void*, unsigned int );
 		using BuildActiveDepthFn = int( __thiscall* )( void*, const void*, int, std::uint16_t*, int* );
+		using FrameStageFn		 = void( __thiscall* )( void*, int );
 
 		static void __fastcall UpdateProjected( void* self, void*, unsigned int handle, bool force );
 		static int __fastcall BuildActiveDepthList(
 			void* self, void*, const void* view, int maximum, std::uint16_t* output, int* high_priority_count );
+		static void __fastcall FrameStageNotify( void* self, void*, int stage );
 
 		static ProjectedShadowCache* m_instance;
 
 		VmtHook						  m_update_projected;
 		CallSitePatch				  m_build_active_depth;
+		VmtHook						  m_frame_stage;
 		FrameMetrics*				  m_metrics{ };
 		std::vector< cached_state_t > m_states;
 		std::mutex					  m_state_mutex;

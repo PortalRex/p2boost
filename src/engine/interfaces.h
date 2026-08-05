@@ -61,6 +61,10 @@ namespace p2boost::sdk {
 	// VEngineClient015 methods used to place provenance inside recorded demos.
 	class EngineClient final : public Interface {
 	public:
+		__forceinline int GetMaxClients( ) {
+			return call< portal2::vmt::engine_get_max_clients, int >( );
+		}
+
 		__forceinline bool IsRecordingDemo( ) {
 			return call< portal2::vmt::engine_is_recording_demo, bool >( );
 		}
@@ -76,6 +80,10 @@ namespace p2boost::sdk {
 
 	// VEngineRenderView013 exposes the optional VGui_Paint renderer guard.
 	class RenderView final : public Interface {};
+
+	// VClient016 owns client entity updates on both the listen-server host and
+	// a remote Orange client. FrameStageNotify is hooked by verified VMT index.
+	class BaseClient final : public Interface {};
 
 	// IShadowMgr exposes the immutable state associated with an engine shadow
 	// handle. The optimizer reads only the priority bit already consumed by

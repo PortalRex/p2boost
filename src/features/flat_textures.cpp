@@ -564,14 +564,22 @@ namespace p2boost {
 		const Address material_end = materials.add( static_cast< std::ptrdiff_t >( pattern::image_size( materials ) ) );
 		const Address vgui_paint{ m_render_view->method( portal2::vmt::render_view_vgui_paint ) };
 		const Address engine_end = engine.add( static_cast< std::ptrdiff_t >( pattern::image_size( engine ) ) );
+
+		// The profiler owns this slot first. Accept only the stock engine target
+		// or an earlier hook inside this exact p2boost image before chaining it.
+		const Address plugin{ GetModuleHandleW( L"p2boost.dll" ) };
+		const Address plugin_end		   = plugin.add( static_cast< std::ptrdiff_t >( pattern::image_size( plugin ) ) );
+		const bool	  vgui_paint_is_engine = vgui_paint.as< std::uintptr_t >( ) >= engine.as< std::uintptr_t >( ) &&
+										  vgui_paint.as< std::uintptr_t >( ) < engine_end.as< std::uintptr_t >( );
+		const bool vgui_paint_is_plugin = plugin && vgui_paint.as< std::uintptr_t >( ) >= plugin.as< std::uintptr_t >( ) &&
+										  vgui_paint.as< std::uintptr_t >( ) < plugin_end.as< std::uintptr_t >( );
 		if( reload_textures.as< std::uintptr_t >( ) < materials.as< std::uintptr_t >( ) ||
 			reload_textures.as< std::uintptr_t >( ) >= material_end.as< std::uintptr_t >( ) ||
 			reload.as< std::uintptr_t >( ) < materials.as< std::uintptr_t >( ) ||
 			reload.as< std::uintptr_t >( ) >= material_end.as< std::uintptr_t >( ) ||
 			get_render_context.as< std::uintptr_t >( ) < materials.as< std::uintptr_t >( ) ||
 			get_render_context.as< std::uintptr_t >( ) >= material_end.as< std::uintptr_t >( ) ||
-			vgui_paint.as< std::uintptr_t >( ) < engine.as< std::uintptr_t >( ) ||
-			vgui_paint.as< std::uintptr_t >( ) >= engine_end.as< std::uintptr_t >( ) ) {
+			( !vgui_paint_is_engine && !vgui_paint_is_plugin ) ) {
 			m_render_view	  = nullptr;
 			m_material_system = nullptr;
 			m_device		  = nullptr;

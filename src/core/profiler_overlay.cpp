@@ -1,5 +1,8 @@
 #include "profiler_overlay.h"
 
+#include "address.h"
+#include "pattern.h"
+
 #include <Windows.h>
 
 #include <array>
@@ -12,6 +15,13 @@ namespace p2boost {
 		constexpr float panel_y{ 0.025f };
 		constexpr float line_height{ 0.022f };
 		constexpr float text_lifetime{ 0.35f };
+
+		// Read focus from the local process instead of a listen-server callback.
+		bool process_is_foreground( ) noexcept {
+			DWORD foreground_process{ };
+			GetWindowThreadProcessId( GetForegroundWindow( ), &foreground_process );
+			return foreground_process == GetCurrentProcessId( );
+		}
 
 		// keep engine overlay calls in one small typed helper.
 		void draw_line( sdk::DebugOverlay* overlay, int line, const std::array< int, 4 >& color, const char* text ) noexcept {
@@ -41,29 +51,57 @@ namespace p2boost {
 
 	}
 
-	bool ProfilerOverlay::connect( sdk::CreateInterfaceFn interface_factory ) noexcept {
-		// prefer the loader-provided factory so interface ownership stays explicit.
-		if( interface_factory )
-			m_debug_overlay = static_cast< sdk::DebugOverlay* >( interface_factory( "VDebugOverlay004", nullptr ) );
-		if( m_debug_overlay )
-			return true;
+	ProfilerOverlay* ProfilerOverlay::m_instance{ };
 
-		const HMODULE engine = GetModuleHandleW( L"engine.dll" );
-		if( !engine )
+	bool ProfilerOverlay::connect(
+		sdk::CreateInterfaceFn interface_factory, FrameMetrics* metrics, sdk::EngineClient* engine_client ) noexcept {
+		// prefer the loader-provided factory so interface ownership stays explicit.
+		if( m_instance || !interface_factory || !metrics || !engine_client )
 			return false;
 
-		auto factory = reinterpret_cast< sdk::CreateInterfaceFn >( GetProcAddress( engine, "CreateInterface" ) );
-		if( factory )
-			m_debug_overlay = static_cast< sdk::DebugOverlay* >( factory( "VDebugOverlay004", nullptr ) );
-		return m_debug_overlay != nullptr;
+		if( interface_factory )
+			m_debug_overlay = static_cast< sdk::DebugOverlay* >( interface_factory( "VDebugOverlay004", nullptr ) );
+		auto* render_view = static_cast< sdk::RenderView* >( interface_factory( "VEngineRenderView013", nullptr ) );
+		if( !m_debug_overlay || !render_view || !render_view->methods( ) )
+			return false;
+
+		// The supported fingerprint still validates that the recovered VMT slot
+		// resolves into engine.dll before p2boost changes it.
+		const Address engine{ GetModuleHandleW( L"engine.dll" ) };
+		const Address paint{ render_view->method( portal2::vmt::render_view_vgui_paint ) };
+		const Address engine_end = engine.add( static_cast< std::ptrdiff_t >( pattern::image_size( engine ) ) );
+		if( !engine || paint.as< std::uintptr_t >( ) < engine.as< std::uintptr_t >( ) ||
+			paint.as< std::uintptr_t >( ) >= engine_end.as< std::uintptr_t >( ) )
+			return false;
+
+		m_metrics		= metrics;
+		m_engine_client = engine_client;
+		m_instance		= this;
+		if( m_vgui_paint.install(
+				render_view->methods( ) + portal2::vmt::render_view_vgui_paint,
+				reinterpret_cast< void* >( &VGuiPaint ) ) )
+			return true;
+
+		m_instance		= nullptr;
+		m_metrics		= nullptr;
+		m_engine_client = nullptr;
+		m_debug_overlay = nullptr;
+		return false;
 	}
 
 	void ProfilerOverlay::disconnect( ) noexcept {
 		// p2boost lines expire naturally. clearing the engine overlay would also
 		// erase drawings owned by SAR and other plugins.
+		m_vgui_paint.remove( );
+		if( m_instance == this )
+			m_instance = nullptr;
+
 		m_debug_overlay = nullptr;
+		m_engine_client = nullptr;
+		m_metrics		= nullptr;
 		m_next_update	= 0;
 		m_enabled		= false;
+		m_fixes_enabled = false;
 	}
 
 	void ProfilerOverlay::set_enabled( bool enabled, FrameMetrics& metrics ) noexcept {
@@ -72,8 +110,28 @@ namespace p2boost {
 		m_next_update = 0;
 	}
 
-	void ProfilerOverlay::draw( const FrameMetrics& metrics, bool fixes_enabled, bool sar_loaded ) noexcept {
-		if( !m_enabled || !m_debug_overlay )
+	void ProfilerOverlay::set_fixes_enabled( bool enabled ) noexcept {
+		m_fixes_enabled = enabled;
+	}
+
+	void __fastcall ProfilerOverlay::VGuiPaint( void* self, void*, int mode ) {
+		ProfilerOverlay* overlay = m_instance;
+		if( !overlay )
+			return;
+
+		auto original = reinterpret_cast< VGuiPaintFn >( overlay->m_vgui_paint.previous( ) );
+		if( !original )
+			return;
+
+		// Schedule local UI text before Portal 2 paints it. This callback exists
+		// on a remote Orange client and does not overlap SAR's CEngineVGui hook.
+		if( mode & portal2::paint_mode::ui_panels )
+			overlay->draw( );
+		original( self, mode );
+	}
+
+	void ProfilerOverlay::draw( ) noexcept {
+		if( !m_enabled || !m_debug_overlay || !m_metrics )
 			return;
 
 		// refresh at 4 Hz while frame samples continue at render frequency.
@@ -82,7 +140,11 @@ namespace p2boost {
 			return;
 		m_next_update = now + Qpc::ticks( 250.0 );
 
-		draw_panel( metrics.overlay_metrics( ), fixes_enabled, sar_loaded );
+		// GetMaxClients reflects a remote co-op connection without a local server.
+		m_metrics->set_coop( m_engine_client && m_engine_client->GetMaxClients( ) > 1 );
+		m_metrics->set_focused( process_is_foreground( ) );
+		draw_panel(
+			m_metrics->overlay_metrics( ), m_fixes_enabled, GetModuleHandleW( L"sar.dll" ) != nullptr );
 	}
 
 	void ProfilerOverlay::draw_panel( const overlay_metrics_t& sample, bool fixes_enabled, bool sar_loaded ) noexcept {

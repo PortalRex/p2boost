@@ -109,8 +109,9 @@ namespace p2boost {
 			if( !viewport_cvars_ready )
 				m_verification.m_errors.emplace_back( "viewport cvars unavailable" );
 
-			m_overlay.connect( interface_factory );
 			m_engine_client = interface_factory ? static_cast< sdk::EngineClient* >( interface_factory( "VEngineClient015", nullptr ) ) : nullptr;
+			if( m_verification.m_supported && !m_overlay.connect( interface_factory, &m_metrics, m_engine_client ) )
+				m_verification.m_errors.emplace_back( "profiler client-paint interface unavailable" );
 			if( m_verification.m_supported && !m_demo_provenance.connect( m_engine_client ) )
 				m_verification.m_errors.emplace_back( "demo command-buffer xref unavailable" );
 
@@ -185,12 +186,6 @@ namespace p2boost {
 		}
 
 		void GameFrame( bool simulating ) override {
-			// Projected-light receiver membership can change without changing the
-			// private shadow bytes. Rebuild once after every simulation update, then
-			// allow exact reuse across the additional high-refresh render frames.
-			if( simulating )
-				m_shadow_cache.invalidate( );
-
 			// mirror only the state needed by diagnostics.
 			m_metrics.set_simulating( simulating );
 			m_demo_provenance.update( P2BOOST_VERSION, m_enabled, m_flat_textures.enabled( ) );
@@ -203,8 +198,6 @@ namespace p2boost {
 				m_shadow_cache.invalidate( );
 				m_last_focused = focused;
 			}
-
-			m_overlay.draw( m_metrics, m_enabled, GetModuleHandleW( L"sar.dll" ) != nullptr );
 		}
 
 		void LevelShutdown( ) override {
@@ -396,7 +389,7 @@ namespace p2boost {
 				m_overlay.set_enabled( enabled, m_metrics );
 
 			if( !m_overlay.available( ) )
-				console_print( "[p2boost] profiler unavailable: VDebugOverlay004 is missing\n" );
+				console_print( "[p2boost] profiler unavailable: local client paint interfaces are missing\n" );
 
 			return sdk::Stop;
 		}
@@ -418,6 +411,7 @@ namespace p2boost {
 			// both performance fixes share one reversible master switch.
 			m_frame_limiter.set_enabled( m_enabled );
 			m_shadow_cache.set_enabled( m_enabled );
+			m_overlay.set_fixes_enabled( m_enabled );
 		}
 
 		static void __cdecl CommandThunk( const sdk::CCommand& command ) {

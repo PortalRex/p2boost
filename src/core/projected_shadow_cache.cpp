@@ -5,6 +5,7 @@
 #include "frame_metrics.h"
 #include "pattern.h"
 #include "qpc.h"
+#include "sdk.h"
 
 #include <Windows.h>
 
@@ -305,6 +306,21 @@ namespace p2boost {
 		if( !client )
 			return false;
 
+		// VClient016 is the client lifecycle authority on every machine. Unlike
+		// server-plugin GameFrame, this interface also exists for remote Orange.
+		auto client_factory = reinterpret_cast< sdk::CreateInterfaceFn >(
+			GetProcAddress( client.as< HMODULE >( ), "CreateInterface" ) );
+		auto* base_client = client_factory ? static_cast< sdk::BaseClient* >( client_factory( "VClient016", nullptr ) ) : nullptr;
+		if( !base_client || !base_client->methods( ) )
+			return false;
+
+		// Validate the recovered slot against the fingerprinted client image.
+		const Address frame_stage{ base_client->method( portal2::vmt::base_client_frame_stage_notify ) };
+		const Address client_end = client.add( static_cast< std::ptrdiff_t >( pattern::image_size( client ) ) );
+		if( frame_stage.as< std::uintptr_t >( ) < client.as< std::uintptr_t >( ) ||
+			frame_stage.as< std::uintptr_t >( ) >= client_end.as< std::uintptr_t >( ) )
+			return false;
+
 		// this xref loads Portal 2's private CClientShadowMgr singleton.
 		const Address manager_xref = pattern::find_unique( client, portal2::signature::shadow_manager );
 		const Address manager	   = manager_xref.add( portal2::xref::shadow_manager_object ).at< Address >( );
@@ -364,11 +380,22 @@ namespace p2boost {
 			m_shadow_manager_parent		  = nullptr;
 			return false;
 		}
+		if( !m_frame_stage.install(
+				base_client->methods( ) + portal2::vmt::base_client_frame_stage_notify, reinterpret_cast< void* >( &FrameStageNotify ) ) ) {
+			m_build_active_depth.remove( );
+			m_update_projected.remove( );
+			m_instance					  = nullptr;
+			m_metrics					  = nullptr;
+			m_original_build_active_depth = nullptr;
+			m_shadow_manager_parent		  = nullptr;
+			return false;
+		}
 
 		return true;
 	}
 
 	void ProjectedShadowCache::remove( ) {
+		m_frame_stage.remove( );
 		m_build_active_depth.remove( );
 		m_update_projected.remove( );
 		invalidate( );
@@ -383,6 +410,28 @@ namespace p2boost {
 
 		if( m_instance == this )
 			m_instance = nullptr;
+	}
+
+	void __fastcall ProjectedShadowCache::FrameStageNotify( void* self, void*, int stage ) {
+		ProjectedShadowCache* cache = m_instance;
+		if( !cache )
+			return;
+
+		auto original = reinterpret_cast< FrameStageFn >( cache->m_frame_stage.previous( ) );
+		if( !original )
+			return;
+
+		// Drop the previous receiver generation before any OnDataChanged handler
+		// can replace a player with its goo-death ragdoll.
+		if( stage == portal2::frame_stage::net_update_start )
+			cache->invalidate( );
+
+		original( self, stage );
+
+		// Drop any intermediate receiver list built while the packet was being
+		// applied. Rendering begins with the final client entity topology only.
+		if( stage == portal2::frame_stage::net_update_end )
+			cache->invalidate( );
 	}
 
 	int __fastcall ProjectedShadowCache::BuildActiveDepthList(
