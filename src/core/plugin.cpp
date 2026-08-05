@@ -118,7 +118,7 @@ namespace p2boost {
 			// each feature validates its own signatures and remains disabled on failure.
 			if( m_verification.m_supported && !m_frame_limiter.install( &m_metrics ) )
 				m_verification.m_errors.emplace_back( "frame-limiter signature mismatch" );
-			if( m_verification.m_supported && !m_shadow_cache.install( &m_metrics ) )
+			if( m_verification.m_supported && !m_shadow_cache.install( interface_factory, &m_metrics ) )
 				m_verification.m_errors.emplace_back( "projected-shadow signature mismatch" );
 			if( m_verification.m_supported && !m_flat_textures.install( ) )
 				m_verification.m_errors.emplace_back( "optional flat-texture hooks unavailable" );

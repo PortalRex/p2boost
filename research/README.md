@@ -8,7 +8,8 @@ This directory is intentionally outside the release target.
 - `scripts` contains the matching ETW, PresentMon, gameplay-route, focus, and
   SAR test harnesses.
 - `benchmarks/native-d3d9-report.md` is the complete pre-Vulkan benchmark log.
-- `ghidra` contains the reproducible headless analysis exporter.
+- `ghidra` contains the reproducible headless analysis exporter and the targeted
+  `AuditRagdollShadowFix.java` model-instance/shadow-manager audit.
 - `report.md` records accepted and rejected hypotheses, signatures, xrefs, and
   causality evidence.
 

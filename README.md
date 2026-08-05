@@ -20,15 +20,17 @@ game with `-vulkan`; native D3D9 is deliberately rejected.
 - A client-update-scoped projected-shadow cache that skips duplicate
   high-refresh rebuilds, plus exact per-view frustum rejection for projected
   shadow maps that cannot contribute to the main, portal, split-screen, or
-  remote view. Client entity completion is observed on both co-op machines, so
-  a remote-player ragdoll cannot leave a stale projected-shadow receiver.
+  remote view. Model-instance transfers also clear the engine's stale
+  model-to-shadow mapping, preventing a goo-death ragdoll from crashing the
+  co-op partner's client.
 - Working `mat_monitorgamma` and `mat_viewportscale` output on DXVK, including
   independent local split-screen viewports and remote-view composition.
 - Optional alpha-safe flat textures through `p2boost_flat_textures`, disabled
   by default and kept separate from the performance fixes.
 - A toggleable frame-time overlay and bounded CSV tracing for diagnosing real
-  hitches instead of relying only on average FPS. The overlay is scheduled by
-  each local client's UI paint, including Orange on a remote co-op connection.
+  hitches instead of relying only on average FPS. The overlay is drawn directly
+  in each local client's final VGUI paint, including Orange on a remote co-op
+  connection.
 - Replay-visible demo provenance and compatibility with SAR in either plugin
   load order.
 - Automatic NVIDIA application-profile setup for the Vulkan alt-tab black
@@ -52,7 +54,9 @@ changes and one conservative projected-shadow selection correction:
   A full vanilla rebuild follows every completed entity update, entity, map,
   focus, plugin, and A/B state transition. This uses `VClient016` rather than a
   listen-server callback, so host and remote Orange receive the same lifetime
-  boundary.
+  boundary. A separate correctness hook mirrors Valve's ragdoll fix by removing
+  every shadow mapping from a model instance immediately after the engine moves
+  that instance to another renderable.
 - Portal 2's active shadow-depth list uses the axis-aligned box surrounding each
   projected-light frustum. A long rotated box can overlap the camera box even
   when the actual convex volumes do not intersect, causing a complete extra

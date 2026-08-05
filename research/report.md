@@ -885,14 +885,14 @@ boundary difference is expected because the two collectors start separately.
 
 The original display backend also used `Con_NXPrintf`, whose global console
 rows duplicated both panels over the orange half of Portal 2's vertical
-split-screen layout and could silently fail for an online orange client. The
-replacement binds the exact public `VDebugOverlay004` interface registered by
-this build and uses its normalized screen-text API. Visual SP and local co-op
-tests show one stable top-left panel, while `p2boost_status` separately reports
-`overlay_available` and `overlay` so a remote co-op installation failure is no
-longer silent. Portal and render-worker collection now remains active when the
-overlay is enabled even if full CSV tracing is off. Summed worker CPU time is
-presented as render-thread utilization and call count rather than misleading
+split-screen layout and could silently fail for an online orange client. An
+intermediate replacement used `VDebugOverlay004`; the current implementation
+instead draws through `VGUI_Surface031` in the final engine-VGUI paint, matching
+SAR's proven HUD ownership and draw lifetime. `p2boost_status` separately
+reports `overlay_available` and `overlay` so a remote co-op installation failure
+is no longer silent. Portal and render-worker collection remains active when
+the overlay is enabled even if full CSV tracing is off. Summed worker CPU time
+is presented as render-thread utilization and call count rather than misleading
 wall-clock milliseconds.
 
 The focus harness now rejects a window that does not cover its monitor. Before
@@ -1110,30 +1110,35 @@ remote client and does not receive that callback as a local render heartbeat.
 Two features incorrectly depended on it: projected-shadow cache generations
 and profiler text scheduling.
 
-For projected shadows, that asymmetry allowed Orange to retain a cached
-receiver list across client entity replacement. A goo death replaces the
-remote player renderable with a client ragdoll during the network update. The
-new hook chains `VClient016::FrameStageNotify`, clears the old generation at
-`FRAME_NET_UPDATE_START`, and clears any intermediate receiver list again at
-`FRAME_NET_UPDATE_END` after all `OnDataChanged` work has completed. The first
-projected-light update used for rendering therefore follows Portal 2's full
-receiver rebuild against the final client entity set. This closes the stale
-receiver path directly; no ragdoll is hidden, delayed, or excluded from
+For projected shadows, a goo death transfers the player model instance to a
+client ragdoll. Valve documents that `C_BaseEntity::SnatchModelInstance` moves
+the instance with `IVModelRender::ChangeInstance` but leaves the engine's
+internal model-to-shadow mapping behind; its prescribed fix calls
+`IShadowMgr::RemoveAllShadowsFromModel` after a successful move. The targeted
+Ghidra audit of build 23973718 found `SnatchModelInstance` at
+`client.dll+0x6fd10`, confirmed its call to `VEngineModel016` slot 7, and found
+no shadow-manager cleanup. p2boost therefore chains that exact `ChangeInstance`
+slot and, after success, calls `VEngineShadowMgr002` slot 11 before invalidating
+its own receiver cache. This safety hook stays active during an A/B performance
+disable because it repairs engine state rather than skipping render work.
+
+The existing `VClient016::FrameStageNotify` generation boundaries remain useful
+for cache correctness: they invalidate before and after network entity updates.
+They are not treated as a substitute for fixing the engine's separate stale
+model-to-shadow mapping. No ragdoll is hidden, delayed, or excluded from
 projected lighting.
 
-The public SDK ragdoll null-dereference proposal checks a failed physics-ragdoll
-allocation inside `ragdoll_shared.cpp`. The observed p2boost fault instead
-followed stale client renderable ownership in the projected-shadow path, so
-transplanting that unrelated guard into a shipped Portal 2 function would
-conceal the wrong failure boundary.
+For the profiler, SAR establishes the correct ownership model by drawing after
+`CEngineVGui::Paint`. p2boost now chains the same `VEngineVGui001` slot 14,
+calls the prior owner first, then brackets `VGUI_Surface031::DrawColoredText`
+with SAR's recovered `StartDrawing` and `FinishDrawing` helpers. Chaining
+preserves SAR in either plugin load order. Metrics are formatted at 4 Hz but
+the retained panel is painted every UI frame, eliminating the expired
+debug-overlay lifetime that made the old panel disappear. Co-op state is read
+locally through `VEngineClient015::GetMaxClients`, so Orange does not depend on
+`ServerActivate` for the panel label either.
 
-For the profiler, SAR establishes the correct ownership model by drawing from
-the local client UI-paint path. p2boost now schedules its existing public
-`VDebugOverlay004` lines from `VEngineRenderView013::VGui_Paint` when UI panels
-are painted. This adjacent render hook runs on both co-op machines without
-claiming SAR's `CEngineVGui::Paint` slot, preserving either load order. Co-op
-state is read locally through `VEngineClient015::GetMaxClients`, so Orange does
-not depend on `ServerActivate` for the panel label either.
-
-These changes were implemented from static analysis at the user's request.
-No build or runtime test was performed for version 0.8.7 in this change set.
+These changes were implemented from the Valve fix, SourceAutoRecord, and a
+targeted Ghidra audit at the user's request. A clean x86 Release build completed
+with `/W4 /WX`, and the native test suite passed. An in-game two-client goo-death
+and overlay smoke test was not available in this change set.

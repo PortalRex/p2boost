@@ -50,14 +50,6 @@ namespace p2boost::sdk {
 		}
 	};
 
-	// VDebugOverlay004 methods used by the lightweight profiler panel.
-	class DebugOverlay final : public Interface {
-	public:
-		__forceinline void AddScreenText( float x, float y, float lifetime, int red, int green, int blue, int alpha, const char* text ) {
-			call< 7, void >( x, y, lifetime, red, green, blue, alpha, text );
-		}
-	};
-
 	// VEngineClient015 methods used to place provenance inside recorded demos.
 	class EngineClient final : public Interface {
 	public:
@@ -78,6 +70,35 @@ namespace p2boost::sdk {
 		}
 	};
 
+	// VEngineModel016 owns model-instance transfers. A ragdoll snatches its
+	// source entity's instance through ChangeInstance.
+	class ModelRender final : public Interface {};
+
+	// VEngineVGui001's private extension owns the final UI paint callback used
+	// by SourceAutoRecord and the p2boost profiler.
+	class EngineVGui final : public Interface {};
+
+	class Surface final : public Interface {
+	public:
+		__forceinline int GetFontTall( unsigned long font ) {
+			return call< portal2::vmt::surface_get_font_tall, int >( font );
+		}
+	};
+
+	class Scheme final : public Interface {
+	public:
+		__forceinline unsigned long GetFont( const char* name, bool proportional ) {
+			return call< portal2::vmt::scheme_get_font, unsigned long >( name, proportional );
+		}
+	};
+
+	class SchemeManager final : public Interface {
+	public:
+		__forceinline Scheme* GetIScheme( unsigned long handle ) {
+			return call< portal2::vmt::scheme_manager_get_scheme, Scheme* >( handle );
+		}
+	};
+
 	// VEngineRenderView013 exposes the optional VGui_Paint renderer guard.
 	class RenderView final : public Interface {};
 
@@ -90,6 +111,10 @@ namespace p2boost::sdk {
 	// Portal 2's active-depth-list implementation.
 	class ShadowManager final : public Interface {
 	public:
+		__forceinline void RemoveAllShadowsFromModel( unsigned short handle ) {
+			call< portal2::vmt::shadow_remove_all_from_model, void >( handle );
+		}
+
 		__forceinline const void* GetFlashlightState( unsigned short handle ) {
 			return call< portal2::vmt::shadow_get_flashlight_state, const void* >( handle );
 		}

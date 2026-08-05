@@ -2,6 +2,7 @@
 
 #include "hook.h"
 #include "portal2.h"
+#include "sdk.h"
 
 #include <array>
 #include <atomic>
@@ -22,13 +23,14 @@ namespace p2boost {
 	public:
 		~ProjectedShadowCache( );
 
-		bool install( FrameMetrics* metrics );
+		bool install( sdk::CreateInterfaceFn interface_factory, FrameMetrics* metrics );
 		void remove( );
 		void invalidate( ) noexcept;
 		void set_enabled( bool enabled ) noexcept;
 
 		bool installed( ) const noexcept {
-			return m_update_projected.installed( ) && m_build_active_depth.installed( ) && m_frame_stage.installed( );
+			return m_update_projected.installed( ) && m_build_active_depth.installed( ) && m_frame_stage.installed( ) &&
+				   m_change_instance.installed( );
 		}
 
 		unsigned int hit_count( ) const noexcept {
@@ -50,17 +52,20 @@ namespace p2boost {
 		using RemoveDirtyFn		 = void( __thiscall* )( void*, unsigned int );
 		using BuildActiveDepthFn = int( __thiscall* )( void*, const void*, int, std::uint16_t*, int* );
 		using FrameStageFn		 = void( __thiscall* )( void*, int );
+		using ChangeInstanceFn = bool( __thiscall* )( void*, unsigned short, void* );
 
 		static void __fastcall UpdateProjected( void* self, void*, unsigned int handle, bool force );
 		static int __fastcall BuildActiveDepthList(
 			void* self, void*, const void* view, int maximum, std::uint16_t* output, int* high_priority_count );
 		static void __fastcall FrameStageNotify( void* self, void*, int stage );
+		static bool __fastcall ChangeInstance( void* self, void*, unsigned short handle, void* renderable );
 
 		static ProjectedShadowCache* m_instance;
 
 		VmtHook						  m_update_projected;
 		CallSitePatch				  m_build_active_depth;
 		VmtHook						  m_frame_stage;
+		VmtHook						  m_change_instance;
 		FrameMetrics*				  m_metrics{ };
 		std::vector< cached_state_t > m_states;
 		std::mutex					  m_state_mutex;
@@ -69,6 +74,7 @@ namespace p2boost {
 		RemoveDirtyFn				  m_remove_dirty{ };
 		BuildActiveDepthFn			  m_original_build_active_depth{ };
 		sdk::ShadowManager**		  m_shadow_manager_parent{ };
+		sdk::ShadowManager*		  m_engine_shadow_manager{ };
 		std::atomic_bool			  m_enabled{ };
 		std::atomic_uint			  m_hits{ };
 		std::atomic_uint			  m_depth_culls{ };

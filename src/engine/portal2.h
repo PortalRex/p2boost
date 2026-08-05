@@ -81,13 +81,24 @@ namespace p2boost::portal2 {
 	namespace vmt {
 		constexpr size_t update_projected{ 24 };
 		constexpr size_t base_client_frame_stage_notify{ 35 };
+		constexpr size_t model_render_change_instance{ 7 };
+		constexpr size_t shadow_remove_all_from_model{ 11 };
 		constexpr size_t shadow_get_flashlight_state{ 20 };
 		constexpr size_t engine_client_cmd{ 7 };
 		constexpr size_t engine_get_max_clients{ 21 };
 		constexpr size_t engine_is_recording_demo{ 79 };
 		constexpr size_t engine_execute_client_cmd{ 104 };
 		constexpr size_t engine_active_split_screen_slot{ 127 };
+		constexpr size_t engine_vgui_paint{ 14 };
 		constexpr size_t render_view_vgui_paint{ 36 };
+
+		// SourceAutoRecord's current Portal 2 HUD path independently identifies
+		// these private CMatSystemSurface helpers and public scheme slots.
+		constexpr size_t surface_get_font_tall{ 72 };
+		constexpr size_t surface_paint_traverse_ex{ 117 };
+		constexpr size_t surface_draw_colored_text{ 160 };
+		constexpr size_t scheme_manager_get_scheme{ 8 };
+		constexpr size_t scheme_get_font{ 3 };
 
 		// VMaterialSystem080 and public D3D9 ABI methods used by the optional
 		// flat-texture feature. these describe interface layout, not addresses.
@@ -125,6 +136,13 @@ namespace p2boost::portal2 {
 	// PaintMode_t is part of the public render-view ABI.
 	namespace paint_mode {
 		constexpr int ui_panels{ 1 << 0 };
+	}
+
+	// rel32 call operands inside CMatSystemSurface::PaintTraverseEx. These are
+	// the Windows offsets used by SAR for the supported Portal 2 surface ABI.
+	namespace surface {
+		constexpr std::ptrdiff_t start_drawing_operand{ 127 };
+		constexpr std::ptrdiff_t finish_drawing_operand{ 603 };
 	}
 
 }
