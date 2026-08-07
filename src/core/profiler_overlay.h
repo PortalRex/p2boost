@@ -28,15 +28,15 @@ namespace p2boost {
 
 	private:
 		using EngineVGuiPaintFn = int( __thiscall* )( void*, int );
-		using StartDrawingFn	 = int( __thiscall* )( void* );
-		using FinishDrawingFn	 = int( __cdecl* )( );
+		using StartDrawingFn	= int( __thiscall* )( void* );
+		using FinishDrawingFn	= int( __cdecl* )( );
 		using DrawColoredTextFn = int( __cdecl* )(
 			void*, unsigned long, int, int, int, int, int, int, const char*, ... );
 
 		static int __fastcall EngineVGuiPaint( void* self, void*, int mode );
-		void draw( ) noexcept;
-		void draw_panel( const overlay_metrics_t& sample, bool fixes_enabled, bool sar_loaded ) noexcept;
-		void draw_line( int line, const std::array< int, 4 >& color, const char* text ) noexcept;
+		void				  draw( ) noexcept;
+		void				  draw_panel( const overlay_metrics_t& sample, bool fixes_enabled, bool sar_loaded ) noexcept;
+		void				  draw_line( int line, const std::array< int, 4 >& color, const char* text ) noexcept;
 
 		static ProfilerOverlay* m_instance;
 
@@ -45,15 +45,15 @@ namespace p2boost {
 		FrameMetrics*	   m_metrics{ };
 		VmtHook			   m_engine_vgui_paint;
 		StartDrawingFn	   m_start_drawing{ };
-		FinishDrawingFn   m_finish_drawing{ };
-		DrawColoredTextFn m_draw_colored_text{ };
-		overlay_metrics_t m_sample{ };
+		FinishDrawingFn	   m_finish_drawing{ };
+		DrawColoredTextFn  m_draw_colored_text{ };
+		overlay_metrics_t  m_sample{ };
 		Qpc::tick_t		   m_next_update{ };
 		unsigned long	   m_font{ };
 		int				   m_line_height{ 16 };
-		bool				   m_have_sample{ };
-		bool				   m_enabled{ };
-		bool				   m_fixes_enabled{ };
+		bool			   m_have_sample{ };
+		bool			   m_enabled{ };
+		bool			   m_fixes_enabled{ };
 	};
 
 }

@@ -175,8 +175,8 @@ namespace p2boost {
 		// Private VMT hooks resolve methods from these mapped modules. Hashing the
 		// on-disk files is insufficient if a different copy was loaded first.
 		const std::wstring material_system = root + L"\\bin\\materialsystem.dll";
-		const std::wstring surface         = root + L"\\bin\\vguimatsurface.dll";
-		const std::wstring vgui            = root + L"\\bin\\vgui2.dll";
+		const std::wstring surface		   = root + L"\\bin\\vguimatsurface.dll";
+		const std::wstring vgui			   = root + L"\\bin\\vgui2.dll";
 		if( !is_loaded_from( L"materialsystem.dll", material_system ) )
 			result.m_errors.emplace_back( "materialsystem.dll was not loaded from the verified Portal 2 installation" );
 		if( !is_loaded_from( L"vguimatsurface.dll", surface ) )
@@ -188,7 +188,7 @@ namespace p2boost {
 		const std::wstring shader_api = root + L"\\bin\\shaderapivk.dll";
 		const std::wstring dxvk		  = root + L"\\bin\\dxvk_d3d9.dll";
 		result.m_dxvk_vulkan		  = is_loaded_from( L"shaderapivk.dll", shader_api ) && is_loaded_from( L"dxvk_d3d9.dll", dxvk ) &&
-							   GetModuleHandleW( L"vulkan-1.dll" ) != nullptr;
+										GetModuleHandleW( L"vulkan-1.dll" ) != nullptr;
 		if( !result.m_dxvk_vulkan )
 			result.m_errors.emplace_back( "Portal 2's shipped DXVK/Vulkan backend is not active; launch with -vulkan" );
 

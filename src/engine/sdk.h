@@ -63,9 +63,9 @@ namespace p2boost::sdk {
 		virtual PluginResult ClientCommand( edict_t* entity, const CCommand& args )											   = 0;
 		virtual PluginResult NetworkIDValidated( const char* user_name, const char* network_id )							   = 0;
 		virtual void		 OnQueryCvarValueFinished(
-					int cookie, edict_t* player, QueryStatus status, const char* cvar_name, const char* cvar_value ) = 0;
-		virtual void OnEdictAllocated( edict_t* edict )																 = 0;
-		virtual void OnEdictFreed( const edict_t* edict )															 = 0;
+			int cookie, edict_t* player, QueryStatus status, const char* cvar_name, const char* cvar_value ) = 0;
+		virtual void OnEdictAllocated( edict_t* edict )														 = 0;
+		virtual void OnEdictFreed( const edict_t* edict )													 = 0;
 	};
 
 }

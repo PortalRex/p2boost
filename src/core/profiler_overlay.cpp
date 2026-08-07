@@ -36,10 +36,10 @@ namespace p2boost {
 				return false;
 
 			const auto signature = pattern::parse( text );
-			const auto base      = module.as< std::uintptr_t >( );
-			const auto current   = address.as< std::uintptr_t >( );
-			const auto size      = pattern::image_size( module );
-			const auto offset    = static_cast< size_t >( current - base );
+			const auto base		 = module.as< std::uintptr_t >( );
+			const auto current	 = address.as< std::uintptr_t >( );
+			const auto size		 = pattern::image_size( module );
+			const auto offset	 = static_cast< size_t >( current - base );
 			if( signature.empty( ) || offset > size || signature.size( ) > size - offset )
 				return false;
 
@@ -68,7 +68,7 @@ namespace p2boost {
 		if( m_instance || !interface_factory || !metrics || !engine_client || !engine_client->methods( ) )
 			return false;
 
-		auto* engine_vgui = static_cast< sdk::EngineVGui* >( interface_factory( "VEngineVGui001", nullptr ) );
+		auto*		  engine_vgui = static_cast< sdk::EngineVGui* >( interface_factory( "VEngineVGui001", nullptr ) );
 		const Address engine{ GetModuleHandleW( L"engine.dll" ) };
 		const Address surface_module{ GetModuleHandleW( L"vguimatsurface.dll" ) };
 		const Address vgui_module{ GetModuleHandleW( L"vgui2.dll" ) };
@@ -83,7 +83,7 @@ namespace p2boost {
 			GetProcAddress( surface_module.as< HMODULE >( ), "CreateInterface" ) );
 		auto scheme_factory = reinterpret_cast< sdk::CreateInterfaceFn >(
 			GetProcAddress( vgui_module.as< HMODULE >( ), "CreateInterface" ) );
-		m_surface = surface_factory ? static_cast< sdk::Surface* >( surface_factory( "VGUI_Surface031", nullptr ) ) : nullptr;
+		m_surface			 = surface_factory ? static_cast< sdk::Surface* >( surface_factory( "VGUI_Surface031", nullptr ) ) : nullptr;
 		auto* scheme_manager = scheme_factory ? static_cast< sdk::SchemeManager* >( scheme_factory( "VGUI_Scheme010", nullptr ) ) : nullptr;
 		if( !m_surface || !m_surface->methods( ) || !scheme_manager || !scheme_manager->methods( ) ) {
 			m_surface = nullptr;
@@ -95,7 +95,7 @@ namespace p2boost {
 		const Address paint_traverse{ m_surface->method( portal2::vmt::surface_paint_traverse_ex ) };
 		const Address draw_colored_text{ m_surface->method( portal2::vmt::surface_draw_colored_text ) };
 		const Address get_font_tall{ m_surface->method( portal2::vmt::surface_get_font_tall ) };
-		const Address start_operand = paint_traverse.add( portal2::surface::start_drawing_operand );
+		const Address start_operand	 = paint_traverse.add( portal2::surface::start_drawing_operand );
 		const Address finish_operand = paint_traverse.add( portal2::surface::finish_drawing_operand );
 		if( !signature_at( paint_traverse, surface_module, portal2::signature::overlay_surface_paint_traverse ) ||
 			!signature_at( draw_colored_text, surface_module, portal2::signature::overlay_surface_draw_colored_text ) ||
@@ -106,7 +106,7 @@ namespace p2boost {
 			return false;
 		}
 
-		const Address start_drawing = start_operand.rel32( );
+		const Address start_drawing	 = start_operand.rel32( );
 		const Address finish_drawing = finish_operand.rel32( );
 		if( !signature_at( start_drawing, surface_module, portal2::signature::overlay_surface_start_drawing ) ||
 			!signature_at( finish_drawing, surface_module, portal2::signature::overlay_surface_finish_drawing ) ) {
@@ -133,7 +133,7 @@ namespace p2boost {
 
 		const Address sar{ GetModuleHandleW( L"sar.dll" ) };
 		const Address engine_paint{ engine_vgui->method( portal2::vmt::engine_vgui_paint ) };
-		const bool engine_owned = address_in_module( engine_paint, engine );
+		const bool	  engine_owned = address_in_module( engine_paint, engine );
 		if( ( !engine_owned && !address_in_module( engine_paint, sar ) ) ||
 			( engine_owned && !signature_at( engine_paint, engine, portal2::signature::overlay_engine_vgui_paint ) ) ) {
 			m_surface = nullptr;
@@ -141,26 +141,26 @@ namespace p2boost {
 			return false;
 		}
 
-		m_start_drawing	 = start_drawing.as< StartDrawingFn >( );
-		m_finish_drawing	 = finish_drawing.as< FinishDrawingFn >( );
+		m_start_drawing		= start_drawing.as< StartDrawingFn >( );
+		m_finish_drawing	= finish_drawing.as< FinishDrawingFn >( );
 		m_draw_colored_text = draw_colored_text.as< DrawColoredTextFn >( );
-		m_line_height		 = std::max( m_surface->GetFontTall( m_font ) + 2, 12 );
-		m_metrics			 = metrics;
-		m_engine_client	 = engine_client;
-		m_instance			 = this;
+		m_line_height		= std::max( m_surface->GetFontTall( m_font ) + 2, 12 );
+		m_metrics			= metrics;
+		m_engine_client		= engine_client;
+		m_instance			= this;
 
 		if( m_engine_vgui_paint.install(
 				engine_vgui->methods( ) + portal2::vmt::engine_vgui_paint, reinterpret_cast< void* >( &EngineVGuiPaint ) ) )
 			return true;
 
-		m_instance			 = nullptr;
-		m_metrics			 = nullptr;
-		m_engine_client	 = nullptr;
-		m_surface			 = nullptr;
-		m_start_drawing	 = nullptr;
-		m_finish_drawing	 = nullptr;
+		m_instance			= nullptr;
+		m_metrics			= nullptr;
+		m_engine_client		= nullptr;
+		m_surface			= nullptr;
+		m_start_drawing		= nullptr;
+		m_finish_drawing	= nullptr;
 		m_draw_colored_text = nullptr;
-		m_font				 = 0;
+		m_font				= 0;
 		return false;
 	}
 
@@ -169,19 +169,19 @@ namespace p2boost {
 		if( m_instance == this )
 			m_instance = nullptr;
 
-		m_surface			 = nullptr;
-		m_engine_client	 = nullptr;
-		m_metrics			 = nullptr;
-		m_start_drawing	 = nullptr;
-		m_finish_drawing	 = nullptr;
+		m_surface			= nullptr;
+		m_engine_client		= nullptr;
+		m_metrics			= nullptr;
+		m_start_drawing		= nullptr;
+		m_finish_drawing	= nullptr;
 		m_draw_colored_text = nullptr;
-		m_sample			 = { };
-		m_next_update		 = 0;
-		m_font				 = 0;
-		m_line_height		 = 16;
-		m_have_sample		 = false;
-		m_enabled			 = false;
-		m_fixes_enabled	 = false;
+		m_sample			= { };
+		m_next_update		= 0;
+		m_font				= 0;
+		m_line_height		= 16;
+		m_have_sample		= false;
+		m_enabled			= false;
+		m_fixes_enabled		= false;
 	}
 
 	void ProfilerOverlay::set_enabled( bool enabled, FrameMetrics& metrics ) noexcept {
@@ -223,7 +223,7 @@ namespace p2boost {
 			m_next_update = now + Qpc::ticks( 250.0 );
 			m_metrics->set_coop( m_engine_client && m_engine_client->GetMaxClients( ) > 1 );
 			m_metrics->set_focused( process_is_foreground( ) );
-			m_sample		 = m_metrics->overlay_metrics( );
+			m_sample	  = m_metrics->overlay_metrics( );
 			m_have_sample = true;
 		}
 
@@ -271,7 +271,7 @@ namespace p2boost {
 					   sample.m_p99_ms,
 					   sample.m_max_ms );
 		const auto& timing_color = sample.m_hitch_count > 0 ? bad : sample.m_p99_ms >= 4.0 ? warning
-																	   : good;
+																						   : good;
 		draw_line( 1, timing_color, line );
 
 		std::array< char, overlay_metrics_t::graph_capacity + 3 > graph{ };

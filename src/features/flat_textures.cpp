@@ -568,16 +568,16 @@ namespace p2boost {
 		// The profiler owns this slot first. Accept only the stock engine target
 		// or an earlier hook inside this exact p2boost image before chaining it.
 		const Address plugin{ GetModuleHandleW( L"p2boost.dll" ) };
-		const Address plugin_end = plugin.add( static_cast< std::ptrdiff_t >( pattern::image_size( plugin ) ) );
-		const auto engine_paint_signature = pattern::parse( portal2::signature::overlay_engine_vgui_paint );
-		const auto paint_address = vgui_paint.as< std::uintptr_t >( );
-		const auto engine_begin  = engine.as< std::uintptr_t >( );
-		const auto engine_limit  = engine_end.as< std::uintptr_t >( );
-		const bool vgui_paint_is_engine = !engine_paint_signature.empty( ) && paint_address >= engine_begin &&
-										  paint_address <= engine_limit - engine_paint_signature.size( ) &&
-										  pattern::find( vgui_paint, engine_paint_signature.size( ), engine_paint_signature ) == vgui_paint;
-		const bool vgui_paint_is_plugin = plugin && vgui_paint.as< std::uintptr_t >( ) >= plugin.as< std::uintptr_t >( ) &&
-										  vgui_paint.as< std::uintptr_t >( ) < plugin_end.as< std::uintptr_t >( );
+		const Address plugin_end			 = plugin.add( static_cast< std::ptrdiff_t >( pattern::image_size( plugin ) ) );
+		const auto	  engine_paint_signature = pattern::parse( portal2::signature::overlay_engine_vgui_paint );
+		const auto	  paint_address			 = vgui_paint.as< std::uintptr_t >( );
+		const auto	  engine_begin			 = engine.as< std::uintptr_t >( );
+		const auto	  engine_limit			 = engine_end.as< std::uintptr_t >( );
+		const bool	  vgui_paint_is_engine	 = !engine_paint_signature.empty( ) && paint_address >= engine_begin &&
+											   paint_address <= engine_limit - engine_paint_signature.size( ) &&
+											   pattern::find( vgui_paint, engine_paint_signature.size( ), engine_paint_signature ) == vgui_paint;
+		const bool	  vgui_paint_is_plugin	 = plugin && vgui_paint.as< std::uintptr_t >( ) >= plugin.as< std::uintptr_t >( ) &&
+											   vgui_paint.as< std::uintptr_t >( ) < plugin_end.as< std::uintptr_t >( );
 		if( reload_textures.as< std::uintptr_t >( ) < materials.as< std::uintptr_t >( ) ||
 			reload_textures.as< std::uintptr_t >( ) >= material_end.as< std::uintptr_t >( ) ||
 			reload.as< std::uintptr_t >( ) < materials.as< std::uintptr_t >( ) ||
@@ -1018,9 +1018,9 @@ namespace p2boost {
 		}
 
 		const RECT		   flat_rect{ upload_destination.x,
-							  upload_destination.y,
-							  upload_destination.x + static_cast< LONG >( width ),
-							  upload_destination.y + static_cast< LONG >( height ) };
+									  upload_destination.y,
+									  upload_destination.x + static_cast< LONG >( width ),
+									  upload_destination.y + static_cast< LONG >( height ) };
 		IDirect3DSurface9* flat_surface{ };
 		D3DLOCKED_RECT	   source_bits{ };
 		D3DLOCKED_RECT	   destination_bits{ };
@@ -1039,20 +1039,20 @@ namespace p2boost {
 			return result;
 		}
 
-		const bool complete_base = level == 0 && upload_source.left == 0 && upload_source.top == 0 && width == source_description.Width &&
-								   height == source_description.Height && upload_destination.x == 0 && upload_destination.y == 0 &&
-								   width == destination_description.Width && height == destination_description.Height;
-		const flat_color_t color   = record.m_color_valid
-										 ? record.m_color
-										 : classify_flat_texture( record.m_format, source_bits.pBits, source_bits.Pitch, width, height );
-		const bool		   written = write_flat_texture( record.m_format,
-														 destination_bits.pBits,
-														 destination_bits.Pitch,
-														 source_bits.pBits,
-														 source_bits.Pitch,
-														 width,
-														 height,
-														 color );
+		const bool		   complete_base = level == 0 && upload_source.left == 0 && upload_source.top == 0 && width == source_description.Width &&
+										   height == source_description.Height && upload_destination.x == 0 && upload_destination.y == 0 &&
+										   width == destination_description.Width && height == destination_description.Height;
+		const flat_color_t color		 = record.m_color_valid
+											   ? record.m_color
+											   : classify_flat_texture( record.m_format, source_bits.pBits, source_bits.Pitch, width, height );
+		const bool		   written		 = write_flat_texture( record.m_format,
+															   destination_bits.pBits,
+															   destination_bits.Pitch,
+															   source_bits.pBits,
+															   source_bits.Pitch,
+															   width,
+															   height,
+															   color );
 		if( written )
 			instance->m_device_uploads.fetch_add( 1, std::memory_order_relaxed );
 		flat_surface->UnlockRect( );

@@ -52,10 +52,10 @@ namespace p2boost {
 		using RemoveDirtyFn		 = void( __thiscall* )( void*, unsigned int );
 		using BuildActiveDepthFn = int( __thiscall* )( void*, const void*, int, std::uint16_t*, int* );
 		using FrameStageFn		 = void( __thiscall* )( void*, int );
-		using ChangeInstanceFn = bool( __thiscall* )( void*, unsigned short, void* );
+		using ChangeInstanceFn	 = bool( __thiscall* )( void*, unsigned short, void* );
 
 		static void __fastcall UpdateProjected( void* self, void*, unsigned int handle, bool force );
-		static int __fastcall BuildActiveDepthList(
+		static int __fastcall  BuildActiveDepthList(
 			void* self, void*, const void* view, int maximum, std::uint16_t* output, int* high_priority_count );
 		static void __fastcall FrameStageNotify( void* self, void*, int stage );
 		static bool __fastcall ChangeInstance( void* self, void*, unsigned short handle, void* renderable );
