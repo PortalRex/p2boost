@@ -58,12 +58,15 @@ namespace p2boost {
 
 	}
 
-	const std::array< module_fingerprint_t, 4 >& supported_build_23973718( ) {
-		// only modules that define hooked code or the required backend belong in
-		// the production fingerprint. Native-D3D9 research modules are excluded.
-		static const std::array< module_fingerprint_t, 4 > modules{ {
+	const std::array< module_fingerprint_t, 7 >& supported_build_23973718( ) {
+		// Only modules that define hooked code, private overlay ABIs, or the
+		// required backend belong in the production fingerprint.
+		static const std::array< module_fingerprint_t, 7 > modules{ {
 			{ "engine.dll", "bin\\engine.dll", "5196eace78d5f2f47f8ce39a49b0efd15374a2b996b272642f0493ace42c24dc" },
 			{ "client.dll", "portal2\\bin\\client.dll", "2ff27c2878c258b2c16a0982e30b0d2f1bad9d213e42cc778dc2a2925c625137" },
+			{ "materialsystem.dll", "bin\\materialsystem.dll", "8b8bbdb77e72a23bef8e67f0b9800327338e125ba0fbfae68feb2dc864af4fbf" },
+			{ "vguimatsurface.dll", "bin\\vguimatsurface.dll", "2f1865aefc0eebe2e28289d827cbd737f6744e2ca2a28a830c78f4ab96d5eeb6" },
+			{ "vgui2.dll", "bin\\vgui2.dll", "d79a9a5dab2be278f7df93afcf864c509f0117b9c52b65bca984013d9614571e" },
 			{ "shaderapivk.dll", "bin\\shaderapivk.dll", "aaefa05d9c02049a0cca67a9181f71f5a7710fcc21474bd55c0e1deabba76e84" },
 			{ "dxvk_d3d9.dll", "bin\\dxvk_d3d9.dll", "7bf7c95d81ff33b951ff985037401ff5a792474f1e3b9c5d2f521affb92b9073" },
 		} };
@@ -168,6 +171,18 @@ namespace p2boost {
 				result.m_errors.emplace_back( std::string( module.m_name ) + " verification failed: " + error.what( ) );
 			}
 		}
+
+		// Private VMT hooks resolve methods from these mapped modules. Hashing the
+		// on-disk files is insufficient if a different copy was loaded first.
+		const std::wstring material_system = root + L"\\bin\\materialsystem.dll";
+		const std::wstring surface         = root + L"\\bin\\vguimatsurface.dll";
+		const std::wstring vgui            = root + L"\\bin\\vgui2.dll";
+		if( !is_loaded_from( L"materialsystem.dll", material_system ) )
+			result.m_errors.emplace_back( "materialsystem.dll was not loaded from the verified Portal 2 installation" );
+		if( !is_loaded_from( L"vguimatsurface.dll", surface ) )
+			result.m_errors.emplace_back( "vguimatsurface.dll was not loaded from the verified Portal 2 installation" );
+		if( !is_loaded_from( L"vgui2.dll", vgui ) )
+			result.m_errors.emplace_back( "vgui2.dll was not loaded from the verified Portal 2 installation" );
 
 		// filenames alone are insufficient; verify the loaded backend paths too.
 		const std::wstring shader_api = root + L"\\bin\\shaderapivk.dll";

@@ -20,13 +20,14 @@ game with `-vulkan`; native D3D9 is deliberately rejected.
 - A client-update-scoped projected-shadow cache that skips duplicate
   high-refresh rebuilds, plus exact per-view frustum rejection for projected
   shadow maps that cannot contribute to the main, portal, split-screen, or
-  remote view. Model-instance transfers also clear the engine's stale
-  model-to-shadow mapping, preventing a goo-death ragdoll from crashing the
-  co-op partner's client.
+  remote view. Model-instance transfers invalidate p2boost's receiver cache
+  after the supported engine performs Valve's model-shadow cleanup.
 - Working `mat_monitorgamma` and `mat_viewportscale` output on DXVK, including
   independent local split-screen viewports and remote-view composition.
 - Optional alpha-safe flat textures through `p2boost_flat_textures`, disabled
-  by default and kept separate from the performance fixes.
+  by default and kept separate from the performance fixes. Its VGUI exclusion
+  chains the verified engine paint callback; it never intercepts render-view
+  geometry or water-volume queries.
 - A toggleable frame-time overlay and bounded CSV tracing for diagnosing real
   hitches instead of relying only on average FPS. The overlay is drawn directly
   in each local client's final VGUI paint, including Orange on a remote co-op
@@ -54,9 +55,11 @@ changes and one conservative projected-shadow selection correction:
   A full vanilla rebuild follows every completed entity update, entity, map,
   focus, plugin, and A/B state transition. This uses `VClient016` rather than a
   listen-server callback, so host and remote Orange receive the same lifetime
-  boundary. A separate correctness hook mirrors Valve's ragdoll fix by removing
-  every shadow mapping from a model instance immediately after the engine moves
-  that instance to another renderable.
+  boundary. The supported engine already calls
+  `IShadowMgr::RemoveAllShadowsFromModel` inside `ChangeInstance`, as prescribed
+  by Valve's ragdoll fix. p2boost observes a successful transfer only to
+  invalidate its own separate client receiver cache; it does not duplicate the
+  engine cleanup.
 - Portal 2's active shadow-depth list uses the axis-aligned box surrounding each
   projected-light frustum. A long rotated box can overlap the camera box even
   when the actual convex volumes do not intersect, causing a complete extra
@@ -118,8 +121,10 @@ not reset the Portal 2 application profile.
 
 ## Build and install
 
-Requirements are Visual Studio 2022, CMake 3.24 or newer, an x86 toolchain, and
-the Windows SDK's x86 `fxc.exe` shader compiler.
+Requirements are Visual Studio 2019 or newer, CMake 3.24 or newer, an x86
+toolchain, and the Windows SDK's x86 `fxc.exe` shader compiler. The build script
+selects the installed Visual Studio generator and keeps architecture-specific
+outputs separate.
 
 ```powershell
 .\scripts\build.ps1

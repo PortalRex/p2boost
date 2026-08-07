@@ -12,6 +12,7 @@ $rcon = Join-Path $repo 'scripts\invoke-rcon.ps1'
 $stopGame = Join-Path $repo 'scripts\stop-portal2.ps1'
 $outputPath = [IO.Path]::GetFullPath((Join-Path $repo $Output))
 $game = Get-Process portal2 -ErrorAction Stop | Select-Object -First 1
+$p2boostPattern = '^p2boost DXVK/Vulkan performance patch v'
 
 New-Item -ItemType Directory -Force (Split-Path $outputPath) | Out-Null
 Set-Content -LiteralPath $outputPath -Value "p2boost / SAR lifecycle test, pid=$($game.Id), cycles=$Cycles"
@@ -86,7 +87,7 @@ function Load-Plugin([string]$Filename, [string]$Pattern) {
 
 function Assert-Compatible([ValidateSet('sar-first', 'p2boost-first')][string]$Order) {
 	$sar = Find-Plugin '^SourceAutoRecord '
-	$p2boost = Find-Plugin '^p2boost native-D3D9 '
+	$p2boost = Find-Plugin $p2boostPattern
 	if(-not $sar -or -not $p2boost -or $sar.Disabled -or $p2boost.Disabled) {
 		throw "Both plugins must be loaded and enabled for '$Order'."
 	}
@@ -96,11 +97,21 @@ function Assert-Compatible([ValidateSet('sar-first', 'p2boost-first')][string]$O
 	}
 
 	$status = Invoke-Game @('p2boost_status')
-	if($status -notmatch 'supported=1' -or $status -notmatch 'native_d3d9=1' -or
-		$status -notmatch 'pacer_installed=1' -or $status -notmatch 'shadow_cache=1' -or
+	if($status -notmatch 'supported=1' -or $status -notmatch 'dxvk_vulkan=1' -or
+		$status -notmatch 'limiter=1' -or $status -notmatch 'shadow_cache=1' -or
 		$status -notmatch 'sar=1') {
 		throw "p2boost validation failed in '$Order': $status"
 	}
+	Invoke-Game @('p2boost_overlay 1') | Out-Null
+	Start-Sleep -Milliseconds 250
+	if(-not (Get-Process -Id $game.Id -ErrorAction SilentlyContinue)) {
+		throw "Portal 2 exited after enabling the overlay in '$Order'."
+	}
+	$status = Invoke-Game @('p2boost_status')
+	if($status -notmatch 'overlay=1' -or $status -notmatch 'overlay_available=1') {
+		throw "Overlay validation failed in '$Order': $status"
+	}
+	Invoke-Game @('p2boost_overlay 0') | Out-Null
 	$about = Invoke-Game @('sar_about')
 	if($about -notmatch 'SourceAutoRecord' -or $about -notmatch 'Version:\s+\S+') {
 		throw "SAR validation failed in '$Order': $about"
@@ -113,17 +124,17 @@ try {
 
 		# Remove only the two plugins under test. Any unrelated plugin remains
 		# loaded and its displayed index is never assumed.
-		Unload-Plugin '^p2boost native-D3D9 '
+		Unload-Plugin $p2boostPattern
 		Enable-Plugin '^SourceAutoRecord '
 		Unload-Plugin '^SourceAutoRecord '
-		Load-Plugin 'p2boost' '^p2boost native-D3D9 '
+		Load-Plugin 'p2boost' $p2boostPattern
 		Load-Plugin 'sar' '^SourceAutoRecord '
 		Assert-Compatible 'p2boost-first'
 
 		# Remove and restore the later owner while p2boost remains active.
 		Unload-Plugin '^SourceAutoRecord '
 		$status = Invoke-Game @('p2boost_status')
-		if($status -notmatch 'sar=0' -or $status -notmatch 'pacer_installed=1') {
+		if($status -notmatch 'sar=0' -or $status -notmatch 'limiter=1') {
 			throw "p2boost did not survive SAR unload: $status"
 		}
 		Load-Plugin 'sar' '^SourceAutoRecord '
@@ -133,13 +144,13 @@ try {
 
 		# Remove the earlier owner, reactivate the shifted SAR entry, then load
 		# p2boost behind it. This exercises p2boost's full hook restoration.
-		Unload-Plugin '^p2boost native-D3D9 '
+		Unload-Plugin $p2boostPattern
 		Enable-Plugin '^SourceAutoRecord '
 		$about = Invoke-Game @('sar_about')
 		if($about -notmatch 'SourceAutoRecord') {
 			throw "SAR did not survive p2boost unload: $about"
 		}
-		Load-Plugin 'p2boost' '^p2boost native-D3D9 '
+		Load-Plugin 'p2boost' $p2boostPattern
 		Assert-Compatible 'sar-first'
 	}
 }

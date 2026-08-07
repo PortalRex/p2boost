@@ -315,15 +315,13 @@ namespace p2boost {
 			return false;
 
 		// A client ragdoll moves its source entity's model instance through this
-		// public engine ABI. Portal 2 does not remove the old model-to-shadow
-		// mapping after that move, which can leave a dangling renderable on the
-		// co-op peer. Valve's documented fix performs the missing cleanup.
+		// public engine ABI. The supported engine already performs Valve's
+		// RemoveAllShadowsFromModel fix inside ChangeInstance; this hook exists only
+		// to invalidate p2boost's separate client receiver cache at that ownership
+		// boundary.
 		auto* model_render = static_cast< sdk::ModelRender* >( interface_factory( "VEngineModel016", nullptr ) );
-		m_engine_shadow_manager = static_cast< sdk::ShadowManager* >( interface_factory( "VEngineShadowMgr002", nullptr ) );
-		if( !model_render || !model_render->methods( ) || !m_engine_shadow_manager || !m_engine_shadow_manager->methods( ) ) {
-			m_engine_shadow_manager = nullptr;
+		if( !model_render || !model_render->methods( ) )
 			return false;
-		}
 
 		// Validate the recovered slot against the fingerprinted client image.
 		const Address frame_stage{ base_client->method( portal2::vmt::base_client_frame_stage_notify ) };
@@ -331,14 +329,10 @@ namespace p2boost {
 		const Address engine{ GetModuleHandleW( L"engine.dll" ) };
 		const Address engine_end = engine.add( static_cast< std::ptrdiff_t >( pattern::image_size( engine ) ) );
 		const Address change_instance{ model_render->method( portal2::vmt::model_render_change_instance ) };
-		const Address remove_model_shadows{ m_engine_shadow_manager->method( portal2::vmt::shadow_remove_all_from_model ) };
 		if( frame_stage.as< std::uintptr_t >( ) < client.as< std::uintptr_t >( ) ||
 			frame_stage.as< std::uintptr_t >( ) >= client_end.as< std::uintptr_t >( ) || !engine ||
 			change_instance.as< std::uintptr_t >( ) < engine.as< std::uintptr_t >( ) ||
-			change_instance.as< std::uintptr_t >( ) >= engine_end.as< std::uintptr_t >( ) ||
-			remove_model_shadows.as< std::uintptr_t >( ) < engine.as< std::uintptr_t >( ) ||
-			remove_model_shadows.as< std::uintptr_t >( ) >= engine_end.as< std::uintptr_t >( ) ) {
-			m_engine_shadow_manager = nullptr;
+			change_instance.as< std::uintptr_t >( ) >= engine_end.as< std::uintptr_t >( ) ) {
 			return false;
 		}
 
@@ -390,16 +384,14 @@ namespace p2boost {
 
 		if( !m_change_instance.install(
 				model_render->methods( ) + portal2::vmt::model_render_change_instance, reinterpret_cast< void* >( &ChangeInstance ) ) ) {
-			m_instance				  = nullptr;
-			m_metrics				  = nullptr;
-			m_engine_shadow_manager = nullptr;
+			m_instance = nullptr;
+			m_metrics  = nullptr;
 			return false;
 		}
 		if( !m_update_projected.install( vmt + portal2::vmt::update_projected, reinterpret_cast< void* >( &UpdateProjected ) ) ) {
 			m_change_instance.remove( );
 			m_instance = nullptr;
 			m_metrics  = nullptr;
-			m_engine_shadow_manager = nullptr;
 			return false;
 		}
 		if( !m_build_active_depth.install( active_call.as< void* >( ), active_call_bytes, reinterpret_cast< void* >( &BuildActiveDepthList ) ) ) {
@@ -409,7 +401,6 @@ namespace p2boost {
 			m_metrics					  = nullptr;
 			m_original_build_active_depth = nullptr;
 			m_shadow_manager_parent		  = nullptr;
-			m_engine_shadow_manager		  = nullptr;
 			return false;
 		}
 		if( !m_frame_stage.install(
@@ -421,7 +412,6 @@ namespace p2boost {
 			m_metrics					  = nullptr;
 			m_original_build_active_depth = nullptr;
 			m_shadow_manager_parent		  = nullptr;
-			m_engine_shadow_manager		  = nullptr;
 			return false;
 		}
 
@@ -439,7 +429,6 @@ namespace p2boost {
 		m_remove_dirty					= nullptr;
 		m_original_build_active_depth	= nullptr;
 		m_shadow_manager_parent			= nullptr;
-		m_engine_shadow_manager			= nullptr;
 		m_enabled.store( false, std::memory_order_relaxed );
 		m_hits.store( 0, std::memory_order_relaxed );
 		m_depth_culls.store( 0, std::memory_order_relaxed );
@@ -461,14 +450,10 @@ namespace p2boost {
 		if( !changed )
 			return false;
 
-		// Ghidra confirms C_BaseEntity::SnatchModelInstance calls ChangeInstance
-		// before transferring the 16-bit handle to its goo-death ragdoll. Remove
-		// the engine's stale model receiver mapping at that exact boundary.
-		if( handle != 0xffffu && cache->m_engine_shadow_manager )
-			cache->m_engine_shadow_manager->RemoveAllShadowsFromModel( handle );
-
-		// The model move also changes hidden receiver ownership that is not part
-		// of ClientShadow_t, so no p2boost cache entry may survive it.
+		// Ghidra confirms the supported engine's original has already removed all
+		// engine shadows before it returns success. The model move also changes
+		// hidden client receiver ownership that is not part of ClientShadow_t, so
+		// no p2boost cache entry may survive it.
 		cache->invalidate( );
 		return true;
 	}

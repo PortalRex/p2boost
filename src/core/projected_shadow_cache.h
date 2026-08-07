@@ -74,7 +74,6 @@ namespace p2boost {
 		RemoveDirtyFn				  m_remove_dirty{ };
 		BuildActiveDepthFn			  m_original_build_active_depth{ };
 		sdk::ShadowManager**		  m_shadow_manager_parent{ };
-		sdk::ShadowManager*		  m_engine_shadow_manager{ };
 		std::atomic_bool			  m_enabled{ };
 		std::atomic_uint			  m_hits{ };
 		std::atomic_uint			  m_depth_culls{ };

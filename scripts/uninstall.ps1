@@ -6,6 +6,8 @@ if (Test-Path -LiteralPath $autoexec) {
     $text = Get-Content -LiteralPath $autoexec -Raw
     $pattern = '(?ms)^// p2boost installer begin\r?\nplugin_load p2boost\r?\n// p2boost installer end\r?\n?'
     $updated = [regex]::Replace($text, $pattern, '')
+	$legacyLoadPattern = '(?im)^\s*plugin_load\s+"?(?:portal2[\\/])?p2boost(?:\.dll)?"?\s*$\r?\n?'
+	$updated = [regex]::Replace($updated, $legacyLoadPattern, '')
     if ($updated -ne $text) { [IO.File]::WriteAllText($autoexec, $updated, [Text.UTF8Encoding]::new($false)) }
 }
 foreach ($directory in $GameRoot,(Join-Path $GameRoot 'portal2')) {

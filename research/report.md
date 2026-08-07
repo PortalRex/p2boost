@@ -264,15 +264,23 @@ load, and unload transitions also invalidate it. Cache access and invalidation
 are synchronized so an entity-lifecycle callback cannot clear receiver state
 between comparison and the skipped rebuild.
 
-Three Steam minidumps from the reported online co-op failure all contain the
-same relocated client fault at `client.dll+0x1e9465`, followed by the same
-view-render stack. Ghidra places that instruction in material render-context
-cleanup after a visibility/query call. The dumps do not prove which earlier
-operation corrupted or invalidated the context, but their identical location,
-the concurrent missing-shadow report, and the SDK receiver-lifetime finding
-make cross-lifetime shadow reuse the attributable p2boost state removed by this
-change. Local validation then completed 20 partner-death cycles and five full
-map/entity rebuilds without a new Steam dump or SAR crash report.
+Four Steam minidumps from the reported goo failure all contain the same
+relocated fault at `client.dll+0x1e9465`. The preserved registers make the
+cause exact: the client acquired an `IMatRenderContext` in ESI, called
+`VEngineRenderView013` slot 36 with `(mins, maxs, leafWaterDataID)`, and returned
+with ESI clobbered to the render-view object. Cleanup then interpreted the
+engine object's first instruction bytes as a vtable (`EDX=0x83ec8b55`) and
+faulted at `[EDX+0x0c]`.
+
+Ghidra identifies the stock slot-36 target as
+`DoesBoxIntersectWaterVolume`, not `VGui_Paint`. The optional flat-texture
+installer had replaced that three-argument boolean method with a one-argument
+paint hook and called the stock target through the same incorrect prototype.
+That stack/register ABI violation explains both the water/goo trigger and the
+apparently intermittent later cleanup fault. The hook now chains the actual
+`VEngineVGui001::Paint` slot 14 with its verified integer return ABI. No
+render-view geometry method is patched. This evidence supersedes the earlier
+cross-lifetime-cache attribution; the cache was not on the crashing call path.
 
 Changing `r_flashlightmodels` twice produced two measured cache misses, and
 each focus resource reacquisition produced an uncached rebuild before hits
@@ -1111,22 +1119,20 @@ Two features incorrectly depended on it: projected-shadow cache generations
 and profiler text scheduling.
 
 For projected shadows, a goo death transfers the player model instance to a
-client ragdoll. Valve documents that `C_BaseEntity::SnatchModelInstance` moves
-the instance with `IVModelRender::ChangeInstance` but leaves the engine's
-internal model-to-shadow mapping behind; its prescribed fix calls
-`IShadowMgr::RemoveAllShadowsFromModel` after a successful move. The targeted
-Ghidra audit of build 23973718 found `SnatchModelInstance` at
-`client.dll+0x6fd10`, confirmed its call to `VEngineModel016` slot 7, and found
-no shadow-manager cleanup. p2boost therefore chains that exact `ChangeInstance`
-slot and, after success, calls `VEngineShadowMgr002` slot 11 before invalidating
-its own receiver cache. This safety hook stays active during an A/B performance
-disable because it repairs engine state rather than skipping render work.
+client ragdoll. Valve's prescribed fix calls
+`IShadowMgr::RemoveAllShadowsFromModel` from
+`IVModelRender::ChangeInstance`. The targeted Ghidra audit of build 23973718
+found `SnatchModelInstance` at `client.dll+0x6fd10`, confirmed its call to
+`VEngineModel016` slot 7, and then decompiled the supported engine's slot-7
+target at `engine.dll+0xef0c0`. That target already calls shadow-manager slot
+11 before storing the new renderable. The prior p2boost post-hook therefore
+duplicated an existing Valve fix and has been removed. p2boost retains only the
+successful-transfer notification needed to invalidate its own receiver cache.
 
 The existing `VClient016::FrameStageNotify` generation boundaries remain useful
 for cache correctness: they invalidate before and after network entity updates.
-They are not treated as a substitute for fixing the engine's separate stale
-model-to-shadow mapping. No ragdoll is hidden, delayed, or excluded from
-projected lighting.
+They complement the exact model-instance ownership boundary. No ragdoll is
+hidden, delayed, or excluded from projected lighting.
 
 For the profiler, SAR establishes the correct ownership model by drawing after
 `CEngineVGui::Paint`. p2boost now chains the same `VEngineVGui001` slot 14,
@@ -1138,7 +1144,13 @@ debug-overlay lifetime that made the old panel disappear. Co-op state is read
 locally through `VEngineClient015::GetMaxClients`, so Orange does not depend on
 `ServerActivate` for the panel label either.
 
-These changes were implemented from the Valve fix, SourceAutoRecord, and a
-targeted Ghidra audit at the user's request. A clean x86 Release build completed
-with `/W4 /WX`, and the native test suite passed. An in-game two-client goo-death
-and overlay smoke test was not available in this change set.
+The corrected overlay uses `VEngineClient015` slot 20 for `GetMaxClients`;
+slot 21 is `Con_NPrintf` and treats the missing argument as a string pointer.
+`CEngineVGui::Paint` also returns an integer, so both p2boost paint hooks now
+preserve that return value. Exact Ghidra-derived entry signatures guard these
+private calls, and all supplying modules are fingerprinted before installation.
+
+These corrections were implemented from SourceAutoRecord, Valve source, the
+Steam minidumps, and targeted Ghidra audits of the installed fingerprinted
+binaries. A clean x86 Release build completed with `/W4 /WX`, and the native
+test suite passed.

@@ -30,6 +30,22 @@ namespace p2boost {
 				   address.as< std::uintptr_t >( ) < end.as< std::uintptr_t >( );
 		}
 
+		// Match a recovered function entry without scanning for a nearby lookalike.
+		bool signature_at( Address address, Address module, const char* text ) {
+			if( !address_in_module( address, module ) || !text )
+				return false;
+
+			const auto signature = pattern::parse( text );
+			const auto base      = module.as< std::uintptr_t >( );
+			const auto current   = address.as< std::uintptr_t >( );
+			const auto size      = pattern::image_size( module );
+			const auto offset    = static_cast< size_t >( current - base );
+			if( signature.empty( ) || offset > size || signature.size( ) > size - offset )
+				return false;
+
+			return pattern::find( address, signature.size( ), signature ) == address;
+		}
+
 		// Encode graph samples without depending on a custom font or texture.
 		char graph_character( double milliseconds ) noexcept {
 			if( milliseconds >= 8.3 )
@@ -49,13 +65,18 @@ namespace p2boost {
 
 	bool ProfilerOverlay::connect(
 		sdk::CreateInterfaceFn interface_factory, FrameMetrics* metrics, sdk::EngineClient* engine_client ) noexcept {
-		if( m_instance || !interface_factory || !metrics || !engine_client )
+		if( m_instance || !interface_factory || !metrics || !engine_client || !engine_client->methods( ) )
 			return false;
 
 		auto* engine_vgui = static_cast< sdk::EngineVGui* >( interface_factory( "VEngineVGui001", nullptr ) );
+		const Address engine{ GetModuleHandleW( L"engine.dll" ) };
 		const Address surface_module{ GetModuleHandleW( L"vguimatsurface.dll" ) };
 		const Address vgui_module{ GetModuleHandleW( L"vgui2.dll" ) };
-		if( !engine_vgui || !engine_vgui->methods( ) || !surface_module || !vgui_module )
+		if( !engine_vgui || !engine_vgui->methods( ) || !engine || !surface_module || !vgui_module )
+			return false;
+
+		const Address get_max_clients{ engine_client->method( portal2::vmt::engine_get_max_clients ) };
+		if( !signature_at( get_max_clients, engine, portal2::signature::overlay_engine_get_max_clients ) )
 			return false;
 
 		auto surface_factory = reinterpret_cast< sdk::CreateInterfaceFn >(
@@ -76,8 +97,10 @@ namespace p2boost {
 		const Address get_font_tall{ m_surface->method( portal2::vmt::surface_get_font_tall ) };
 		const Address start_operand = paint_traverse.add( portal2::surface::start_drawing_operand );
 		const Address finish_operand = paint_traverse.add( portal2::surface::finish_drawing_operand );
-		if( !address_in_module( paint_traverse, surface_module ) || !address_in_module( draw_colored_text, surface_module ) ||
-			!address_in_module( get_font_tall, surface_module ) || start_operand.sub( 1 ).at< std::uint8_t >( ) != 0xe8 ||
+		if( !signature_at( paint_traverse, surface_module, portal2::signature::overlay_surface_paint_traverse ) ||
+			!signature_at( draw_colored_text, surface_module, portal2::signature::overlay_surface_draw_colored_text ) ||
+			!signature_at( get_font_tall, surface_module, portal2::signature::overlay_surface_get_font_tall ) ||
+			start_operand.sub( 1 ).at< std::uint8_t >( ) != 0xe8 ||
 			finish_operand.sub( 1 ).at< std::uint8_t >( ) != 0xe8 ) {
 			m_surface = nullptr;
 			return false;
@@ -85,7 +108,8 @@ namespace p2boost {
 
 		const Address start_drawing = start_operand.rel32( );
 		const Address finish_drawing = finish_operand.rel32( );
-		if( !address_in_module( start_drawing, surface_module ) || !address_in_module( finish_drawing, surface_module ) ) {
+		if( !signature_at( start_drawing, surface_module, portal2::signature::overlay_surface_start_drawing ) ||
+			!signature_at( finish_drawing, surface_module, portal2::signature::overlay_surface_finish_drawing ) ) {
 			m_surface = nullptr;
 			return false;
 		}
@@ -107,10 +131,11 @@ namespace p2boost {
 			return false;
 		}
 
-		const Address engine{ GetModuleHandleW( L"engine.dll" ) };
 		const Address sar{ GetModuleHandleW( L"sar.dll" ) };
 		const Address engine_paint{ engine_vgui->method( portal2::vmt::engine_vgui_paint ) };
-		if( !address_in_module( engine_paint, engine ) && !address_in_module( engine_paint, sar ) ) {
+		const bool engine_owned = address_in_module( engine_paint, engine );
+		if( ( !engine_owned && !address_in_module( engine_paint, sar ) ) ||
+			( engine_owned && !signature_at( engine_paint, engine, portal2::signature::overlay_engine_vgui_paint ) ) ) {
 			m_surface = nullptr;
 			m_font	  = 0;
 			return false;
@@ -170,20 +195,21 @@ namespace p2boost {
 		m_fixes_enabled = enabled;
 	}
 
-	void __fastcall ProfilerOverlay::EngineVGuiPaint( void* self, void*, int mode ) {
+	int __fastcall ProfilerOverlay::EngineVGuiPaint( void* self, void*, int mode ) {
 		ProfilerOverlay* overlay = m_instance;
 		if( !overlay )
-			return;
+			return 0;
 
 		auto original = reinterpret_cast< EngineVGuiPaintFn >( overlay->m_engine_vgui_paint.previous( ) );
 		if( !original )
-			return;
+			return 0;
 
 		// Match SAR's ordering: let the engine paint its panels, then draw the
 		// plugin HUD directly on the material-system surface.
-		original( self, mode );
+		const int result = original( self, mode );
 		if( mode & portal2::paint_mode::ui_panels )
 			overlay->draw( );
+		return result;
 	}
 
 	void ProfilerOverlay::draw( ) noexcept {

@@ -19,9 +19,9 @@ namespace p2boost {
 		std::vector< std::string > m_errors;
 	};
 
-	// return the exact engine, client, Vulkan renderer, and DXVK files supported
-	// by this release. Hooks are never installed for an approximate match.
-	const std::array< module_fingerprint_t, 4 >& supported_build_23973718( );
+	// Return every binary that supplies a production hook or private overlay ABI.
+	// Hooks are never installed for an approximate match.
+	const std::array< module_fingerprint_t, 7 >& supported_build_23973718( );
 
 	// hash a file without preventing Steam or the game from updating it.
 	std::string sha256_file( const std::wstring& path );

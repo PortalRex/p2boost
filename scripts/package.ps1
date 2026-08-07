@@ -1,4 +1,7 @@
-param([string]$Configuration = 'Release')
+param(
+    [string]$Configuration = 'Release',
+    [string]$BuildDirectory = ''
+)
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 $destination = Join-Path $repo "out\p2boost-$Configuration"
@@ -26,9 +29,15 @@ New-Item -ItemType Directory -Force (Join-Path $researchDestination 'ghidra') | 
 Copy-Item -LiteralPath (Join-Path $repo 'research\ghidra\scripts') `
     -Destination (Join-Path $researchDestination 'ghidra') -Recurse
 
-$binaryDirectory = Join-Path $repo "build\vs2022-x86\$Configuration"
-Copy-Item -LiteralPath (Join-Path $binaryDirectory 'p2boost.dll') -Destination $destination
-Copy-Item -LiteralPath (Join-Path $binaryDirectory 'p2boost.pdb') -Destination $destination
+if (-not $BuildDirectory) {
+    $candidate = Get-ChildItem (Join-Path $repo 'build') -Directory -ErrorAction SilentlyContinue |
+        ForEach-Object { Get-Item (Join-Path $_.FullName "$Configuration\p2boost.dll") -ErrorAction SilentlyContinue } |
+        Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if (-not $candidate) { throw "No $Configuration p2boost build was found." }
+    $BuildDirectory = $candidate.DirectoryName
+}
+Copy-Item -LiteralPath (Join-Path $BuildDirectory 'p2boost.dll') -Destination $destination
+Copy-Item -LiteralPath (Join-Path $BuildDirectory 'p2boost.pdb') -Destination $destination
 $archive = "${destination}.zip"
 # PowerShell's wildcard omits root dotfiles, so add the format policy
 # explicitly while keeping the archive rooted at its contents.

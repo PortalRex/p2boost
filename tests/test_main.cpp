@@ -6,6 +6,7 @@
 #include "hook.h"
 #include "nvidia_profile.h"
 #include "pattern.h"
+#include "portal2.h"
 #include "runtime_verification.h"
 #include "stack.h"
 #include "x86.h"
@@ -133,6 +134,26 @@ namespace {
 		const std::string first	 = p2boost::sha256_file( path );
 		const std::string second = p2boost::sha256_file( path );
 		return first.size( ) == 64 && first == second;
+	}
+
+	bool test_overlay_abi_contract( ) {
+		static_assert( p2boost::portal2::vmt::engine_get_max_clients == 20 );
+		static_assert( p2boost::portal2::vmt::engine_vgui_paint == 14 );
+
+		bool surface_fingerprinted{ };
+		bool scheme_fingerprinted{ };
+		bool material_system_fingerprinted{ };
+		for( const auto& module : p2boost::supported_build_23973718( ) ) {
+			if( std::strcmp( module.m_name, "materialsystem.dll" ) == 0 )
+				material_system_fingerprinted = true;
+			if( std::strcmp( module.m_name, "vguimatsurface.dll" ) == 0 )
+				surface_fingerprinted = true;
+			if( std::strcmp( module.m_name, "vgui2.dll" ) == 0 )
+				scheme_fingerprinted = true;
+		}
+
+		return p2boost::supported_build_23973718( ).size( ) == 7 && material_system_fingerprinted && surface_fingerprinted &&
+			   scheme_fingerprinted;
 	}
 
 	bool test_metrics( ) {
@@ -320,6 +341,7 @@ int main( ) {
 	const bool callsite		  = test_call_site_patch( );
 	const bool callsite_chain = test_call_site_chain( );
 	const bool hash			  = test_known_hash( );
+	const bool overlay_abi	  = test_overlay_abi_contract( );
 	const bool metrics		  = test_metrics( );
 	const bool overlay		  = test_overlay_metrics( );
 	const bool phase		  = test_frame_phase_carry( );
@@ -330,7 +352,7 @@ int main( ) {
 	const bool viewport_scale = test_viewport_scale_rects( );
 	const bool nvidia_vendor  = test_nvidia_vendor_filter( );
 	std::printf( "address=%s rel32=%s pattern=%s hook_chain=%s callsite=%s callsite_chain=%s "
-				 "hash=%s metrics=%s overlay=%s "
+				 "hash=%s overlay_abi=%s metrics=%s overlay=%s "
 				 "phase=%s qpc=%s flat_alpha=%s flat_color=%s gamma_curve=%s viewport_scale=%s nvidia_vendor=%s\n",
 				 address ? "ok" : "FAIL",
 				 relative_call ? "ok" : "FAIL",
@@ -339,6 +361,7 @@ int main( ) {
 				 callsite ? "ok" : "FAIL",
 				 callsite_chain ? "ok" : "FAIL",
 				 hash ? "ok" : "FAIL",
+				 overlay_abi ? "ok" : "FAIL",
 				 metrics ? "ok" : "FAIL",
 				 overlay ? "ok" : "FAIL",
 				 phase ? "ok" : "FAIL",
@@ -348,7 +371,7 @@ int main( ) {
 				 gamma_curve ? "ok" : "FAIL",
 				 viewport_scale ? "ok" : "FAIL",
 				 nvidia_vendor ? "ok" : "FAIL" );
-	return address && relative_call && pattern && hook && callsite && callsite_chain && hash && metrics && overlay && phase && qpc && flat_alpha && flat_color && gamma_curve &&
+	return address && relative_call && pattern && hook && callsite && callsite_chain && hash && overlay_abi && metrics && overlay && phase && qpc && flat_alpha && flat_color && gamma_curve &&
 				   viewport_scale && nvidia_vendor
 			   ? 0
 			   : 1;

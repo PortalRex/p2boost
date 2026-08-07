@@ -1,11 +1,19 @@
 param(
     [string]$GameRoot = 'D:\SteamLibrary\steamapps\common\Portal 2',
-    [string]$Configuration = 'Release'
+    [string]$Configuration = 'Release',
+    [string]$BuildDirectory = ''
 )
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
-$source = Join-Path $repo "build\vs2022-x86\$Configuration\p2boost.dll"
-$pdb = Join-Path $repo "build\vs2022-x86\$Configuration\p2boost.pdb"
+if (-not $BuildDirectory) {
+    $candidate = Get-ChildItem (Join-Path $repo 'build') -Directory -ErrorAction SilentlyContinue |
+        ForEach-Object { Get-Item (Join-Path $_.FullName "$Configuration\p2boost.dll") -ErrorAction SilentlyContinue } |
+        Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if (-not $candidate) { throw "No $Configuration p2boost build was found." }
+    $BuildDirectory = $candidate.DirectoryName
+}
+$source = Join-Path $BuildDirectory 'p2boost.dll'
+$pdb = Join-Path $BuildDirectory 'p2boost.pdb'
 $autoexec = Join-Path $GameRoot 'portal2\cfg\autoexec.cfg'
 $pluginDirectory = Join-Path $GameRoot 'portal2'
 if (-not (Test-Path -LiteralPath $source)) { throw "build not found: $source" }
@@ -32,14 +40,15 @@ $backup = "$autoexec.p2boost-backup"
 if (-not (Test-Path -LiteralPath $backup)) {
     Copy-Item -LiteralPath $autoexec -Destination $backup
 }
-$managedPattern = '(?ms)^// p2boost installer begin\r?\n.*?^// p2boost installer end'
-if ($text -match $managedPattern) {
-    $updated = [regex]::Replace($text, $managedPattern, $block)
+$managedPattern = '(?ms)^// p2boost installer begin\r?\n.*?^// p2boost installer end\r?\n?'
+$legacyLoadPattern = '(?im)^\s*plugin_load\s+"?(?:portal2[\\/])?p2boost(?:\.dll)?"?\s*$\r?\n?'
+$updated = [regex]::Replace($text, $managedPattern, '')
+$updated = [regex]::Replace($updated, $legacyLoadPattern, '')
+$suffix = if ($updated.Length -eq 0 -or $updated.EndsWith("`n")) { '' } else { "`r`n" }
+$updated = $updated + $suffix + $block + "`r`n"
+if ($updated -ne $text) {
     [IO.File]::WriteAllText($autoexec, $updated, [Text.UTF8Encoding]::new($false))
-} else {
-    $suffix = if ($text.EndsWith("`n")) { '' } else { "`r`n" }
-    [IO.File]::WriteAllText($autoexec, $text + $suffix + $block + "`r`n", [Text.UTF8Encoding]::new($false))
 }
 
-Write-Host 'Installed the Vulkan-only p2boost DLL. NVIDIA profile setup runs only when Portal 2 uses an NVIDIA adapter.'
+Write-Host 'Installed one managed Vulkan-only p2boost load entry. NVIDIA profile setup runs only when Portal 2 uses an NVIDIA adapter.'
 Write-Host "Launch Portal 2 with -vulkan."

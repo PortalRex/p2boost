@@ -99,9 +99,6 @@ namespace p2boost::sdk {
 		}
 	};
 
-	// VEngineRenderView013 exposes the optional VGui_Paint renderer guard.
-	class RenderView final : public Interface {};
-
 	// VClient016 owns client entity updates on both the listen-server host and
 	// a remote Orange client. FrameStageNotify is hooked by verified VMT index.
 	class BaseClient final : public Interface {};
@@ -111,10 +108,6 @@ namespace p2boost::sdk {
 	// Portal 2's active-depth-list implementation.
 	class ShadowManager final : public Interface {
 	public:
-		__forceinline void RemoveAllShadowsFromModel( unsigned short handle ) {
-			call< portal2::vmt::shadow_remove_all_from_model, void >( handle );
-		}
-
 		__forceinline const void* GetFlashlightState( unsigned short handle ) {
 			return call< portal2::vmt::shadow_get_flashlight_state, const void* >( handle );
 		}

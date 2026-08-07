@@ -56,7 +56,7 @@ function Start-VerifiedDemo($Case) {
 }
 
 $runtime = Invoke-Game @('p2boost_status') | Out-String
-if ($runtime -notmatch 'supported=1' -or $runtime -notmatch 'native_d3d9=1') {
+if ($runtime -notmatch 'supported=1' -or $runtime -notmatch 'dxvk_vulkan=1') {
     throw "p2boost runtime verification failed: $runtime"
 }
 $originalFpsMax = Read-Cvar 'fps_max'

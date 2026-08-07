@@ -27,13 +27,13 @@ namespace p2boost {
 		}
 
 	private:
-		using EngineVGuiPaintFn = void( __thiscall* )( void*, int );
+		using EngineVGuiPaintFn = int( __thiscall* )( void*, int );
 		using StartDrawingFn	 = int( __thiscall* )( void* );
 		using FinishDrawingFn	 = int( __cdecl* )( );
 		using DrawColoredTextFn = int( __cdecl* )(
 			void*, unsigned long, int, int, int, int, int, int, const char*, ... );
 
-		static void __fastcall EngineVGuiPaint( void* self, void*, int mode );
+		static int __fastcall EngineVGuiPaint( void* self, void*, int mode );
 		void draw( ) noexcept;
 		void draw_panel( const overlay_metrics_t& sample, bool fixes_enabled, bool sar_loaded ) noexcept;
 		void draw_line( int line, const std::array< int, 4 >& color, const char* text ) noexcept;

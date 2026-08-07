@@ -9,6 +9,17 @@ namespace p2boost::portal2 {
 	namespace signature {
 		constexpr auto frame_complete = "84 DB 5B 74 0C 8B 0D ? ? ? ? FF 15 ? ? ? ? 0F 57 C0 F3 0F 11 46 18 5E 8B E5 5D C3";
 
+		// Exact entry points reached through the overlay's private Windows ABIs.
+		// These guards make every recovered VMT index and PaintTraverseEx helper
+		// fail closed before the first HUD frame can call it.
+		constexpr auto overlay_engine_get_max_clients = "E8 ? ? ? ? 8B 80 10 01 00 00 C3";
+		constexpr auto overlay_engine_vgui_paint = "55 8B EC 83 EC 28 53 56 8B F1";
+		constexpr auto overlay_surface_get_font_tall = "55 8B EC 8B 45 08 50 E8 ? ? ? ? 8B C8 E8 ? ? ? ? 5D C2 04 00";
+		constexpr auto overlay_surface_paint_traverse = "55 8B EC 8B 55 08 83 EC 2C 56 8B F1";
+		constexpr auto overlay_surface_start_drawing = "55 8B EC 83 EC 10 80 3D ? ? ? ? 00 56 57 8B F9";
+		constexpr auto overlay_surface_finish_drawing = "56 6A 00 E8 ? ? ? ? 8B 0D ? ? ? ? 8B 01 8B 90 C4 01 00 00";
+		constexpr auto overlay_surface_draw_colored_text = "55 8B EC 8B 4D 28 8B 55 24 8D 45 2C";
+
 		// CShaderDeviceDx8::CreateD3DDevice stores the returned DXVK device
 		// immediately before initializing its concrete shader-device wrapper.
 		constexpr auto flat_texture_device = "53 8B CE E8 ? ? ? ? 68 ? ? ? ? 8B CE 89 1D ? ? ? ? E8 ? ? ? ? 8B 55 08";
@@ -82,15 +93,13 @@ namespace p2boost::portal2 {
 		constexpr size_t update_projected{ 24 };
 		constexpr size_t base_client_frame_stage_notify{ 35 };
 		constexpr size_t model_render_change_instance{ 7 };
-		constexpr size_t shadow_remove_all_from_model{ 11 };
 		constexpr size_t shadow_get_flashlight_state{ 20 };
 		constexpr size_t engine_client_cmd{ 7 };
-		constexpr size_t engine_get_max_clients{ 21 };
+		constexpr size_t engine_get_max_clients{ 20 };
 		constexpr size_t engine_is_recording_demo{ 79 };
 		constexpr size_t engine_execute_client_cmd{ 104 };
 		constexpr size_t engine_active_split_screen_slot{ 127 };
 		constexpr size_t engine_vgui_paint{ 14 };
-		constexpr size_t render_view_vgui_paint{ 36 };
 
 		// SourceAutoRecord's current Portal 2 HUD path independently identifies
 		// these private CMatSystemSurface helpers and public scheme slots.

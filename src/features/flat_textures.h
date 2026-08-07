@@ -55,7 +55,7 @@ namespace p2boost {
 
 		bool available( ) const noexcept {
 			return m_create_texture.installed( ) && m_set_texture.installed( ) && m_bind_material.installed( ) &&
-				   m_vgui_paint.installed( ) && m_material_system && m_render_view;
+				   m_vgui_paint.installed( ) && m_material_system && m_engine_vgui;
 		}
 
 		bool enabled( ) const noexcept {
@@ -140,7 +140,7 @@ namespace p2boost {
 		using LockSurfaceFn		= HRESULT( __stdcall* )( IDirect3DSurface9*, D3DLOCKED_RECT*, const RECT*, DWORD );
 		using UnlockSurfaceFn	= HRESULT( __stdcall* )( IDirect3DSurface9* );
 		using BindMaterialFn	= void( __thiscall* )( void*, sdk::Material*, void* );
-		using VguiPaintFn		= void( __thiscall* )( void*, int );
+		using VguiPaintFn		= int( __thiscall* )( void*, int );
 
 		// install resource hooks lazily when the first object appears.
 		bool install_texture_hooks( IDirect3DTexture9* texture );
@@ -164,13 +164,13 @@ namespace p2boost {
 		static HRESULT __stdcall LockSurface( IDirect3DSurface9* surface, D3DLOCKED_RECT* locked, const RECT* rect, DWORD flags );
 		static HRESULT __stdcall UnlockSurface( IDirect3DSurface9* surface );
 		static void __fastcall BindMaterial( void* context, void*, sdk::Material* material, void* proxy_data );
-		static void __fastcall VguiPaint( void* render_view, void*, int mode );
+		static int __fastcall VguiPaint( void* engine_vgui, void*, int mode );
 
 		static FlatTextures* m_instance;
 
 		// engine objects and chain-aware hooks installed on their VMTs.
 		sdk::MaterialSystem* m_material_system{ };
-		sdk::RenderView*	 m_render_view{ };
+		sdk::EngineVGui*	 m_engine_vgui{ };
 		void**				 m_render_context_vmt{ };
 		IDirect3DDevice9*	 m_device{ };
 		IDirect3DTexture9*	 m_flat_normal{ };

@@ -548,9 +548,9 @@ namespace p2boost {
 		auto material_factory	= reinterpret_cast< CreateInterfaceFn >( GetProcAddress( materials.as< HMODULE >( ), "CreateInterface" ) );
 		auto engine_factory		= reinterpret_cast< CreateInterfaceFn >( GetProcAddress( engine.as< HMODULE >( ), "CreateInterface" ) );
 		m_material_system		= material_factory ? static_cast< sdk::MaterialSystem* >( material_factory( "VMaterialSystem080", nullptr ) ) : nullptr;
-		m_render_view			= engine_factory ? static_cast< sdk::RenderView* >( engine_factory( "VEngineRenderView013", nullptr ) ) : nullptr;
-		if( !m_material_system || !m_render_view ) {
-			m_render_view	  = nullptr;
+		m_engine_vgui			= engine_factory ? static_cast< sdk::EngineVGui* >( engine_factory( "VEngineVGui001", nullptr ) ) : nullptr;
+		if( !m_material_system || !m_engine_vgui || !m_engine_vgui->methods( ) ) {
+			m_engine_vgui	  = nullptr;
 			m_material_system = nullptr;
 			m_device		  = nullptr;
 			return false;
@@ -562,15 +562,20 @@ namespace p2boost {
 		const Address reload{ m_material_system->method( portal2::vmt::reload_materials ) };
 		const Address get_render_context{ m_material_system->method( portal2::vmt::get_render_context ) };
 		const Address material_end = materials.add( static_cast< std::ptrdiff_t >( pattern::image_size( materials ) ) );
-		const Address vgui_paint{ m_render_view->method( portal2::vmt::render_view_vgui_paint ) };
+		const Address vgui_paint{ m_engine_vgui->method( portal2::vmt::engine_vgui_paint ) };
 		const Address engine_end = engine.add( static_cast< std::ptrdiff_t >( pattern::image_size( engine ) ) );
 
 		// The profiler owns this slot first. Accept only the stock engine target
 		// or an earlier hook inside this exact p2boost image before chaining it.
 		const Address plugin{ GetModuleHandleW( L"p2boost.dll" ) };
-		const Address plugin_end		   = plugin.add( static_cast< std::ptrdiff_t >( pattern::image_size( plugin ) ) );
-		const bool	  vgui_paint_is_engine = vgui_paint.as< std::uintptr_t >( ) >= engine.as< std::uintptr_t >( ) &&
-										  vgui_paint.as< std::uintptr_t >( ) < engine_end.as< std::uintptr_t >( );
+		const Address plugin_end = plugin.add( static_cast< std::ptrdiff_t >( pattern::image_size( plugin ) ) );
+		const auto engine_paint_signature = pattern::parse( portal2::signature::overlay_engine_vgui_paint );
+		const auto paint_address = vgui_paint.as< std::uintptr_t >( );
+		const auto engine_begin  = engine.as< std::uintptr_t >( );
+		const auto engine_limit  = engine_end.as< std::uintptr_t >( );
+		const bool vgui_paint_is_engine = !engine_paint_signature.empty( ) && paint_address >= engine_begin &&
+										  paint_address <= engine_limit - engine_paint_signature.size( ) &&
+										  pattern::find( vgui_paint, engine_paint_signature.size( ), engine_paint_signature ) == vgui_paint;
 		const bool vgui_paint_is_plugin = plugin && vgui_paint.as< std::uintptr_t >( ) >= plugin.as< std::uintptr_t >( ) &&
 										  vgui_paint.as< std::uintptr_t >( ) < plugin_end.as< std::uintptr_t >( );
 		if( reload_textures.as< std::uintptr_t >( ) < materials.as< std::uintptr_t >( ) ||
@@ -580,7 +585,7 @@ namespace p2boost {
 			get_render_context.as< std::uintptr_t >( ) < materials.as< std::uintptr_t >( ) ||
 			get_render_context.as< std::uintptr_t >( ) >= material_end.as< std::uintptr_t >( ) ||
 			( !vgui_paint_is_engine && !vgui_paint_is_plugin ) ) {
-			m_render_view	  = nullptr;
+			m_engine_vgui	  = nullptr;
 			m_material_system = nullptr;
 			m_device		  = nullptr;
 			return false;
@@ -588,7 +593,7 @@ namespace p2boost {
 
 		sdk::RenderContext* render_context = m_material_system->GetRenderContext( );
 		if( !render_context ) {
-			m_render_view	  = nullptr;
+			m_engine_vgui	  = nullptr;
 			m_material_system = nullptr;
 			m_device		  = nullptr;
 			return false;
@@ -599,7 +604,7 @@ namespace p2boost {
 			bind.as< std::uintptr_t >( ) >= material_end.as< std::uintptr_t >( ) ) {
 			render_context->Release( );
 			m_render_context_vmt = nullptr;
-			m_render_view		 = nullptr;
+			m_engine_vgui		 = nullptr;
 			m_material_system	 = nullptr;
 			m_device			 = nullptr;
 			return false;
@@ -608,7 +613,7 @@ namespace p2boost {
 		auto** device_vmt	 = *reinterpret_cast< void*** >( m_device );
 		m_instance			 = this;
 		const bool installed = m_bind_material.install( m_render_context_vmt + portal2::vmt::render_context_bind, reinterpret_cast< void* >( &BindMaterial ) ) &&
-							   m_vgui_paint.install( m_render_view->methods( ) + portal2::vmt::render_view_vgui_paint, reinterpret_cast< void* >( &VguiPaint ) ) &&
+							   m_vgui_paint.install( m_engine_vgui->methods( ) + portal2::vmt::engine_vgui_paint, reinterpret_cast< void* >( &VguiPaint ) ) &&
 							   m_create_texture.install( device_vmt + portal2::vmt::d3d9_create_texture, reinterpret_cast< void* >( &CreateTexture ) ) &&
 							   m_update_surface.install( device_vmt + portal2::vmt::d3d9_update_surface, reinterpret_cast< void* >( &UpdateSurface ) ) &&
 							   m_update_texture.install( device_vmt + portal2::vmt::d3d9_update_texture, reinterpret_cast< void* >( &UpdateTexture ) ) &&
@@ -623,7 +628,7 @@ namespace p2boost {
 			m_bind_material.remove( );
 			m_render_context_vmt = nullptr;
 			m_instance			 = nullptr;
-			m_render_view		 = nullptr;
+			m_engine_vgui		 = nullptr;
 			m_material_system	 = nullptr;
 			m_device			 = nullptr;
 			return false;
@@ -652,7 +657,7 @@ namespace p2boost {
 		m_get_surface_level.remove( );
 		m_release_texture.remove( );
 		m_texture_vmt	  = nullptr;
-		m_render_view	  = nullptr;
+		m_engine_vgui	  = nullptr;
 		m_material_system = nullptr;
 		m_device		  = nullptr;
 		m_substitutions.store( 0, std::memory_order_relaxed );
@@ -1490,19 +1495,20 @@ namespace p2boost {
 		}
 	}
 
-	void __fastcall FlatTextures::VguiPaint( void* render_view, void*, int mode ) {
+	int __fastcall FlatTextures::VguiPaint( void* engine_vgui, void*, int mode ) {
 		FlatTextures* instance = m_instance;
 		auto		  original = instance ? reinterpret_cast< VguiPaintFn >( instance->m_vgui_paint.previous( ) ) : nullptr;
 		if( !original )
-			return;
+			return 0;
 
 		// VGui_Paint owns menus, console, HUD, cursor, and third-party overlays.
 		// bypassing substitution for the whole boundary requires no material names.
 		++g_vgui_paint_depth;
 		clear_material_pass( );
-		original( render_view, mode );
+		const int result = original( engine_vgui, mode );
 		clear_material_pass( );
 		--g_vgui_paint_depth;
+		return result;
 	}
 
 }
