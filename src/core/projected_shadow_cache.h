@@ -55,7 +55,7 @@ namespace p2boost {
 		using ChangeInstanceFn	 = bool( __thiscall* )( void*, unsigned short, void* );
 
 		static void __fastcall UpdateProjected( void* self, void*, unsigned int handle, bool force );
-		static int __fastcall  BuildActiveDepthList(
+		static int __fastcall BuildActiveDepthList(
 			void* self, void*, const void* view, int maximum, std::uint16_t* output, int* high_priority_count );
 		static void __fastcall FrameStageNotify( void* self, void*, int stage );
 		static bool __fastcall ChangeInstance( void* self, void*, unsigned short handle, void* renderable );

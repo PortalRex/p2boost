@@ -368,8 +368,8 @@ namespace p2boost {
 
 		const Address shadow_manager_xref = pattern::find_unique( client, portal2::signature::active_shadow_manager );
 		m_shadow_manager_parent			  = shadow_manager_xref.add( portal2::xref::active_shadow_manager_global )
-												.at< Address >( )
-												.as< sdk::ShadowManager** >( );
+									  .at< Address >( )
+									  .as< sdk::ShadowManager** >( );
 		if( !m_remove_dirty || !m_flashlight_models_cvar_parent || !*m_flashlight_models_cvar_parent ||
 			!m_shadow_manager_parent || !*m_shadow_manager_parent )
 			return false;

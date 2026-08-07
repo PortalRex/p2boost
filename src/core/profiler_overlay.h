@@ -34,9 +34,9 @@ namespace p2boost {
 			void*, unsigned long, int, int, int, int, int, int, const char*, ... );
 
 		static int __fastcall EngineVGuiPaint( void* self, void*, int mode );
-		void				  draw( ) noexcept;
-		void				  draw_panel( const overlay_metrics_t& sample, bool fixes_enabled, bool sar_loaded ) noexcept;
-		void				  draw_line( int line, const std::array< int, 4 >& color, const char* text ) noexcept;
+		void draw( ) noexcept;
+		void draw_panel( const overlay_metrics_t& sample, bool fixes_enabled, bool sar_loaded ) noexcept;
+		void draw_line( int line, const std::array< int, 4 >& color, const char* text ) noexcept;
 
 		static ProfilerOverlay* m_instance;
 

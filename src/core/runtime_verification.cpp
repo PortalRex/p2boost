@@ -188,7 +188,7 @@ namespace p2boost {
 		const std::wstring shader_api = root + L"\\bin\\shaderapivk.dll";
 		const std::wstring dxvk		  = root + L"\\bin\\dxvk_d3d9.dll";
 		result.m_dxvk_vulkan		  = is_loaded_from( L"shaderapivk.dll", shader_api ) && is_loaded_from( L"dxvk_d3d9.dll", dxvk ) &&
-										GetModuleHandleW( L"vulkan-1.dll" ) != nullptr;
+							   GetModuleHandleW( L"vulkan-1.dll" ) != nullptr;
 		if( !result.m_dxvk_vulkan )
 			result.m_errors.emplace_back( "Portal 2's shipped DXVK/Vulkan backend is not active; launch with -vulkan" );
 

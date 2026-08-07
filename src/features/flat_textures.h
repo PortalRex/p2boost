@@ -156,15 +156,15 @@ namespace p2boost {
 		static HRESULT __stdcall UpdateSurface( IDirect3DDevice9* device, IDirect3DSurface9* source, const RECT* source_rect, IDirect3DSurface9* destination, const POINT* destination_point );
 		static HRESULT __stdcall UpdateTexture( IDirect3DDevice9* device, IDirect3DBaseTexture9* source, IDirect3DBaseTexture9* destination );
 		static HRESULT __stdcall SetTexture( IDirect3DDevice9* device, DWORD stage, IDirect3DBaseTexture9* texture );
-		static ULONG __stdcall	 ReleaseTexture( IDirect3DTexture9* texture );
+		static ULONG __stdcall ReleaseTexture( IDirect3DTexture9* texture );
 		static HRESULT __stdcall GetSurfaceLevel( IDirect3DTexture9* texture, unsigned int level, IDirect3DSurface9** surface );
 		static HRESULT __stdcall LockTexture( IDirect3DTexture9* texture, unsigned int level, D3DLOCKED_RECT* locked, const RECT* rect, DWORD flags );
 		static HRESULT __stdcall UnlockTexture( IDirect3DTexture9* texture, unsigned int level );
-		static ULONG __stdcall	 ReleaseSurface( IDirect3DSurface9* surface );
+		static ULONG __stdcall ReleaseSurface( IDirect3DSurface9* surface );
 		static HRESULT __stdcall LockSurface( IDirect3DSurface9* surface, D3DLOCKED_RECT* locked, const RECT* rect, DWORD flags );
 		static HRESULT __stdcall UnlockSurface( IDirect3DSurface9* surface );
-		static void __fastcall	 BindMaterial( void* context, void*, sdk::Material* material, void* proxy_data );
-		static int __fastcall	 VguiPaint( void* engine_vgui, void*, int mode );
+		static void __fastcall BindMaterial( void* context, void*, sdk::Material* material, void* proxy_data );
+		static int __fastcall VguiPaint( void* engine_vgui, void*, int mode );
 
 		static FlatTextures* m_instance;
 

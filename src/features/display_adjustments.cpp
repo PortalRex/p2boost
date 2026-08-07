@@ -172,7 +172,7 @@ namespace p2boost {
 		D3DSURFACE_DESC	   description{ };
 		IDirect3DSurface9* copy_surface{ };
 		const bool		   ready = SUCCEEDED( back_buffer->GetDesc( &description ) ) && ensure_copy_target( device, description ) &&
-								   SUCCEEDED( m_copy_texture->GetSurfaceLevel( 0, &copy_surface ) ) && copy_surface;
+						   SUCCEEDED( m_copy_texture->GetSurfaceLevel( 0, &copy_surface ) ) && copy_surface;
 		if( !ready ) {
 			if( copy_surface )
 				copy_surface->Release( );
@@ -201,13 +201,13 @@ namespace p2boost {
 
 		IDirect3DSurface9* copy_surface{ };
 		IDirect3DSurface9* destination{ };
-		const bool		   ready	= SUCCEEDED( m_copy_texture->GetSurfaceLevel( 0, &copy_surface ) ) && copy_surface &&
-									  SUCCEEDED( device->GetBackBuffer( 0, 0, D3DBACKBUFFER_TYPE_MONO, &destination ) ) && destination;
-		const bool		   expanded = ready && SUCCEEDED( device->StretchRect( copy_surface,
-																			   &view.m_destination,
-																			   destination,
-																			   &view.m_destination,
-																			   D3DTEXF_NONE ) );
+		const bool		   ready = SUCCEEDED( m_copy_texture->GetSurfaceLevel( 0, &copy_surface ) ) && copy_surface &&
+						   SUCCEEDED( device->GetBackBuffer( 0, 0, D3DBACKBUFFER_TYPE_MONO, &destination ) ) && destination;
+		const bool expanded = ready && SUCCEEDED( device->StretchRect( copy_surface,
+																	   &view.m_destination,
+																	   destination,
+																	   &view.m_destination,
+																	   D3DTEXF_NONE ) );
 		if( destination )
 			destination->Release( );
 		if( copy_surface )
@@ -219,8 +219,8 @@ namespace p2boost {
 		IDirect3DSurface9* render_target{ };
 		IDirect3DSurface9* back_buffer{ };
 		const bool		   acquired = SUCCEEDED( device->GetRenderTarget( 0, &render_target ) ) && render_target &&
-									  SUCCEEDED( device->GetBackBuffer( 0, 0, D3DBACKBUFFER_TYPE_MONO, &back_buffer ) ) && back_buffer;
-		const bool		   matches	= acquired && render_target == back_buffer && SUCCEEDED( back_buffer->GetDesc( &description ) );
+							  SUCCEEDED( device->GetBackBuffer( 0, 0, D3DBACKBUFFER_TYPE_MONO, &back_buffer ) ) && back_buffer;
+		const bool matches = acquired && render_target == back_buffer && SUCCEEDED( back_buffer->GetDesc( &description ) );
 		if( back_buffer )
 			back_buffer->Release( );
 		if( render_target )
@@ -295,7 +295,7 @@ namespace p2boost {
 			IDirect3DSurface9* back_buffer{ };
 			D3DSURFACE_DESC	   description{ };
 			const bool		   described = SUCCEEDED( device->GetBackBuffer( 0, 0, D3DBACKBUFFER_TYPE_MONO, &back_buffer ) ) && back_buffer &&
-										   SUCCEEDED( back_buffer->GetDesc( &description ) );
+								   SUCCEEDED( back_buffer->GetDesc( &description ) );
 			if( back_buffer )
 				back_buffer->Release( );
 			const bool subview = described && ( destination_rect.left != 0 || destination_rect.top != 0 ||
