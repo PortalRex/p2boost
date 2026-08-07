@@ -1,4 +1,4 @@
-# p2boost
+# p2boost [![Build and release](https://github.com/aIIison/p2boost/actions/workflows/build-release.yml/badge.svg)](https://github.com/aIIison/p2boost/actions/workflows/build-release.yml)
 
 p2boost is an open-source Windows performance and display plugin for Portal 2.
 It targets Steam build `23973718`, requires the game's shipped DXVK renderer,
