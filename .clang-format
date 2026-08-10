@@ -5,7 +5,7 @@ ColumnLimit: 0
 IndentWidth: 4
 ContinuationIndentWidth: 4
 TabWidth: 4
-UseTab: Always
+UseTab: ForIndentation
 AccessModifierOffset: -4
 NamespaceIndentation: All
 BreakBeforeBraces: Attach
@@ -18,13 +18,13 @@ AllowShortEnumsOnASingleLine: false
 BinPackArguments: true
 BinPackParameters: true
 AllowAllArgumentsOnNextLine: true
-AlignAfterOpenBracket: Align
-AlignConsecutiveAssignments: Consecutive
+AlignAfterOpenBracket: DontAlign
+AlignConsecutiveAssignments: false
 AlignConsecutiveBitFields: Consecutive
-AlignConsecutiveDeclarations: Consecutive
+AlignConsecutiveDeclarations: false
 AlignConsecutiveMacros: Consecutive
 AlignEscapedNewlines: Right
-AlignOperands: Align
+AlignOperands: DontAlign
 AlignTrailingComments: true
 DerivePointerAlignment: false
 PointerAlignment: Left

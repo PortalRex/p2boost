@@ -1,0 +1,80 @@
+#pragma once
+
+#include "interface.h"
+
+namespace p2boost::sdk {
+
+	// IMaterial exposes only immutable classification data used at bind time.
+	class IMaterial final : public Interface {
+	public:
+		static constexpr std::size_t get_texture_group_name_slot{ 1 };
+		static constexpr std::size_t get_shader_name_slot{ 49 };
+
+		const char* GetTextureGroupName( ) {
+			using function_t = const char*(__thiscall*)( void* );
+			return invoke< get_texture_group_name_slot, function_t >( );
+		}
+
+		const char* GetShaderName( ) {
+			using function_t = const char*(__thiscall*)( void* );
+			return invoke< get_shader_name_slot, function_t >( );
+		}
+	};
+
+	// IMatRenderContext owns material binding and a temporary reference count.
+	class IMatRenderContext final : public Interface {
+	public:
+		static constexpr std::size_t release_slot{ 1 };
+		static constexpr std::size_t bind_slot{ 9 };
+
+		int Release( ) {
+			using function_t = int( __thiscall* )( void* );
+			return invoke< release_slot, function_t >( );
+		}
+
+		Address BindAddress( ) const noexcept {
+			return method( bind_slot );
+		}
+
+		void** BindSlot( ) noexcept {
+			return method_slot( bind_slot );
+		}
+	};
+
+	// VMaterialSystem080 owns material reloads and render contexts.
+	class IMaterialSystem final : public Interface {
+	public:
+		static constexpr const char* version{ "VMaterialSystem080" };
+		static constexpr std::size_t reload_textures_slot{ 79 };
+		static constexpr std::size_t reload_materials_slot{ 80 };
+		static constexpr std::size_t get_render_context_slot{ 113 };
+
+		void ReloadTextures( ) {
+			using function_t = void( __thiscall* )( void* );
+			invoke< reload_textures_slot, function_t >( );
+		}
+
+		void ReloadMaterials( const char* filter = nullptr ) {
+			using function_t = void( __thiscall* )( void*, const char* );
+			invoke< reload_materials_slot, function_t >( filter );
+		}
+
+		IMatRenderContext* GetRenderContext( ) {
+			using function_t = IMatRenderContext*(__thiscall*)( void* );
+			return invoke< get_render_context_slot, function_t >( );
+		}
+
+		Address ReloadTexturesAddress( ) const noexcept {
+			return method( reload_textures_slot );
+		}
+
+		Address ReloadMaterialsAddress( ) const noexcept {
+			return method( reload_materials_slot );
+		}
+
+		Address GetRenderContextAddress( ) const noexcept {
+			return method( get_render_context_slot );
+		}
+	};
+
+}

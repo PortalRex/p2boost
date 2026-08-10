@@ -1,6 +1,7 @@
 #pragma once
 
 #include "interfaces.h"
+#include "portal2_context.h"
 
 namespace p2boost {
 
@@ -8,7 +9,7 @@ namespace p2boost {
 	// path SAR uses, making the marker visible during real demo playback.
 	class DemoProvenance {
 	public:
-		bool connect( sdk::EngineClient* engine_client );
+		bool connect( const portal2_modules_t& modules, sdk::IVEngineClient* engine_client );
 		void disconnect( );
 		void reset( ) noexcept;
 		void update( const char* version, bool fixes_enabled, bool flat_textures_enabled );
@@ -18,12 +19,12 @@ namespace p2boost {
 		}
 
 	private:
-		using CbufAddTextFn = void( __cdecl* )( int, const char*, int );
+		using cbuf_add_text_fn_t = void( __cdecl* )( int, const char*, int );
 
-		sdk::EngineClient* m_engine_client{ };
-		CbufAddTextFn	   m_cbuf_add_text{ };
-		unsigned int	   m_recording_frames{ };
-		bool			   m_marked{ };
+		sdk::IVEngineClient* m_engine_client{ };
+		cbuf_add_text_fn_t m_cbuf_add_text{ };
+		unsigned int m_recording_frames{ };
+		bool m_marked{ };
 	};
 
 }

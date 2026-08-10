@@ -17,9 +17,9 @@ namespace p2boost::x86 {
 			return { };
 
 		std::int64_t displacement = static_cast< std::int64_t >( static_cast< std::uintptr_t >( target ) ) -
-									static_cast< std::int64_t >( static_cast< std::uintptr_t >( instruction.add( 5 ) ) );
+		    static_cast< std::int64_t >( static_cast< std::uintptr_t >( instruction.add( 5 ) ) );
 		if( displacement < ( std::numeric_limits< std::int32_t >::min )( ) ||
-			displacement > ( std::numeric_limits< std::int32_t >::max )( ) )
+		    displacement > ( std::numeric_limits< std::int32_t >::max )( ) )
 			return { };
 
 		std::vector< std::uint8_t > bytes( size, 0x90 );

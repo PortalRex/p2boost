@@ -1,59 +1,68 @@
 #pragma once
 
+#include "color.h"
 #include "frame_metrics.h"
 #include "hook.h"
 #include "interfaces.h"
+#include "portal2_context.h"
 #include "qpc.h"
 #include "sdk.h"
 
-#include <array>
-
 namespace p2boost {
 
-	// Draw a low-frequency summary directly in the final VGUI surface pass.
+	// select how much frame data the in-game profiler paints.
+	enum class profiler_mode_t : int {
+		off,
+		full,
+		fps,
+	};
+
+	// draw a low-frequency summary directly in the final VGUI surface pass.
 	class ProfilerOverlay {
 	public:
-		bool connect( sdk::CreateInterfaceFn interface_factory, FrameMetrics* metrics, sdk::EngineClient* engine_client ) noexcept;
+		bool connect( const portal2_modules_t& modules, const Portal2Interfaces& interfaces, FrameMetrics* metrics ) noexcept;
 		void disconnect( ) noexcept;
-		void set_enabled( bool enabled, FrameMetrics& metrics ) noexcept;
+		void set_mode( profiler_mode_t mode, FrameMetrics& metrics ) noexcept;
 		void set_fixes_enabled( bool enabled ) noexcept;
 
 		bool available( ) const noexcept {
-			return m_surface && m_engine_vgui_paint.installed( ) && m_start_drawing && m_finish_drawing && m_draw_colored_text && m_font;
+			return m_surface && m_engine_vgui_paint.installed( ) && m_start_drawing && m_finish_drawing && m_panel_font;
 		}
 
 		bool enabled( ) const noexcept {
-			return m_enabled;
+			return m_mode != profiler_mode_t::off;
+		}
+
+		int mode( ) const noexcept {
+			return static_cast< int >( m_mode );
 		}
 
 	private:
-		using EngineVGuiPaintFn = int( __thiscall* )( void*, int );
-		using StartDrawingFn	= int( __thiscall* )( void* );
-		using FinishDrawingFn	= int( __cdecl* )( );
-		using DrawColoredTextFn = int( __cdecl* )(
-			void*, unsigned long, int, int, int, int, int, int, const char*, ... );
-
+		using engine_vgui_paint_fn_t = int( __thiscall* )( void*, int );
+		using start_drawing_fn_t = int( __thiscall* )( void* );
+		using finish_drawing_fn_t = int( __cdecl* )( );
 		static int __fastcall EngineVGuiPaint( void* self, void*, int mode );
 		void draw( ) noexcept;
-		void draw_panel( const overlay_metrics_t& sample, bool fixes_enabled, bool sar_loaded ) noexcept;
-		void draw_line( int line, const std::array< int, 4 >& color, const char* text ) noexcept;
+		void draw_panel( int screen_width, const overlay_metrics_t& sample, bool fixes_enabled, bool sar_loaded ) noexcept;
+		void draw_fps( int screen_width, const overlay_metrics_t& sample ) noexcept;
+		void draw_line( int screen_width, unsigned long font, int line, const color_t& color, const char* text ) noexcept;
+		int text_width( unsigned long font, const char* text ) const noexcept;
 
 		static ProfilerOverlay* m_instance;
 
-		sdk::Surface*	   m_surface{ };
-		sdk::EngineClient* m_engine_client{ };
-		FrameMetrics*	   m_metrics{ };
-		VmtHook			   m_engine_vgui_paint;
-		StartDrawingFn	   m_start_drawing{ };
-		FinishDrawingFn	   m_finish_drawing{ };
-		DrawColoredTextFn  m_draw_colored_text{ };
-		overlay_metrics_t  m_sample{ };
-		Qpc::tick_t		   m_next_update{ };
-		unsigned long	   m_font{ };
-		int				   m_line_height{ 16 };
-		bool			   m_have_sample{ };
-		bool			   m_enabled{ };
-		bool			   m_fixes_enabled{ };
+		sdk::ISurface* m_surface{ };
+		sdk::IVEngineClient* m_engine_client{ };
+		FrameMetrics* m_metrics{ };
+		VmtHook m_engine_vgui_paint;
+		start_drawing_fn_t m_start_drawing{ };
+		finish_drawing_fn_t m_finish_drawing{ };
+		overlay_metrics_t m_sample{ };
+		Qpc::tick_t m_next_update{ };
+		unsigned long m_panel_font{ };
+		int m_line_height{ 16 };
+		bool m_have_sample{ };
+		bool m_fixes_enabled{ };
+		profiler_mode_t m_mode{ profiler_mode_t::off };
 	};
 
 }

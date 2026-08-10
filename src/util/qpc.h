@@ -4,7 +4,7 @@
 
 namespace p2boost {
 
-	// wraps the invariant windows performance counter used by all traces.
+	// wrap the invariant Windows performance counter used by all traces.
 	class Qpc {
 	public:
 		using tick_t = long long;
@@ -38,14 +38,14 @@ namespace p2boost {
 		}
 	};
 
-	// measures one already-selected code path.
+	// measure one already-selected code path.
 	class Stopwatch {
 	private:
 		Qpc::tick_t m_begin;
 
 	public:
 		__forceinline explicit Stopwatch( bool enabled = true ) noexcept
-			: m_begin{ enabled ? Qpc::now( ) : 0 } {
+		    : m_begin{ enabled ? Qpc::now( ) : 0 } {
 		}
 
 		// return elapsed counter ticks.

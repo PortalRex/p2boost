@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(p2boost VERSION 0.8.8 LANGUAGES CXX)
+project(p2boost VERSION 0.8.9 LANGUAGES CXX)
 
 option(P2BOOST_BUILD_RESEARCH_TOOLS "Build offline profiling tools from research/" OFF)
 
@@ -20,6 +20,7 @@ set(P2BOOST_INCLUDE_DIRECTORIES
   src/features
   src/memory
   src/platform
+  src/util
 )
 
 # Compile the readable HLSL source into a C header. Keeping shader bytecode out
@@ -47,6 +48,9 @@ add_custom_command(
 # flat-texture mode, and their shared runtime support. Historical probes stay
 # under research/ and are never compiled into p2boost.dll.
 add_library(p2boost_core STATIC
+  src/features/flat_material_pass.cpp
+  src/features/flat_texture_codec.cpp
+  src/features/flat_texture_hooks.cpp
   src/features/flat_textures.cpp
   src/features/display_adjustments.cpp
   src/features/demo_provenance.cpp
@@ -56,7 +60,10 @@ add_library(p2boost_core STATIC
   src/core/projected_shadow_cache.cpp
   src/core/profiler_overlay.cpp
   src/core/runtime_verification.cpp
+  src/engine/portal2_context.cpp
   src/memory/hook.cpp
+  src/platform/game_window.cpp
+  src/util/projected_frustum.cpp
 )
 target_include_directories(p2boost_core PUBLIC ${P2BOOST_INCLUDE_DIRECTORIES})
 target_include_directories(p2boost_core PRIVATE "${P2BOOST_GENERATED_DIRECTORY}")

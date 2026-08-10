@@ -10,16 +10,16 @@ namespace p2boost {
 	class VmtHook {
 	private:
 		void** m_method{ };
-		void*  m_previous{ };
-		void*  m_replacement{ };
-		bool   m_installed{ };
+		void* m_previous{ };
+		void* m_replacement{ };
+		bool m_installed{ };
 
 	public:
 		// default ctor / dtor.
 		VmtHook( ) = default;
 		~VmtHook( );
 
-		VmtHook( const VmtHook& )			 = delete;
+		VmtHook( const VmtHook& ) = delete;
 		VmtHook& operator=( const VmtHook& ) = delete;
 
 		// install or remove this virtual method replacement.
@@ -31,6 +31,11 @@ namespace p2boost {
 			return m_previous;
 		}
 
+		template < typename function_t >
+		function_t previous( ) const noexcept {
+			return reinterpret_cast< function_t >( m_previous );
+		}
+
 		bool installed( ) const noexcept {
 			return m_installed;
 		}
@@ -39,17 +44,17 @@ namespace p2boost {
 	// rewrites one verified x86 call site.
 	class CallSitePatch {
 	private:
-		std::uint8_t*				m_address{ };
+		std::uint8_t* m_address{ };
 		std::vector< std::uint8_t > m_original;
 		std::vector< std::uint8_t > m_patched;
-		bool						m_installed{ };
+		bool m_installed{ };
 
 	public:
 		// default ctor / dtor.
 		CallSitePatch( ) = default;
 		~CallSitePatch( );
 
-		CallSitePatch( const CallSitePatch& )			 = delete;
+		CallSitePatch( const CallSitePatch& ) = delete;
 		CallSitePatch& operator=( const CallSitePatch& ) = delete;
 
 		// install or remove this call patch.

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "hook.h"
+#include "portal2_context.h"
 
 #include <atomic>
 
@@ -18,7 +19,7 @@ namespace p2boost {
 	public:
 		~FrameLimiter( );
 
-		bool install( FrameMetrics* metrics );
+		bool install( const portal2_modules_t& modules, FrameMetrics* metrics );
 		void remove( );
 
 		void set_enabled( bool enabled ) noexcept {
@@ -38,8 +39,8 @@ namespace p2boost {
 
 		static FrameLimiter* m_instance;
 
-		CallSitePatch	 m_frame_complete;
-		FrameMetrics*	 m_metrics{ };
+		CallSitePatch m_frame_complete;
+		FrameMetrics* m_metrics{ };
 		std::atomic_bool m_enabled{ };
 	};
 

@@ -9,15 +9,15 @@ namespace p2boost::portal2 {
 	namespace signature {
 		constexpr auto frame_complete = "84 DB 5B 74 0C 8B 0D ? ? ? ? FF 15 ? ? ? ? 0F 57 C0 F3 0F 11 46 18 5E 8B E5 5D C3";
 
-		// Exact entry points reached through the overlay's private Windows ABIs.
-		// These guards make every recovered VMT index and PaintTraverseEx helper
+		// exact entry points reached through the overlay's private Windows ABIs.
+		// these guards make every recovered VMT index and PaintTraverseEx helper
 		// fail closed before the first HUD frame can call it.
-		constexpr auto overlay_engine_get_max_clients	 = "E8 ? ? ? ? 8B 80 10 01 00 00 C3";
-		constexpr auto overlay_engine_vgui_paint		 = "55 8B EC 83 EC 28 53 56 8B F1";
-		constexpr auto overlay_surface_get_font_tall	 = "55 8B EC 8B 45 08 50 E8 ? ? ? ? 8B C8 E8 ? ? ? ? 5D C2 04 00";
-		constexpr auto overlay_surface_paint_traverse	 = "55 8B EC 8B 55 08 83 EC 2C 56 8B F1";
-		constexpr auto overlay_surface_start_drawing	 = "55 8B EC 83 EC 10 80 3D ? ? ? ? 00 56 57 8B F9";
-		constexpr auto overlay_surface_finish_drawing	 = "56 6A 00 E8 ? ? ? ? 8B 0D ? ? ? ? 8B 01 8B 90 C4 01 00 00";
+		constexpr auto overlay_engine_get_max_clients = "E8 ? ? ? ? 8B 80 10 01 00 00 C3";
+		constexpr auto overlay_engine_vgui_paint = "55 8B EC 83 EC 28 53 56 8B F1";
+		constexpr auto overlay_surface_get_font_tall = "55 8B EC 8B 45 08 50 E8 ? ? ? ? 8B C8 E8 ? ? ? ? 5D C2 04 00";
+		constexpr auto overlay_surface_paint_traverse = "55 8B EC 8B 55 08 83 EC 2C 56 8B F1";
+		constexpr auto overlay_surface_start_drawing = "55 8B EC 83 EC 10 80 3D ? ? ? ? 00 56 57 8B F9";
+		constexpr auto overlay_surface_finish_drawing = "56 6A 00 E8 ? ? ? ? 8B 0D ? ? ? ? 8B 01 8B 90 C4 01 00 00";
 		constexpr auto overlay_surface_draw_colored_text = "55 8B EC 8B 4D 28 8B 55 24 8D 45 2C";
 
 		// CShaderDeviceDx8::CreateD3DDevice stores the returned DXVK device
@@ -31,16 +31,14 @@ namespace p2boost::portal2 {
 		// ComputeShadowDepthTextures calls the private active-list builder after
 		// preparing its 1024-handle output buffer. This is the only call site that
 		// owns the per-view shadow-depth selection used by the renderer.
-		constexpr auto active_shadow_depth_call =
-			"8D 4D EC 51 8D 95 88 F6 FF FF 52 68 00 04 00 00 50 8B CE C7 45 EC 00 00 00 00 E8 ? ? ? ? 8B 15";
+		constexpr auto active_shadow_depth_call = "8D 4D EC 51 8D 95 88 F6 FF FF 52 68 00 04 00 00 50 8B CE C7 45 EC 00 00 00 00 E8 ? ? ? ? 8B 15";
 
 		// Portal 2's active-list implementation has a stack-aligned prologue due
 		// to its 1024-float sort workspace. Validating the target prevents a nearby
 		// private helper from ever being accepted as the selection function.
-		constexpr auto active_shadow_depth_list =
-			"53 8B DC 83 EC 08 83 E4 F0 83 C4 04 55 8B 6B 04 89 6C 24 04 8B EC B8 88 11 00 00";
+		constexpr auto active_shadow_depth_list = "53 8B DC 83 EC 08 83 E4 F0 83 C4 04 55 8B 6B 04 89 6C 24 04 8B EC B8 88 11 00 00";
 
-		// The selected-list loop resolves IShadowMgr before reading the retained
+		// the selected-list loop resolves IShadowMgr before reading the retained
 		// FlashlightState_t. This xref gives the optimizer the public manager ABI
 		// without embedding the address of Portal 2's private global.
 		constexpr auto active_shadow_manager = "0F B7 3A 8B 0D ? ? ? ? 69 FF 14 01 00 00 03 7E 2C";
@@ -63,13 +61,13 @@ namespace p2boost::portal2 {
 	// recovered class and stack fields used by the two production hooks.
 	namespace frame {
 		constexpr std::ptrdiff_t accumulator{ 0x18 };
-		constexpr size_t		 target_local{ 8 };
+		constexpr size_t target_local{ 8 };
 	}
 
 	namespace shadow {
 		constexpr std::ptrdiff_t entries{ 0x2c };
 		constexpr std::ptrdiff_t flashlight_models{ 0x30 };
-		constexpr size_t		 entry_size{ 0x114 };
+		constexpr size_t entry_size{ 0x114 };
 		constexpr std::ptrdiff_t remove_dirty_call{ 0x75 };
 		constexpr std::ptrdiff_t engine_handle{ 0x04 };
 		constexpr std::ptrdiff_t world_to_shadow{ 0x0c };
@@ -77,7 +75,7 @@ namespace p2boost::portal2 {
 	}
 
 	// CViewSetup fields read by BuildActiveShadowDepthList in build 23973718.
-	// Keeping these verified fields together avoids pretending the much larger
+	// keeping these verified fields together avoids pretending the much larger
 	// private Portal 2 structure is reproduced in the public SDK wrapper.
 	namespace view {
 		constexpr std::ptrdiff_t fov{ 0x68 };
@@ -88,51 +86,9 @@ namespace p2boost::portal2 {
 		constexpr std::ptrdiff_t aspect_ratio{ 0x98 };
 	}
 
-	// VMT indices describe ABI layout rather than process addresses.
+	// private CClientShadowMgr layout recovered for the supported build.
 	namespace vmt {
 		constexpr size_t update_projected{ 24 };
-		constexpr size_t base_client_frame_stage_notify{ 35 };
-		constexpr size_t model_render_change_instance{ 7 };
-		constexpr size_t shadow_get_flashlight_state{ 20 };
-		constexpr size_t engine_client_cmd{ 7 };
-		constexpr size_t engine_get_max_clients{ 20 };
-		constexpr size_t engine_is_recording_demo{ 79 };
-		constexpr size_t engine_execute_client_cmd{ 104 };
-		constexpr size_t engine_active_split_screen_slot{ 127 };
-		constexpr size_t engine_vgui_paint{ 14 };
-
-		// SourceAutoRecord's current Portal 2 HUD path independently identifies
-		// these private CMatSystemSurface helpers and public scheme slots.
-		constexpr size_t surface_get_font_tall{ 72 };
-		constexpr size_t surface_paint_traverse_ex{ 117 };
-		constexpr size_t surface_draw_colored_text{ 160 };
-		constexpr size_t scheme_manager_get_scheme{ 8 };
-		constexpr size_t scheme_get_font{ 3 };
-
-		// VMaterialSystem080 and public D3D9 ABI methods used by the optional
-		// flat-texture feature. these describe interface layout, not addresses.
-		constexpr size_t reload_textures{ 79 };
-		constexpr size_t reload_materials{ 80 };
-		// Portal 2's current public interface layout. SAR independently uses the
-		// same GetRenderContext method for build 9568/current Steam builds.
-		constexpr size_t get_render_context{ 113 };
-		constexpr size_t render_context_bind{ 9 };
-		constexpr size_t material_texture_group{ 1 };
-		constexpr size_t material_shader_name{ 49 };
-		constexpr size_t d3d9_reset{ 16 };
-		constexpr size_t d3d9_present{ 17 };
-		constexpr size_t d3d9_create_texture{ 23 };
-		constexpr size_t d3d9_update_surface{ 30 };
-		constexpr size_t d3d9_update_texture{ 31 };
-		constexpr size_t d3d9_set_viewport{ 47 };
-		constexpr size_t d3d9_set_texture{ 65 };
-		constexpr size_t d3d9_texture_release{ 2 };
-		constexpr size_t d3d9_texture_get_surface_level{ 18 };
-		constexpr size_t d3d9_texture_lock{ 19 };
-		constexpr size_t d3d9_texture_unlock{ 20 };
-		constexpr size_t d3d9_surface_release{ 2 };
-		constexpr size_t d3d9_surface_lock{ 13 };
-		constexpr size_t d3d9_surface_unlock{ 14 };
 	}
 
 	// ClientFrameStage_t values recovered from VClient016 and independently

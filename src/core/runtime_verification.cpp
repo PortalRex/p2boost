@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstring>
 #include <cwctype>
 #include <iomanip>
 #include <sstream>
@@ -13,17 +14,6 @@
 
 namespace p2boost {
 	namespace {
-
-		// read a loaded module path without imposing MAX_PATH.
-		std::wstring module_path( HMODULE module ) {
-			std::wstring path( 32768, L'\0' );
-			const DWORD	 size = GetModuleFileNameW( module, path.data( ), static_cast< DWORD >( path.size( ) ) );
-			if( size == 0 || size == path.size( ) )
-				return { };
-
-			path.resize( size );
-			return path;
-		}
 
 		// convert verified filesystem paths to UTF-8 for logs and commands.
 		std::string narrow( const std::wstring& input ) {
@@ -51,24 +41,23 @@ namespace p2boost {
 			return std::wstring( input, input + std::strlen( input ) );
 		}
 
-		bool is_loaded_from( const wchar_t* module_name, const std::wstring& expected_path ) {
-			const HMODULE module = GetModuleHandleW( module_name );
-			return module && lower( module_path( module ) ) == lower( expected_path );
+		bool is_loaded_from( const Module& module, const std::wstring& expected_path ) {
+			return module && lower( module.path( ) ) == lower( expected_path );
 		}
 
 	}
 
 	const std::array< module_fingerprint_t, 7 >& supported_build_23973718( ) {
-		// Only modules that define hooked code, private overlay ABIs, or the
+		// only modules that define hooked code, private overlay ABIs, or the
 		// required backend belong in the production fingerprint.
 		static const std::array< module_fingerprint_t, 7 > modules{ {
-			{ "engine.dll", "bin\\engine.dll", "5196eace78d5f2f47f8ce39a49b0efd15374a2b996b272642f0493ace42c24dc" },
-			{ "client.dll", "portal2\\bin\\client.dll", "2ff27c2878c258b2c16a0982e30b0d2f1bad9d213e42cc778dc2a2925c625137" },
-			{ "materialsystem.dll", "bin\\materialsystem.dll", "8b8bbdb77e72a23bef8e67f0b9800327338e125ba0fbfae68feb2dc864af4fbf" },
-			{ "vguimatsurface.dll", "bin\\vguimatsurface.dll", "2f1865aefc0eebe2e28289d827cbd737f6744e2ca2a28a830c78f4ab96d5eeb6" },
-			{ "vgui2.dll", "bin\\vgui2.dll", "d79a9a5dab2be278f7df93afcf864c509f0117b9c52b65bca984013d9614571e" },
-			{ "shaderapivk.dll", "bin\\shaderapivk.dll", "aaefa05d9c02049a0cca67a9181f71f5a7710fcc21474bd55c0e1deabba76e84" },
-			{ "dxvk_d3d9.dll", "bin\\dxvk_d3d9.dll", "7bf7c95d81ff33b951ff985037401ff5a792474f1e3b9c5d2f521affb92b9073" },
+		    { "engine.dll", "bin\\engine.dll", "5196eace78d5f2f47f8ce39a49b0efd15374a2b996b272642f0493ace42c24dc" },
+		    { "client.dll", "portal2\\bin\\client.dll", "2ff27c2878c258b2c16a0982e30b0d2f1bad9d213e42cc778dc2a2925c625137" },
+		    { "materialsystem.dll", "bin\\materialsystem.dll", "8b8bbdb77e72a23bef8e67f0b9800327338e125ba0fbfae68feb2dc864af4fbf" },
+		    { "vguimatsurface.dll", "bin\\vguimatsurface.dll", "2f1865aefc0eebe2e28289d827cbd737f6744e2ca2a28a830c78f4ab96d5eeb6" },
+		    { "vgui2.dll", "bin\\vgui2.dll", "d79a9a5dab2be278f7df93afcf864c509f0117b9c52b65bca984013d9614571e" },
+		    { "shaderapivk.dll", "bin\\shaderapivk.dll", "aaefa05d9c02049a0cca67a9181f71f5a7710fcc21474bd55c0e1deabba76e84" },
+		    { "dxvk_d3d9.dll", "bin\\dxvk_d3d9.dll", "7bf7c95d81ff33b951ff985037401ff5a792474f1e3b9c5d2f521affb92b9073" },
 		} };
 		return modules;
 	}
@@ -76,20 +65,20 @@ namespace p2boost {
 	std::string sha256_file( const std::wstring& path ) {
 		// permit Steam updates while hashing the currently installed file.
 		const HANDLE file = CreateFileW( path.c_str( ),
-										 GENERIC_READ,
-										 FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-										 nullptr,
-										 OPEN_EXISTING,
-										 FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN,
-										 nullptr );
+		    GENERIC_READ,
+		    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+		    nullptr,
+		    OPEN_EXISTING,
+		    FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN,
+		    nullptr );
 		if( file == INVALID_HANDLE_VALUE )
 			throw std::runtime_error( "CreateFileW failed" );
 
-		BCRYPT_ALG_HANDLE				algorithm{ };
-		BCRYPT_HASH_HANDLE				hash{ };
-		DWORD							object_size{ };
-		DWORD							result_size{ };
-		std::vector< unsigned char >	object;
+		BCRYPT_ALG_HANDLE algorithm{ };
+		BCRYPT_HASH_HANDLE hash{ };
+		DWORD object_size{ };
+		DWORD result_size{ };
+		std::vector< unsigned char > object;
 		std::array< unsigned char, 32 > digest{ };
 
 		// own every BCrypt handle explicitly so all failure paths are reversible.
@@ -97,11 +86,11 @@ namespace p2boost {
 			if( BCryptOpenAlgorithmProvider( &algorithm, BCRYPT_SHA256_ALGORITHM, nullptr, 0 ) < 0 )
 				throw std::runtime_error( "BCryptOpenAlgorithmProvider failed" );
 			if( BCryptGetProperty( algorithm,
-								   BCRYPT_OBJECT_LENGTH,
-								   reinterpret_cast< PUCHAR >( &object_size ),
-								   sizeof( object_size ),
-								   &result_size,
-								   0 ) < 0 )
+			        BCRYPT_OBJECT_LENGTH,
+			        reinterpret_cast< PUCHAR >( &object_size ),
+			        sizeof( object_size ),
+			        &result_size,
+			        0 ) < 0 )
 				throw std::runtime_error( "BCryptGetProperty failed" );
 
 			object.resize( object_size );
@@ -140,25 +129,24 @@ namespace p2boost {
 		return output.str( );
 	}
 
-	verification_result_t verify_runtime( ) {
+	verification_result_t verify_runtime( const portal2_modules_t& modules ) {
 		verification_result_t result;
 
 		// derive the installation root from the module the loader actually mapped.
-		const HMODULE engine = GetModuleHandleW( L"engine.dll" );
-		if( !engine ) {
+		if( !modules.m_engine ) {
 			result.m_errors.emplace_back( "engine.dll is not loaded" );
 			return result;
 		}
 
-		const std::wstring engine_path = module_path( engine );
-		const std::wstring suffix	   = L"\\bin\\engine.dll";
+		const std::wstring engine_path = modules.m_engine.path( );
+		const std::wstring suffix = L"\\bin\\engine.dll";
 		if( engine_path.size( ) <= suffix.size( ) || lower( engine_path.substr( engine_path.size( ) - suffix.size( ) ) ) != suffix ) {
 			result.m_errors.emplace_back( "cannot derive the Portal 2 root from engine.dll" );
 			return result;
 		}
 
 		const std::wstring root = engine_path.substr( 0, engine_path.size( ) - suffix.size( ) );
-		result.m_game_root		= narrow( root );
+		result.m_game_root = narrow( root );
 
 		// reject any changed production dependency before hooks can be installed.
 		for( const auto& module : supported_build_23973718( ) ) {
@@ -172,23 +160,23 @@ namespace p2boost {
 			}
 		}
 
-		// Private VMT hooks resolve methods from these mapped modules. Hashing the
+		// private VMT hooks resolve methods from these mapped modules. hashing the
 		// on-disk files is insufficient if a different copy was loaded first.
 		const std::wstring material_system = root + L"\\bin\\materialsystem.dll";
-		const std::wstring surface		   = root + L"\\bin\\vguimatsurface.dll";
-		const std::wstring vgui			   = root + L"\\bin\\vgui2.dll";
-		if( !is_loaded_from( L"materialsystem.dll", material_system ) )
+		const std::wstring surface = root + L"\\bin\\vguimatsurface.dll";
+		const std::wstring vgui = root + L"\\bin\\vgui2.dll";
+		if( !is_loaded_from( modules.m_material_system, material_system ) )
 			result.m_errors.emplace_back( "materialsystem.dll was not loaded from the verified Portal 2 installation" );
-		if( !is_loaded_from( L"vguimatsurface.dll", surface ) )
+		if( !is_loaded_from( modules.m_surface, surface ) )
 			result.m_errors.emplace_back( "vguimatsurface.dll was not loaded from the verified Portal 2 installation" );
-		if( !is_loaded_from( L"vgui2.dll", vgui ) )
+		if( !is_loaded_from( modules.m_vgui, vgui ) )
 			result.m_errors.emplace_back( "vgui2.dll was not loaded from the verified Portal 2 installation" );
 
 		// filenames alone are insufficient; verify the loaded backend paths too.
 		const std::wstring shader_api = root + L"\\bin\\shaderapivk.dll";
-		const std::wstring dxvk		  = root + L"\\bin\\dxvk_d3d9.dll";
-		result.m_dxvk_vulkan		  = is_loaded_from( L"shaderapivk.dll", shader_api ) && is_loaded_from( L"dxvk_d3d9.dll", dxvk ) &&
-							   GetModuleHandleW( L"vulkan-1.dll" ) != nullptr;
+		const std::wstring dxvk = root + L"\\bin\\dxvk_d3d9.dll";
+		result.m_dxvk_vulkan = is_loaded_from( modules.m_shader_api, shader_api ) &&
+		    is_loaded_from( modules.m_dxvk_d3d9, dxvk ) && modules.m_vulkan;
 		if( !result.m_dxvk_vulkan )
 			result.m_errors.emplace_back( "Portal 2's shipped DXVK/Vulkan backend is not active; launch with -vulkan" );
 

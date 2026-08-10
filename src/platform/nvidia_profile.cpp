@@ -1,8 +1,6 @@
 #include "nvidia_profile.h"
 
-#include "address.h"
-#include "pattern.h"
-#include "portal2.h"
+#include "module.h"
 
 #include <Windows.h>
 #include <d3d9.h>
@@ -16,31 +14,19 @@
 namespace p2boost {
 	namespace {
 
-		constexpr NvU32	  present_method_id{ 0x20d690f8 };
-		constexpr NvU32	  present_method_layered{ 0x00000001 };
-		constexpr NvU32	  present_flags_id{ 0x20324987 };
-		constexpr NvU32	  present_flags_dxvk_native{ 0x000802a5 };
+		constexpr NvU32 present_method_id{ 0x20d690f8 };
+		constexpr NvU32 present_method_layered{ 0x00000001 };
+		constexpr NvU32 present_flags_id{ 0x20324987 };
+		constexpr NvU32 present_flags_dxvk_native{ 0x000802a5 };
 		constexpr wchar_t profile_name[]{ L"p2boost Portal 2" };
 
 		constexpr DWORD elevated_configured{ 0 };
 		constexpr DWORD elevated_applied{ 10 };
 		constexpr DWORD elevated_failed{ 20 };
 
-		int module_anchor{ };
-
-		// Read the adapter selected by Portal 2's live DXVK device. This avoids
+		// read the adapter selected by Portal 2's live DXVK device. this avoids
 		// probing NVIDIA APIs on AMD, Intel, and software-rendered systems.
-		bool active_adapter_vendor( unsigned int& vendor_id ) noexcept {
-			const Address shader{ GetModuleHandleW( L"shaderapivk.dll" ) };
-			if( !shader )
-				return false;
-
-			const Address device_xref = pattern::find_unique( shader, portal2::signature::flat_texture_device );
-			if( !device_xref )
-				return false;
-
-			const Address device_global = device_xref.add( portal2::xref::flat_texture_device_global ).at< Address >( );
-			auto*		  device		= device_global.to< IDirect3DDevice9* >( );
+		bool active_adapter_vendor( IDirect3DDevice9* device, unsigned int& vendor_id ) noexcept {
 			if( !device )
 				return false;
 
@@ -53,7 +39,7 @@ namespace p2boost {
 				return false;
 
 			D3DADAPTER_IDENTIFIER9 identifier{ };
-			const bool			   identified = SUCCEEDED( direct3d->GetAdapterIdentifier( parameters.AdapterOrdinal, 0, &identifier ) );
+			const bool identified = SUCCEEDED( direct3d->GetAdapterIdentifier( parameters.AdapterOrdinal, 0, &identifier ) );
 			direct3d->Release( );
 			if( !identified )
 				return false;
@@ -85,7 +71,7 @@ namespace p2boost {
 				}
 
 				m_initialized = true;
-				status		  = NvAPI_DRS_CreateSession( &m_session );
+				status = NvAPI_DRS_CreateSession( &m_session );
 				if( status != NVAPI_OK ) {
 					result = failure( "NvAPI_DRS_CreateSession", status );
 					return false;
@@ -106,13 +92,13 @@ namespace p2boost {
 
 		private:
 			NvDRSSessionHandle m_session{ };
-			bool			   m_initialized{ };
+			bool m_initialized{ };
 		};
 
 		// obtain the exact executable path to avoid ambiguous same-name profiles.
 		std::wstring current_application_path( ) {
 			std::wstring path( 32768, L'\0' );
-			const DWORD	 length = GetModuleFileNameW( nullptr, path.data( ), static_cast< DWORD >( path.size( ) ) );
+			const DWORD length = GetModuleFileNameW( nullptr, path.data( ), static_cast< DWORD >( path.size( ) ) );
 			if( !length || length >= path.size( ) )
 				return { };
 
@@ -122,19 +108,7 @@ namespace p2boost {
 
 		// find the loaded DLL without relying on its filename.
 		std::wstring current_module_path( ) {
-			HMODULE module{ };
-			if( !GetModuleHandleExW( GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-									 reinterpret_cast< const wchar_t* >( &module_anchor ),
-									 &module ) )
-				return { };
-
-			std::wstring path( 32768, L'\0' );
-			const DWORD	 length = GetModuleFileNameW( module, path.data( ), static_cast< DWORD >( path.size( ) ) );
-			if( !length || length >= path.size( ) )
-				return { };
-
-			path.resize( length );
-			return path;
+			return Module::containing( reinterpret_cast< const void* >( &current_module_path ) ).path( );
 		}
 
 		// derive Portal 2's executable from portal2/p2boost.dll in the install.
@@ -154,7 +128,7 @@ namespace p2boost {
 		NvAPI_Status find_profile( NvDRSSessionHandle session, const std::wstring& application_path, NvDRSProfileHandle& profile ) noexcept {
 			NVDRS_APPLICATION application{ };
 			application.version = NVDRS_APPLICATION_VER;
-			auto* name			= reinterpret_cast< NvU16* >( const_cast< wchar_t* >( application_path.c_str( ) ) );
+			auto* name = reinterpret_cast< NvU16* >( const_cast< wchar_t* >( application_path.c_str( ) ) );
 			return NvAPI_DRS_FindApplicationByName( session, name, &profile, &application );
 		}
 
@@ -181,12 +155,12 @@ namespace p2boost {
 		}
 
 		NvAPI_Status read_setting( NvDRSSessionHandle session,
-								   NvDRSProfileHandle profile,
-								   NvU32			  id,
-								   NvU32			  default_value,
-								   NvU32&			  value ) noexcept {
+		    NvDRSProfileHandle profile,
+		    NvU32 id,
+		    NvU32 default_value,
+		    NvU32& value ) noexcept {
 			NVDRS_SETTING setting{ };
-			setting.version			  = NVDRS_SETTING_VER;
+			setting.version = NVDRS_SETTING_VER;
 			const NvAPI_Status status = NvAPI_DRS_GetSetting( session, profile, id, &setting );
 			if( status == NVAPI_SETTING_NOT_FOUND ) {
 				value = default_value;
@@ -200,9 +174,9 @@ namespace p2boost {
 
 		NvAPI_Status set_setting( NvDRSSessionHandle session, NvDRSProfileHandle profile, NvU32 id, NvU32 value ) noexcept {
 			NVDRS_SETTING setting{ };
-			setting.version			= NVDRS_SETTING_VER;
-			setting.settingId		= id;
-			setting.settingType		= NVDRS_DWORD_TYPE;
+			setting.version = NVDRS_SETTING_VER;
+			setting.settingId = id;
+			setting.settingType = NVDRS_DWORD_TYPE;
 			setting.u32CurrentValue = value;
 			return NvAPI_DRS_SetSetting( session, profile, &setting );
 		}
@@ -212,12 +186,12 @@ namespace p2boost {
 				return failure( "GetModuleFileNameW", static_cast< int >( GetLastError( ) ) );
 
 			nvidia_profile_result_t result;
-			DrsSession				drs;
+			DrsSession drs;
 			if( !drs.open( result ) )
 				return result;
 
 			NvDRSProfileHandle profile{ };
-			NvAPI_Status	   status = find_profile( drs.get( ), application_path, profile );
+			NvAPI_Status status = find_profile( drs.get( ), application_path, profile );
 			if( status == NVAPI_EXECUTABLE_NOT_FOUND ) {
 				status = create_profile( drs.get( ), application_path, profile );
 				if( status != NVAPI_OK )
@@ -260,12 +234,12 @@ namespace p2boost {
 
 	}
 
-	nvidia_profile_result_t configure_nvidia_profile( ) noexcept {
+	nvidia_profile_result_t configure_nvidia_profile( IDirect3DDevice9* device ) noexcept {
 		unsigned int vendor_id{ };
-		if( active_adapter_vendor( vendor_id ) && !needs_nvidia_profile( vendor_id ) )
+		if( active_adapter_vendor( device, vendor_id ) && !needs_nvidia_profile( vendor_id ) )
 			return { nvidia_profile_state_t::not_applicable, "non-NVIDIA adapter", static_cast< int >( vendor_id ) };
 
-		// Fall back to NVAPI when adapter discovery fails. This preserves support
+		// fall back to NVAPI when adapter discovery fails. this preserves support
 		// for hybrid systems whose NVIDIA device is visible before DXVK settles.
 		return configure_profile( current_application_path( ) );
 	}
@@ -283,18 +257,18 @@ namespace p2boost {
 		const std::wstring parameters = L"\"" + module_path + L"\",ApplyNvidiaProfile";
 
 		SHELLEXECUTEINFOW launch{ };
-		launch.cbSize		= sizeof( launch );
-		launch.fMask		= SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC;
-		launch.hwnd			= GetForegroundWindow( );
-		launch.lpVerb		= L"runas";
-		launch.lpFile		= executable.c_str( );
+		launch.cbSize = sizeof( launch );
+		launch.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC;
+		launch.hwnd = GetForegroundWindow( );
+		launch.lpVerb = L"runas";
+		launch.lpFile = executable.c_str( );
 		launch.lpParameters = parameters.c_str( );
-		launch.nShow		= SW_HIDE;
+		launch.nShow = SW_HIDE;
 		if( !ShellExecuteExW( &launch ) || !launch.hProcess )
 			return failure( "ShellExecuteExW(runas)", static_cast< int >( GetLastError( ) ) );
 
-		const DWORD wait	  = WaitForSingleObject( launch.hProcess, 120000 );
-		DWORD		exit_code = elevated_failed;
+		const DWORD wait = WaitForSingleObject( launch.hProcess, 120000 );
+		DWORD exit_code = elevated_failed;
 		if( wait == WAIT_OBJECT_0 )
 			GetExitCodeProcess( launch.hProcess, &exit_code );
 		CloseHandle( launch.hProcess );

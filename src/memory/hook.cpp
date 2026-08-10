@@ -29,7 +29,18 @@ namespace p2boost {
 			}
 
 			DWORD ignored{ };
-			VirtualProtect( address, size, old_protection, &ignored );
+			if( !VirtualProtect( address, size, old_protection, &ignored ) ) {
+				// keep ownership transactional when Windows cannot restore the page.
+				// a completed write is rolled back while the temporary access still holds.
+				if( result == write_result_t::written ) {
+					std::memcpy( address, expected, size );
+					FlushInstructionCache( GetCurrentProcess( ), address, size );
+					VirtualProtect( address, size, old_protection, &ignored );
+				}
+
+				return write_result_t::protection_failed;
+			}
+
 			return result;
 		}
 
@@ -49,14 +60,14 @@ namespace p2boost {
 			return false;
 
 		// preserve the current chain target before replacing the VMT entry.
-		m_method	  = method;
-		m_previous	  = *method;
+		m_method = method;
+		m_previous = *method;
 		m_replacement = replacement;
-		m_installed	  = write_method( m_method, m_previous, m_replacement ) == write_result_t::written;
+		m_installed = write_method( m_method, m_previous, m_replacement ) == write_result_t::written;
 
 		if( !m_installed ) {
-			m_method	  = nullptr;
-			m_previous	  = nullptr;
+			m_method = nullptr;
+			m_previous = nullptr;
 			m_replacement = nullptr;
 		}
 
@@ -69,9 +80,12 @@ namespace p2boost {
 
 		// restore only while our replacement still owns the entry.
 		write_result_t result{ write_method( m_method, m_replacement, m_previous ) };
-		m_installed	  = false;
-		m_method	  = nullptr;
-		m_previous	  = nullptr;
+		if( result == write_result_t::protection_failed )
+			return false;
+
+		m_installed = false;
+		m_method = nullptr;
+		m_previous = nullptr;
 		m_replacement = nullptr;
 		return result == write_result_t::written;
 	}
@@ -85,14 +99,13 @@ namespace p2boost {
 			return false;
 
 		// replace the full verified instruction sequence with CALL and NOP padding.
-		m_address  = static_cast< std::uint8_t* >( address );
+		m_address = static_cast< std::uint8_t* >( address );
 		m_original = expected;
-		m_patched  = x86::relative_call( Address{ m_address }, Address{ replacement }, expected.size( ) );
+		m_patched = x86::relative_call( Address{ m_address }, Address{ replacement }, expected.size( ) );
 		if( m_patched.empty( ) )
 			return false;
 
-		m_installed = write_bytes( m_address, m_original.data( ), m_patched.data( ), m_patched.size( ), PAGE_EXECUTE_READWRITE ) ==
-					  write_result_t::written;
+		m_installed = write_bytes( m_address, m_original.data( ), m_patched.data( ), m_patched.size( ), PAGE_EXECUTE_READWRITE ) == write_result_t::written;
 		if( !m_installed )
 			m_address = nullptr;
 
@@ -109,7 +122,7 @@ namespace p2boost {
 			return false;
 
 		m_installed = false;
-		m_address	= nullptr;
+		m_address = nullptr;
 		return result == write_result_t::written;
 	}
 

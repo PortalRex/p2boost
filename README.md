@@ -158,13 +158,18 @@ To remove the plugin:
   render targets, lightmaps, and cubemaps remain original. Shader and texture-
   group classification protects HUD, console, menus, cursors, and SAR overlays
   without relying on material-name exceptions.
-- `p2boost_overlay 0|1` shows actual rendered FPS, current/p95/p99/max frame
-  time, a 64-frame graph, one-second hitch count, and shadow-cache activity.
+- `p2boost_overlay 0|1|2` selects off, the full top-right profiler, or a
+  larger FPS-only counter. The compact counter stays white and turns red only
+  while the rolling one-second window contains an 8.3 ms-or-longer hitch. The
+  full view shows actual rendered FPS, current/p95/p99/max frame time, a
+  64-frame graph, one-second hitch count, and shadow-cache activity.
 - `p2boost_trace 0|1` records bounded frame and shadow-cache metrics.
 - `p2boost_dump_metrics` writes `p2boost_metrics.csv` in the game root.
 
-`mat_monitorgamma` now changes the completed DXVK frame; 2.2 is neutral and
-therefore incurs no extra pass. `mat_viewportscale` and `mat_viewportupscale`
+`mat_monitorgamma` now changes only the frame handed to DXVK and restores the
+untouched back buffer after presentation, so retained loading frames cannot
+accumulate the correction. A value of 2.2 is neutral and therefore incurs no
+extra pass. `mat_viewportscale` and `mat_viewportupscale`
 have only `FCVAR_CHEAT` removed, retain every other engine flag and bound, and
 are restored to their original flags when p2boost unloads. With upscaling
 enabled, each scaled 3D view is expanded into its own full-resolution slot
@@ -188,14 +193,19 @@ custom demo message or changing simulation data.
 
 ## Source layout
 
-- `src/core` contains the two release fixes, runtime verification, metrics,
-  overlay, and plugin entry point.
-- `src/engine` contains typed wrappers for the minimal public Source ABI, the
-  console bridge, and only the reversed fields/signatures used by release code.
+- `src/core` contains the benchmark-proven performance fixes, runtime
+  verification, metrics, overlay, and plugin entry point.
+- `src/engine` contains the single module/interface context, typed Source ABI
+  wrappers, console bridge, and the build-23973718 reversed findings used by
+  release code.
 - `src/features` contains optional display, provenance, and flat-texture
-  features kept separate from the benchmark-proven core patches.
-- `src/memory` contains the small chain-aware hook and pattern helpers.
-- `src/platform` contains the in-process NVIDIA application-profile bridge.
+  features. Flat-texture material classification, pixel codecs, resource
+  ownership, and hook callbacks live in separate translation units.
+- `src/memory` contains executable-memory, pattern, and chain-aware hook
+  helpers, including the only production wrapper around loader module exports.
+- `src/platform` contains D3D9 layout, window handling, and the in-process
+  NVIDIA application-profile bridge. AMD adapters bypass NVIDIA setup cleanly.
+- `src/util` contains shared timing, math, and projected-frustum helpers.
 - `research` contains Ghidra scripts, old native-D3D9 probes, benchmark routes,
   and rejected-experiment notes. Nothing there is linked into `p2boost.dll`.
 - `third_party/nvapi` contains NVIDIA's MIT-licensed public build interface.

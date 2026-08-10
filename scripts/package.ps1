@@ -39,7 +39,8 @@ if (-not $BuildDirectory) {
 Copy-Item -LiteralPath (Join-Path $BuildDirectory 'p2boost.dll') -Destination $destination
 Copy-Item -LiteralPath (Join-Path $BuildDirectory 'p2boost.pdb') -Destination $destination
 $archive = "${destination}.zip"
-# PowerShell's wildcard omits root dotfiles, so add the format policy
-# explicitly while keeping the archive rooted at its contents.
-Compress-Archive -Path "$destination\*", "$destination\.clang-format" -DestinationPath $archive -Force
+# enumerate hidden and ordinary root entries once so PowerShell versions that
+# include dotfiles in wildcards cannot duplicate the format policy.
+$archiveItems = Get-ChildItem -LiteralPath $destination -Force | Select-Object -ExpandProperty FullName
+Compress-Archive -LiteralPath $archiveItems -DestinationPath $archive -Force
 Write-Host "Packaged $archive"
