@@ -27,7 +27,7 @@ namespace p2boost {
 
 		bool installed( ) const noexcept {
 			return m_update_projected.installed( ) && m_build_active_depth.installed( ) && m_frame_stage.installed( ) &&
-			    m_change_instance.installed( );
+			       m_change_instance.installed( );
 		}
 
 		unsigned int hit_count( ) const noexcept {
@@ -40,18 +40,18 @@ namespace p2boost {
 
 	private:
 		struct cached_state_t {
-			std::uint16_t m_handle{ };
+			std::uint16_t                                           m_handle{ };
 			std::array< std::uint8_t, portal2::shadow::entry_size > m_entry{ };
-			int m_flashlight_models_value{ };
+			int                                                     m_flashlight_models_value{ };
 		};
 
 		using state_iterator_t = std::vector< cached_state_t >::iterator;
 
-		using update_projected_fn_t = void( __thiscall* )( void*, unsigned int, bool );
-		using remove_dirty_fn_t = void( __thiscall* )( void*, unsigned int );
+		using update_projected_fn_t   = void( __thiscall* )( void*, unsigned int, bool );
+		using remove_dirty_fn_t       = void( __thiscall* )( void*, unsigned int );
 		using build_active_depth_fn_t = int( __thiscall* )( void*, const void*, int, std::uint16_t*, int* );
-		using frame_stage_fn_t = void( __thiscall* )( void*, int );
-		using change_instance_fn_t = bool( __thiscall* )( void*, unsigned short, void* );
+		using frame_stage_fn_t        = void( __thiscall* )( void*, int );
+		using change_instance_fn_t    = bool( __thiscall* )( void*, unsigned short, void* );
 
 		static void __fastcall UpdateProjected( void* self, void*, unsigned int handle, bool force );
 		static int __fastcall BuildActiveDepthList(
@@ -62,21 +62,21 @@ namespace p2boost {
 
 		static ProjectedShadowCache* m_instance;
 
-		VmtHook m_update_projected;
-		CallSitePatch m_build_active_depth;
-		VmtHook m_frame_stage;
-		VmtHook m_change_instance;
-		FrameMetrics* m_metrics{ };
+		VmtHook                       m_update_projected;
+		CallSitePatch                 m_build_active_depth;
+		VmtHook                       m_frame_stage;
+		VmtHook                       m_change_instance;
+		FrameMetrics*                 m_metrics{ };
 		std::vector< cached_state_t > m_states;
-		std::mutex m_state_mutex;
-		std::uint64_t m_generation{ };
-		int** m_flashlight_models_cvar_parent{ };
-		remove_dirty_fn_t m_remove_dirty{ };
-		build_active_depth_fn_t m_original_build_active_depth{ };
-		sdk::IShadowMgr** m_shadow_manager_parent{ };
-		std::atomic_bool m_enabled{ };
-		std::atomic_uint m_hits{ };
-		std::atomic_uint m_depth_culls{ };
+		std::mutex                    m_state_mutex;
+		std::uint64_t                 m_generation{ };
+		int**                         m_flashlight_models_cvar_parent{ };
+		remove_dirty_fn_t             m_remove_dirty{ };
+		build_active_depth_fn_t       m_original_build_active_depth{ };
+		sdk::IShadowMgr**             m_shadow_manager_parent{ };
+		std::atomic_bool              m_enabled{ };
+		std::atomic_uint              m_hits{ };
+		std::atomic_uint              m_depth_culls{ };
 	};
 
 }

@@ -6,17 +6,17 @@
 namespace p2boost {
 
 	void portal2_modules_t::refresh( ) noexcept {
-		m_engine = Module{ L"engine.dll" };
-		m_client = Module{ L"client.dll" };
+		m_engine          = Module{ L"engine.dll" };
+		m_client          = Module{ L"client.dll" };
 		m_material_system = Module{ L"materialsystem.dll" };
-		m_surface = Module{ L"vguimatsurface.dll" };
-		m_vgui = Module{ L"vgui2.dll" };
-		m_shader_api = Module{ L"shaderapivk.dll" };
-		m_dxvk_d3d9 = Module{ L"dxvk_d3d9.dll" };
-		m_vulkan = Module{ L"vulkan-1.dll" };
-		m_vstdlib = Module{ L"vstdlib.dll" };
-		m_tier0 = Module{ L"tier0.dll" };
-		m_plugin = Module::containing( reinterpret_cast< const void* >( &find_dxvk_device ) );
+		m_surface         = Module{ L"vguimatsurface.dll" };
+		m_vgui            = Module{ L"vgui2.dll" };
+		m_shader_api      = Module{ L"shaderapivk.dll" };
+		m_dxvk_d3d9       = Module{ L"dxvk_d3d9.dll" };
+		m_vulkan          = Module{ L"vulkan-1.dll" };
+		m_vstdlib         = Module{ L"vstdlib.dll" };
+		m_tier0           = Module{ L"tier0.dll" };
+		m_plugin          = Module::containing( reinterpret_cast< const void* >( &find_dxvk_device ) );
 	}
 
 	void Portal2Interfaces::connect( sdk::create_interface_fn_t engine_factory, const portal2_modules_t& modules ) noexcept {
@@ -28,14 +28,14 @@ namespace p2boost {
 		const sdk::InterfaceFactory surface{ modules.m_surface };
 		const sdk::InterfaceFactory vgui{ modules.m_vgui };
 
-		m_cvar = engine.get< sdk::ICvar >( );
-		m_engine_client = engine.get< sdk::IVEngineClient >( );
-		m_model_render = engine.get< sdk::IVModelRender >( );
-		m_engine_vgui = engine.get< sdk::IEngineVGui >( );
-		m_base_client = client.get< sdk::IBaseClientDLL >( );
+		m_cvar            = engine.get< sdk::ICvar >( );
+		m_engine_client   = engine.get< sdk::IVEngineClient >( );
+		m_model_render    = engine.get< sdk::IVModelRender >( );
+		m_engine_vgui     = engine.get< sdk::IEngineVGui >( );
+		m_base_client     = client.get< sdk::IBaseClientDLL >( );
 		m_material_system = materials.get< sdk::IMaterialSystem >( );
-		m_surface = surface.get< sdk::ISurface >( );
-		m_scheme_manager = vgui.get< sdk::ISchemeManager >( );
+		m_surface         = surface.get< sdk::ISurface >( );
+		m_scheme_manager  = vgui.get< sdk::ISchemeManager >( );
 
 		if( m_cvar )
 			return;
@@ -48,14 +48,14 @@ namespace p2boost {
 	}
 
 	void Portal2Interfaces::disconnect( ) noexcept {
-		m_cvar = nullptr;
-		m_engine_client = nullptr;
-		m_model_render = nullptr;
-		m_engine_vgui = nullptr;
-		m_base_client = nullptr;
+		m_cvar            = nullptr;
+		m_engine_client   = nullptr;
+		m_model_render    = nullptr;
+		m_engine_vgui     = nullptr;
+		m_base_client     = nullptr;
 		m_material_system = nullptr;
-		m_surface = nullptr;
-		m_scheme_manager = nullptr;
+		m_surface         = nullptr;
+		m_scheme_manager  = nullptr;
 	}
 
 	IDirect3DDevice9* find_dxvk_device( const portal2_modules_t& modules ) noexcept {

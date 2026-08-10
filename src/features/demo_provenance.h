@@ -22,9 +22,9 @@ namespace p2boost {
 		using cbuf_add_text_fn_t = void( __cdecl* )( int, const char*, int );
 
 		sdk::IVEngineClient* m_engine_client{ };
-		cbuf_add_text_fn_t m_cbuf_add_text{ };
-		unsigned int m_recording_frames{ };
-		bool m_marked{ };
+		cbuf_add_text_fn_t   m_cbuf_add_text{ };
+		unsigned int         m_recording_frames{ };
+		bool                 m_marked{ };
 	};
 
 }

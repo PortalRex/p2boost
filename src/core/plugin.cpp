@@ -29,7 +29,7 @@ namespace p2boost {
 			// configure the NVIDIA application profile before installing engine hooks.
 			m_modules.refresh( );
 			m_verification = verify_runtime( m_modules );
-			m_device = find_dxvk_device( m_modules );
+			m_device       = find_dxvk_device( m_modules );
 			if( m_verification.m_dxvk_vulkan ) {
 				m_nvidia_profile = configure_nvidia_profile( m_device );
 				if( m_nvidia_profile.m_state == nvidia_profile_state_t::failed )
@@ -58,9 +58,9 @@ namespace p2boost {
 			// removing only that flag makes the original engine path usable while
 			// preserving archive, client, bounds, and replication behavior.
 			const bool cvars_ready = !m_verification.m_supported ||
-			    ( m_commands.remove_flags( "mat_viewportscale", cvar_flag_cheat ) &&
-			        m_commands.remove_flags( "mat_viewportupscale", cvar_flag_cheat ) &&
-			        m_commands.remove_flags( "r_drawparticles", cvar_flag_cheat ) );
+			                         ( m_commands.remove_flags( "mat_viewportscale", cvar_flag_cheat ) &&
+			                           m_commands.remove_flags( "mat_viewportupscale", cvar_flag_cheat ) &&
+			                           m_commands.remove_flags( "r_drawparticles", cvar_flag_cheat ) );
 			if( !cvars_ready )
 				m_verification.m_errors.emplace_back( "cvars unavailable" );
 
@@ -86,16 +86,16 @@ namespace p2boost {
 			m_metrics.set_focused( m_last_focused );
 
 			console_print( "[p2boost] loaded v%s; backend=%s fixes=%s\n",
-			    P2BOOST_VERSION,
-			    m_verification.m_dxvk_vulkan ? "DXVK/Vulkan" : "unsupported",
-			    m_enabled ? "enabled" : "disabled" );
+			               P2BOOST_VERSION,
+			               m_verification.m_dxvk_vulkan ? "DXVK/Vulkan" : "unsupported",
+			               m_enabled ? "enabled" : "disabled" );
 			for( const auto& error : m_verification.m_errors )
 				console_print( "[p2boost] %s\n", error.c_str( ) );
 			if( m_nvidia_profile.m_state == nvidia_profile_state_t::unavailable || m_nvidia_profile.m_state == nvidia_profile_state_t::failed )
 				console_print( "[p2boost] NVIDIA profile setup %s at %s (%d); no driver settings were changed\n",
-				    nvidia_profile_state_name( m_nvidia_profile.m_state ),
-				    m_nvidia_profile.m_operation,
-				    m_nvidia_profile.m_status );
+				               nvidia_profile_state_name( m_nvidia_profile.m_state ),
+				               m_nvidia_profile.m_operation,
+				               m_nvidia_profile.m_status );
 			return true;
 		}
 
@@ -110,7 +110,7 @@ namespace p2boost {
 			m_frame_limiter.remove( );
 			m_commands.disconnect( );
 			m_interfaces.disconnect( );
-			m_device = nullptr;
+			m_device   = nullptr;
 			m_instance = nullptr;
 			console_print( "[p2boost] unloaded\n" );
 		}
@@ -298,35 +298,35 @@ namespace p2boost {
 			               "display_available=%d gamma_passes=%llu viewport_passes=%llu demo_marker=%d "
 			               "flat_available=%d flat=%d flat_textures=%zu flat_ready=%zu flat_normal=%d flat_binds=%llu "
 			               "flat_uploads=%llu/%llu/%llu sar=%d samples=%zu root=%s\n",
-			    m_verification.m_supported,
-			    m_verification.m_dxvk_vulkan,
-			    nvidia_profile_state_name( m_nvidia_profile.m_state ),
-			    m_nvidia_profile.m_operation,
-			    m_nvidia_profile.m_status,
-			    m_enabled,
-			    m_frame_limiter.installed( ),
-			    m_shadow_cache.installed( ),
-			    m_shadow_cache.hit_count( ),
-			    m_shadow_cache.culled_count( ),
-			    m_metrics.tracing( ),
-			    m_overlay.mode( ),
-			    m_overlay.available( ),
-			    m_display_adjustments.available( ),
-			    static_cast< unsigned long long >( m_display_adjustments.gamma_passes( ) ),
-			    static_cast< unsigned long long >( m_display_adjustments.viewport_passes( ) ),
-			    m_demo_provenance.available( ),
-			    m_flat_textures.available( ),
-			    m_flat_textures.enabled( ),
-			    m_flat_textures.texture_count( ),
-			    m_flat_textures.ready_texture_count( ),
-			    m_flat_textures.normal_ready( ),
-			    static_cast< unsigned long long >( m_flat_textures.substitution_count( ) ),
-			    static_cast< unsigned long long >( m_flat_textures.texture_upload_count( ) ),
-			    static_cast< unsigned long long >( m_flat_textures.surface_upload_count( ) ),
-			    static_cast< unsigned long long >( m_flat_textures.device_upload_count( ) ),
-			    static_cast< bool >( Module{ L"sar.dll" } ),
-			    m_metrics.count( ),
-			    m_verification.m_game_root.c_str( ) );
+			               m_verification.m_supported,
+			               m_verification.m_dxvk_vulkan,
+			               nvidia_profile_state_name( m_nvidia_profile.m_state ),
+			               m_nvidia_profile.m_operation,
+			               m_nvidia_profile.m_status,
+			               m_enabled,
+			               m_frame_limiter.installed( ),
+			               m_shadow_cache.installed( ),
+			               m_shadow_cache.hit_count( ),
+			               m_shadow_cache.culled_count( ),
+			               m_metrics.tracing( ),
+			               m_overlay.mode( ),
+			               m_overlay.available( ),
+			               m_display_adjustments.available( ),
+			               static_cast< unsigned long long >( m_display_adjustments.gamma_passes( ) ),
+			               static_cast< unsigned long long >( m_display_adjustments.viewport_passes( ) ),
+			               m_demo_provenance.available( ),
+			               m_flat_textures.available( ),
+			               m_flat_textures.enabled( ),
+			               m_flat_textures.texture_count( ),
+			               m_flat_textures.ready_texture_count( ),
+			               m_flat_textures.normal_ready( ),
+			               static_cast< unsigned long long >( m_flat_textures.substitution_count( ) ),
+			               static_cast< unsigned long long >( m_flat_textures.texture_upload_count( ) ),
+			               static_cast< unsigned long long >( m_flat_textures.surface_upload_count( ) ),
+			               static_cast< unsigned long long >( m_flat_textures.device_upload_count( ) ),
+			               static_cast< bool >( Module{ L"sar.dll" } ),
+			               m_metrics.count( ),
+			               m_verification.m_game_root.c_str( ) );
 
 			return sdk::Stop;
 		}
@@ -361,7 +361,7 @@ namespace p2boost {
 				console_print( "[p2boost] flat textures unavailable on this renderer/build\n" );
 			else
 				console_print( "[p2boost] flat textures %s; color maps are solid, normals are neutral, and UI/dynamic inputs are preserved\n",
-				    enabled ? "enabled" : "disabled" );
+				               enabled ? "enabled" : "disabled" );
 
 			return sdk::Stop;
 		}
@@ -401,7 +401,7 @@ namespace p2boost {
 		bool can_enable( ) const noexcept {
 			// partial activation would make A/B results impossible to interpret.
 			return m_verification.m_supported && m_verification.m_dxvk_vulkan && m_frame_limiter.installed( ) &&
-			    m_shadow_cache.installed( );
+			       m_shadow_cache.installed( );
 		}
 
 		void apply_enabled_state( ) noexcept {
@@ -419,25 +419,25 @@ namespace p2boost {
 
 		static Plugin* m_instance;
 
-		verification_result_t m_verification;
-		portal2_modules_t m_modules;
-		Portal2Interfaces m_interfaces;
+		verification_result_t   m_verification;
+		portal2_modules_t       m_modules;
+		Portal2Interfaces       m_interfaces;
 		nvidia_profile_result_t m_nvidia_profile;
-		FrameMetrics m_metrics;
-		FrameLimiter m_frame_limiter;
-		ProjectedShadowCache m_shadow_cache;
-		DisplayAdjustments m_display_adjustments;
-		DemoProvenance m_demo_provenance;
-		FlatTextures m_flat_textures;
-		ProfilerOverlay m_overlay;
-		ConsoleCommandRegistry m_commands;
-		IDirect3DDevice9* m_device{ };
-		bool m_enabled{ };
-		bool m_last_focused{ };
+		FrameMetrics            m_metrics;
+		FrameLimiter            m_frame_limiter;
+		ProjectedShadowCache    m_shadow_cache;
+		DisplayAdjustments      m_display_adjustments;
+		DemoProvenance          m_demo_provenance;
+		FlatTextures            m_flat_textures;
+		ProfilerOverlay         m_overlay;
+		ConsoleCommandRegistry  m_commands;
+		IDirect3DDevice9*       m_device{ };
+		bool                    m_enabled{ };
+		bool                    m_last_focused{ };
 	};
 
 	Plugin* Plugin::m_instance{ };
-	Plugin g_plugin;
+	Plugin  g_plugin;
 
 }
 

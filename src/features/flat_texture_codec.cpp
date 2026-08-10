@@ -19,7 +19,7 @@ namespace p2boost {
 			std::array< std::uint64_t, 256 > m_red{ };
 			std::array< std::uint64_t, 256 > m_green{ };
 			std::array< std::uint64_t, 256 > m_blue{ };
-			std::uint64_t m_samples{ };
+			std::uint64_t                    m_samples{ };
 
 			void add( rgb_t color ) noexcept {
 				++m_red[ color.m_red ];
@@ -56,18 +56,18 @@ namespace p2boost {
 		}
 
 		std::uint16_t encode_565( flat_color_t color ) noexcept {
-			const unsigned int red = ( static_cast< unsigned int >( color.m_red ) * 31u + 127u ) / 255u;
+			const unsigned int red   = ( static_cast< unsigned int >( color.m_red ) * 31u + 127u ) / 255u;
 			const unsigned int green = ( static_cast< unsigned int >( color.m_green ) * 63u + 127u ) / 255u;
-			const unsigned int blue = ( static_cast< unsigned int >( color.m_blue ) * 31u + 127u ) / 255u;
+			const unsigned int blue  = ( static_cast< unsigned int >( color.m_blue ) * 31u + 127u ) / 255u;
 			return static_cast< std::uint16_t >( ( red << 11 ) | ( green << 5 ) | blue );
 		}
 
 		// decode the shared RGB block used by DXT1, DXT3, and DXT5.
 		std::array< rgb_t, 4 > dxt_palette( const std::uint8_t* color_block, bool dxt1 ) noexcept {
-			const std::uint16_t first_value = read_value< std::uint16_t >( color_block );
-			const std::uint16_t second_value = read_value< std::uint16_t >( color_block + 2 );
-			const rgb_t first = decode_565( first_value );
-			const rgb_t second = decode_565( second_value );
+			const std::uint16_t    first_value  = read_value< std::uint16_t >( color_block );
+			const std::uint16_t    second_value = read_value< std::uint16_t >( color_block + 2 );
+			const rgb_t            first        = decode_565( first_value );
+			const rgb_t            second       = decode_565( second_value );
 			std::array< rgb_t, 4 > palette{ first, second };
 
 			if( dxt1 && first_value <= second_value ) {
@@ -116,10 +116,10 @@ namespace p2boost {
 
 		unsigned int dxt_alpha( D3DFORMAT format, const std::uint8_t* block, unsigned int pixel ) noexcept {
 			if( format == D3DFMT_DXT1 ) {
-				const std::uint16_t first = read_value< std::uint16_t >( block );
-				const std::uint16_t second = read_value< std::uint16_t >( block + 2 );
+				const std::uint16_t first   = read_value< std::uint16_t >( block );
+				const std::uint16_t second  = read_value< std::uint16_t >( block + 2 );
 				const std::uint32_t indices = read_value< std::uint32_t >( block + 4 );
-				const unsigned int index = ( indices >> ( pixel * 2u ) ) & 3u;
+				const unsigned int  index   = ( indices >> ( pixel * 2u ) ) & 3u;
 				return first <= second && index == 3u ? 0u : 255u;
 			}
 
@@ -129,7 +129,7 @@ namespace p2boost {
 			}
 
 			const std::array< std::uint8_t, 8 > palette = dxt5_alpha_palette( block );
-			std::uint64_t indices{ };
+			std::uint64_t                       indices{ };
 			std::memcpy( &indices, block + 2, 6 );
 			return palette[ ( indices >> ( pixel * 3u ) ) & 7u ];
 		}
@@ -154,23 +154,23 @@ namespace p2boost {
 		}
 
 		void accumulate_dxt( color_accumulator_t& accumulator,
-		    D3DFORMAT format,
-		    const void* bits,
-		    int pitch,
-		    unsigned int width,
-		    unsigned int height ) noexcept {
-			const auto* source = static_cast< const std::uint8_t* >( bits );
+		                     D3DFORMAT            format,
+		                     const void*          bits,
+		                     int                  pitch,
+		                     unsigned int         width,
+		                     unsigned int         height ) noexcept {
+			const auto*        source     = static_cast< const std::uint8_t* >( bits );
 			const unsigned int block_size = format == D3DFMT_DXT1 ? 8u : 16u;
-			const unsigned int blocks_x = std::max( 1u, ( width + 3u ) / 4u );
-			const unsigned int blocks_y = std::max( 1u, ( height + 3u ) / 4u );
+			const unsigned int blocks_x   = std::max( 1u, ( width + 3u ) / 4u );
+			const unsigned int blocks_y   = std::max( 1u, ( height + 3u ) / 4u );
 
 			for( unsigned int block_y = 0; block_y < blocks_y; ++block_y ) {
 				const auto* row = source + static_cast< size_t >( block_y ) * static_cast< size_t >( pitch );
 				for( unsigned int block_x = 0; block_x < blocks_x; ++block_x ) {
-					const auto* block = row + static_cast< size_t >( block_x ) * block_size;
-					const auto* color_block = block + ( format == D3DFMT_DXT1 ? 0u : 8u );
-					const std::array< rgb_t, 4 > palette = dxt_palette( color_block, format == D3DFMT_DXT1 );
-					const std::uint32_t indices = read_value< std::uint32_t >( color_block + 4 );
+					const auto*                  block       = row + static_cast< size_t >( block_x ) * block_size;
+					const auto*                  color_block = block + ( format == D3DFMT_DXT1 ? 0u : 8u );
+					const std::array< rgb_t, 4 > palette     = dxt_palette( color_block, format == D3DFMT_DXT1 );
+					const std::uint32_t          indices     = read_value< std::uint32_t >( color_block + 4 );
 
 					for( unsigned int local_y = 0; local_y < 4u; ++local_y ) {
 						for( unsigned int local_x = 0; local_x < 4u; ++local_x ) {
@@ -178,7 +178,7 @@ namespace p2boost {
 							const unsigned int y = block_y * 4u + local_y;
 							if( x >= width || y >= height )
 								continue;
-							const unsigned int pixel = local_y * 4u + local_x;
+							const unsigned int pixel       = local_y * 4u + local_x;
 							const unsigned int color_index = ( indices >> ( pixel * 2u ) ) & 3u;
 							// DXT1 index three is genuinely transparent; DXT3/5 alpha often
 							// carries material masks, so their RGB samples remain representative.
@@ -191,11 +191,11 @@ namespace p2boost {
 		}
 
 		void flatten_dxt_color_block( std::uint8_t* destination, const std::uint8_t* source, flat_color_t color, bool dxt1 ) noexcept {
-			const std::uint16_t target = encode_565( color );
-			const std::uint16_t source_first = read_value< std::uint16_t >( source );
-			const std::uint16_t source_second = read_value< std::uint16_t >( source + 2 );
-			const std::uint32_t source_indices = read_value< std::uint32_t >( source + 4 );
-			const bool transparent_mode = dxt1 && source_first <= source_second;
+			const std::uint16_t target           = encode_565( color );
+			const std::uint16_t source_first     = read_value< std::uint16_t >( source );
+			const std::uint16_t source_second    = read_value< std::uint16_t >( source + 2 );
+			const std::uint32_t source_indices   = read_value< std::uint32_t >( source + 4 );
+			const bool          transparent_mode = dxt1 && source_first <= source_second;
 
 			if( transparent_mode ) {
 				// equal endpoints keep DXT1 in three-color/transparent mode. every
@@ -287,17 +287,17 @@ namespace p2boost {
 				case D3DFMT_X1R5G5B5:
 				case D3DFMT_A1R5G5B5: {
 					const std::uint16_t value = read_value< std::uint16_t >( row + x * 2u );
-					color = { expand_bits( ( value >> 10 ) & 31u, 31u ),
-					    expand_bits( ( value >> 5 ) & 31u, 31u ),
-					    expand_bits( value & 31u, 31u ) };
+					color                     = { expand_bits( ( value >> 10 ) & 31u, 31u ),
+					                              expand_bits( ( value >> 5 ) & 31u, 31u ),
+					                              expand_bits( value & 31u, 31u ) };
 					break;
 				}
 				case D3DFMT_A4R4G4B4:
 				case D3DFMT_X4R4G4B4: {
 					const std::uint16_t value = read_value< std::uint16_t >( row + x * 2u );
-					color = { expand_bits( ( value >> 8 ) & 15u, 15u ),
-					    expand_bits( ( value >> 4 ) & 15u, 15u ),
-					    expand_bits( value & 15u, 15u ) };
+					color                     = { expand_bits( ( value >> 8 ) & 15u, 15u ),
+					                              expand_bits( ( value >> 4 ) & 15u, 15u ),
+					                              expand_bits( value & 15u, 15u ) };
 					break;
 				}
 				case D3DFMT_L8:
@@ -317,30 +317,30 @@ namespace p2boost {
 	}
 
 	// replace RGB while copying every source alpha bit exactly.
-	bool write_flat_texture( D3DFORMAT format,
-	    void* destination,
-	    int destination_pitch,
-	    const void* source,
-	    int source_pitch,
-	    unsigned int width,
-	    unsigned int height,
-	    flat_color_t color ) noexcept {
+	bool write_flat_texture( D3DFORMAT    format,
+	                         void*        destination,
+	                         int          destination_pitch,
+	                         const void*  source,
+	                         int          source_pitch,
+	                         unsigned int width,
+	                         unsigned int height,
+	                         flat_color_t color ) noexcept {
 		if( !destination || !source || destination_pitch <= 0 || source_pitch <= 0 || !width || !height ||
 		    !flat_texture_format_supported( format ) )
 			return false;
 
-		auto* output = static_cast< std::uint8_t* >( destination );
-		const auto* input = static_cast< const std::uint8_t* >( source );
+		auto*       output = static_cast< std::uint8_t* >( destination );
+		const auto* input  = static_cast< const std::uint8_t* >( source );
 		if( format == D3DFMT_DXT1 || format == D3DFMT_DXT3 || format == D3DFMT_DXT5 ) {
 			const unsigned int block_size = format == D3DFMT_DXT1 ? 8u : 16u;
-			const unsigned int blocks_x = std::max( 1u, ( width + 3u ) / 4u );
-			const unsigned int blocks_y = std::max( 1u, ( height + 3u ) / 4u );
+			const unsigned int blocks_x   = std::max( 1u, ( width + 3u ) / 4u );
+			const unsigned int blocks_y   = std::max( 1u, ( height + 3u ) / 4u );
 			for( unsigned int y = 0; y < blocks_y; ++y ) {
-				auto* destination_row = output + static_cast< size_t >( y ) * static_cast< size_t >( destination_pitch );
-				const auto* source_row = input + static_cast< size_t >( y ) * static_cast< size_t >( source_pitch );
+				auto*       destination_row = output + static_cast< size_t >( y ) * static_cast< size_t >( destination_pitch );
+				const auto* source_row      = input + static_cast< size_t >( y ) * static_cast< size_t >( source_pitch );
 				for( unsigned int x = 0; x < blocks_x; ++x ) {
-					auto* destination_block = destination_row + static_cast< size_t >( x ) * block_size;
-					const auto* source_block = source_row + static_cast< size_t >( x ) * block_size;
+					auto*       destination_block = destination_row + static_cast< size_t >( x ) * block_size;
+					const auto* source_block      = source_row + static_cast< size_t >( x ) * block_size;
 					if( format != D3DFMT_DXT1 )
 						std::memcpy( destination_block, source_block, 8 );
 					const unsigned int color_offset = format == D3DFMT_DXT1 ? 0u : 8u;
@@ -351,9 +351,9 @@ namespace p2boost {
 		}
 
 		for( unsigned int y = 0; y < height; ++y ) {
-			auto* destination_row = output + static_cast< size_t >( y ) * static_cast< size_t >( destination_pitch );
-			const auto* source_row = input + static_cast< size_t >( y ) * static_cast< size_t >( source_pitch );
-			size_t row_size{ };
+			auto*       destination_row = output + static_cast< size_t >( y ) * static_cast< size_t >( destination_pitch );
+			const auto* source_row      = input + static_cast< size_t >( y ) * static_cast< size_t >( source_pitch );
+			size_t      row_size{ };
 			switch( format ) {
 			case D3DFMT_R8G8B8:
 				row_size = static_cast< size_t >( width ) * 3u;
@@ -376,19 +376,19 @@ namespace p2boost {
 			for( unsigned int x = 0; x < width; ++x ) {
 				switch( format ) {
 				case D3DFMT_R8G8B8:
-					destination_row[ x * 3u ] = color.m_blue;
+					destination_row[ x * 3u ]      = color.m_blue;
 					destination_row[ x * 3u + 1u ] = color.m_green;
 					destination_row[ x * 3u + 2u ] = color.m_red;
 					break;
 				case D3DFMT_A8R8G8B8:
 				case D3DFMT_X8R8G8B8:
-					destination_row[ x * 4u ] = color.m_blue;
+					destination_row[ x * 4u ]      = color.m_blue;
 					destination_row[ x * 4u + 1u ] = color.m_green;
 					destination_row[ x * 4u + 2u ] = color.m_red;
 					break;
 				case D3DFMT_A8B8G8R8:
 				case D3DFMT_X8B8G8R8:
-					destination_row[ x * 4u ] = color.m_red;
+					destination_row[ x * 4u ]      = color.m_red;
 					destination_row[ x * 4u + 1u ] = color.m_green;
 					destination_row[ x * 4u + 2u ] = color.m_blue;
 					break;
@@ -397,10 +397,10 @@ namespace p2boost {
 					break;
 				case D3DFMT_X1R5G5B5:
 				case D3DFMT_A1R5G5B5: {
-					const std::uint16_t alpha = read_value< std::uint16_t >( source_row + x * 2u ) & 0x8000u;
-					const std::uint16_t red = static_cast< std::uint16_t >( ( color.m_red * 31u + 127u ) / 255u );
-					const std::uint16_t green = static_cast< std::uint16_t >( ( color.m_green * 31u + 127u ) / 255u );
-					const std::uint16_t blue = static_cast< std::uint16_t >( ( color.m_blue * 31u + 127u ) / 255u );
+					const std::uint16_t alpha  = read_value< std::uint16_t >( source_row + x * 2u ) & 0x8000u;
+					const std::uint16_t red    = static_cast< std::uint16_t >( ( color.m_red * 31u + 127u ) / 255u );
+					const std::uint16_t green  = static_cast< std::uint16_t >( ( color.m_green * 31u + 127u ) / 255u );
+					const std::uint16_t blue   = static_cast< std::uint16_t >( ( color.m_blue * 31u + 127u ) / 255u );
 					const std::uint16_t prefix = format == D3DFMT_A1R5G5B5 ? alpha : 0x8000u;
 					write_value( destination_row + x * 2u, static_cast< std::uint16_t >( prefix | ( red << 10 ) | ( green << 5 ) | blue ) );
 					break;
@@ -408,10 +408,10 @@ namespace p2boost {
 				case D3DFMT_A4R4G4B4:
 				case D3DFMT_X4R4G4B4: {
 					const std::uint16_t source_value = read_value< std::uint16_t >( source_row + x * 2u );
-					const std::uint16_t alpha = format == D3DFMT_A4R4G4B4 ? source_value & 0xf000u : 0xf000u;
-					const std::uint16_t red = static_cast< std::uint16_t >( ( color.m_red * 15u + 127u ) / 255u );
-					const std::uint16_t green = static_cast< std::uint16_t >( ( color.m_green * 15u + 127u ) / 255u );
-					const std::uint16_t blue = static_cast< std::uint16_t >( ( color.m_blue * 15u + 127u ) / 255u );
+					const std::uint16_t alpha        = format == D3DFMT_A4R4G4B4 ? source_value & 0xf000u : 0xf000u;
+					const std::uint16_t red          = static_cast< std::uint16_t >( ( color.m_red * 15u + 127u ) / 255u );
+					const std::uint16_t green        = static_cast< std::uint16_t >( ( color.m_green * 15u + 127u ) / 255u );
+					const std::uint16_t blue         = static_cast< std::uint16_t >( ( color.m_blue * 15u + 127u ) / 255u );
 					write_value( destination_row + x * 2u, static_cast< std::uint16_t >( alpha | ( red << 8 ) | ( green << 4 ) | blue ) );
 					break;
 				}

@@ -60,14 +60,14 @@ namespace p2boost {
 			return false;
 
 		// preserve the current chain target before replacing the VMT entry.
-		m_method = method;
-		m_previous = *method;
+		m_method      = method;
+		m_previous    = *method;
 		m_replacement = replacement;
-		m_installed = write_method( m_method, m_previous, m_replacement ) == write_result_t::written;
+		m_installed   = write_method( m_method, m_previous, m_replacement ) == write_result_t::written;
 
 		if( !m_installed ) {
-			m_method = nullptr;
-			m_previous = nullptr;
+			m_method      = nullptr;
+			m_previous    = nullptr;
 			m_replacement = nullptr;
 		}
 
@@ -83,9 +83,9 @@ namespace p2boost {
 		if( result == write_result_t::protection_failed )
 			return false;
 
-		m_installed = false;
-		m_method = nullptr;
-		m_previous = nullptr;
+		m_installed   = false;
+		m_method      = nullptr;
+		m_previous    = nullptr;
 		m_replacement = nullptr;
 		return result == write_result_t::written;
 	}
@@ -99,9 +99,9 @@ namespace p2boost {
 			return false;
 
 		// replace the full verified instruction sequence with CALL and NOP padding.
-		m_address = static_cast< std::uint8_t* >( address );
+		m_address  = static_cast< std::uint8_t* >( address );
 		m_original = expected;
-		m_patched = x86::relative_call( Address{ m_address }, Address{ replacement }, expected.size( ) );
+		m_patched  = x86::relative_call( Address{ m_address }, Address{ replacement }, expected.size( ) );
 		if( m_patched.empty( ) )
 			return false;
 
@@ -122,7 +122,7 @@ namespace p2boost {
 			return false;
 
 		m_installed = false;
-		m_address = nullptr;
+		m_address   = nullptr;
 		return result == write_result_t::written;
 	}
 

@@ -34,35 +34,35 @@ namespace p2boost {
 			return;
 		}
 
-		const Qpc::tick_t now = Qpc::now( );
+		const Qpc::tick_t now      = Qpc::now( );
 		const Qpc::tick_t previous = m_last_qpc;
-		m_last_qpc = now;
+		m_last_qpc                 = now;
 		if( previous == 0 )
 			return;
 
 		sample_t sample;
-		sample.m_qpc = now;
-		sample.m_frame_ms = Qpc::milliseconds( now - previous );
+		sample.m_qpc        = now;
+		sample.m_frame_ms   = Qpc::milliseconds( now - previous );
 		sample.m_simulating = m_simulating.load( std::memory_order_relaxed );
-		sample.m_focused = m_focused.load( std::memory_order_relaxed );
-		sample.m_coop = m_coop.load( std::memory_order_relaxed );
+		sample.m_focused    = m_focused.load( std::memory_order_relaxed );
+		sample.m_coop       = m_coop.load( std::memory_order_relaxed );
 
 		// fold shadow work accumulated since the previous rendered frame.
 		{
 			std::lock_guard< std::mutex > pending_lock( m_pending_mutex );
-			sample.m_shadow_ms = m_pending_shadow_ms;
-			sample.m_shadow_updates = m_pending_shadow_updates;
-			sample.m_shadow_hits = m_pending_shadow_hits;
-			m_pending_shadow_ms = 0.0;
+			sample.m_shadow_ms       = m_pending_shadow_ms;
+			sample.m_shadow_updates  = m_pending_shadow_updates;
+			sample.m_shadow_hits     = m_pending_shadow_hits;
+			m_pending_shadow_ms      = 0.0;
 			m_pending_shadow_updates = 0;
-			m_pending_shadow_hits = 0;
+			m_pending_shadow_hits    = 0;
 		}
 
 		// append in constant time and overwrite only the oldest full-buffer sample.
 		std::lock_guard< std::mutex > sample_lock( m_samples_mutex );
 		m_samples[ m_cursor ] = sample;
-		m_cursor = ( m_cursor + 1 ) % capacity;
-		m_count = std::min( m_count + 1, capacity );
+		m_cursor              = ( m_cursor + 1 ) % capacity;
+		m_count               = std::min( m_count + 1, capacity );
 	}
 
 	void FrameMetrics::record_shadow_update( double milliseconds, bool cache_hit ) noexcept {
@@ -77,7 +77,7 @@ namespace p2boost {
 	}
 
 	overlay_metrics_t FrameMetrics::overlay_metrics( ) const noexcept {
-		overlay_metrics_t result;
+		overlay_metrics_t       result;
 		std::vector< sample_t > samples;
 
 		// copy only the most recent second so sorting never blocks the writer.
@@ -86,11 +86,11 @@ namespace p2boost {
 			if( m_count == 0 )
 				return result;
 
-			const Qpc::tick_t newest = m_samples[ ( m_cursor + capacity - 1 ) % capacity ].m_qpc;
+			const Qpc::tick_t newest     = m_samples[ ( m_cursor + capacity - 1 ) % capacity ].m_qpc;
 			const Qpc::tick_t one_second = Qpc::ticks( 1000.0 );
 			samples.reserve( std::min( m_count, size_t{ 4096 } ) );
 			for( size_t age = 0; age < m_count; ++age ) {
-				const size_t index = ( m_cursor + capacity - 1 - age ) % capacity;
+				const size_t    index  = ( m_cursor + capacity - 1 - age ) % capacity;
 				const sample_t& sample = m_samples[ index ];
 				if( newest - sample.m_qpc > one_second )
 					break;
@@ -115,14 +115,14 @@ namespace p2boost {
 		}
 
 		const sample_t& latest = samples.back( );
-		result.m_frame_ms = latest.m_frame_ms;
-		result.m_average_ms = std::accumulate( frame_times.begin( ), frame_times.end( ), 0.0 ) / static_cast< double >( frame_times.size( ) );
+		result.m_frame_ms      = latest.m_frame_ms;
+		result.m_average_ms    = std::accumulate( frame_times.begin( ), frame_times.end( ), 0.0 ) / static_cast< double >( frame_times.size( ) );
 		std::sort( frame_times.begin( ), frame_times.end( ) );
-		result.m_p95_ms = percentile( frame_times, 0.95 );
-		result.m_p99_ms = percentile( frame_times, 0.99 );
-		result.m_max_ms = frame_times.back( );
+		result.m_p95_ms  = percentile( frame_times, 0.95 );
+		result.m_p99_ms  = percentile( frame_times, 0.99 );
+		result.m_max_ms  = frame_times.back( );
 		result.m_focused = latest.m_focused;
-		result.m_coop = latest.m_coop;
+		result.m_coop    = latest.m_coop;
 
 		result.m_graph_count = std::min( samples.size( ), overlay_metrics_t::graph_capacity );
 		for( size_t index = 0; index < result.m_graph_count; ++index )

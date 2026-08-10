@@ -18,13 +18,13 @@ AllowShortEnumsOnASingleLine: false
 BinPackArguments: true
 BinPackParameters: true
 AllowAllArgumentsOnNextLine: true
-AlignAfterOpenBracket: DontAlign
-AlignConsecutiveAssignments: false
+AlignAfterOpenBracket: Align
+AlignConsecutiveAssignments: Consecutive
 AlignConsecutiveBitFields: Consecutive
-AlignConsecutiveDeclarations: false
+AlignConsecutiveDeclarations: Consecutive
 AlignConsecutiveMacros: Consecutive
 AlignEscapedNewlines: Right
-AlignOperands: DontAlign
+AlignOperands: Align
 AlignTrailingComments: true
 DerivePointerAlignment: false
 PointerAlignment: Left

@@ -23,8 +23,8 @@ namespace p2boost {
 	public:
 		~FlatTextures( );
 
-		FlatTextures( ) = default;
-		FlatTextures( const FlatTextures& ) = delete;
+		FlatTextures( )                                = default;
+		FlatTextures( const FlatTextures& )            = delete;
 		FlatTextures& operator=( const FlatTextures& ) = delete;
 
 		bool install( const portal2_modules_t& modules, const Portal2Interfaces& interfaces, IDirect3DDevice9* device );
@@ -40,17 +40,17 @@ namespace p2boost {
 
 		bool available( ) const noexcept {
 			return m_create_texture.installed( ) && m_update_surface.installed( ) && m_update_texture.installed( ) &&
-			    m_set_texture.installed( ) && m_bind_material.installed( ) && m_vgui_paint.installed( ) &&
-			    m_material_system && m_engine_vgui;
+			       m_set_texture.installed( ) && m_bind_material.installed( ) && m_vgui_paint.installed( ) &&
+			       m_material_system && m_engine_vgui;
 		}
 
 		bool enabled( ) const noexcept {
 			return m_enabled.load( std::memory_order_relaxed );
 		}
 
-		size_t texture_count( ) const noexcept;
-		size_t ready_texture_count( ) const noexcept;
-		bool normal_ready( ) const noexcept;
+		size_t        texture_count( ) const noexcept;
+		size_t        ready_texture_count( ) const noexcept;
+		bool          normal_ready( ) const noexcept;
 		std::uint64_t substitution_count( ) const noexcept {
 			return m_substitutions.load( std::memory_order_relaxed );
 		}
@@ -72,21 +72,21 @@ namespace p2boost {
 
 		struct texture_record_t {
 			IDirect3DTexture9* m_flat{ };
-			D3DFORMAT m_format{ D3DFMT_UNKNOWN };
-			unsigned int m_width{ };
-			unsigned int m_height{ };
-			unsigned int m_levels{ };
-			DWORD m_usage{ };
-			D3DPOOL m_pool{ D3DPOOL_DEFAULT };
-			flat_color_t m_color;
-			bool m_color_valid{ };
-			bool m_flat_texture{ };
-			bool m_normal_texture{ };
+			D3DFORMAT          m_format{ D3DFMT_UNKNOWN };
+			unsigned int       m_width{ };
+			unsigned int       m_height{ };
+			unsigned int       m_levels{ };
+			DWORD              m_usage{ };
+			D3DPOOL            m_pool{ D3DPOOL_DEFAULT };
+			flat_color_t       m_color;
+			bool               m_color_valid{ };
+			bool               m_flat_texture{ };
+			bool               m_normal_texture{ };
 		};
 
 		struct lock_key_t {
 			IDirect3DTexture9* m_texture{ };
-			unsigned int m_level{ };
+			unsigned int       m_level{ };
 
 			bool operator==( const lock_key_t& other ) const noexcept {
 				return m_texture == other.m_texture && m_level == other.m_level;
@@ -102,20 +102,20 @@ namespace p2boost {
 
 		struct locked_region_t {
 			D3DLOCKED_RECT m_source{ };
-			RECT m_rect{ };
-			DWORD m_flags{ };
-			bool m_has_rect{ };
+			RECT           m_rect{ };
+			DWORD          m_flags{ };
+			bool           m_has_rect{ };
 		};
 
 		struct surface_record_t {
 			IDirect3DTexture9* m_texture{ };
-			unsigned int m_level{ };
+			unsigned int       m_level{ };
 		};
 
 		// short aliases keep the synchronized resource state readable.
-		using texture_map_t = std::unordered_map< IDirect3DTexture9*, texture_record_t >;
+		using texture_map_t   = std::unordered_map< IDirect3DTexture9*, texture_record_t >;
 		using texture_locks_t = std::unordered_map< lock_key_t, locked_region_t, lock_key_hash_t >;
-		using surface_map_t = std::unordered_map< IDirect3DSurface9*, surface_record_t >;
+		using surface_map_t   = std::unordered_map< IDirect3DSurface9*, surface_record_t >;
 		using surface_locks_t = std::unordered_map< IDirect3DSurface9*, locked_region_t >;
 
 		// exact COM signatures for the D3D9 methods intercepted below.
@@ -125,16 +125,16 @@ namespace p2boost {
 		    IDirect3DDevice9*, IDirect3DSurface9*, const RECT*, IDirect3DSurface9*, const POINT* );
 		using update_texture_fn_t = HRESULT( __stdcall* )(
 		    IDirect3DDevice9*, IDirect3DBaseTexture9*, IDirect3DBaseTexture9* );
-		using set_texture_fn_t = HRESULT( __stdcall* )( IDirect3DDevice9*, DWORD, IDirect3DBaseTexture9* );
-		using release_texture_fn_t = ULONG( __stdcall* )( IDirect3DTexture9* );
+		using set_texture_fn_t       = HRESULT( __stdcall* )( IDirect3DDevice9*, DWORD, IDirect3DBaseTexture9* );
+		using release_texture_fn_t   = ULONG( __stdcall* )( IDirect3DTexture9* );
 		using get_surface_level_fn_t = HRESULT( __stdcall* )( IDirect3DTexture9*, unsigned int, IDirect3DSurface9** );
-		using lock_texture_fn_t = HRESULT( __stdcall* )( IDirect3DTexture9*, unsigned int, D3DLOCKED_RECT*, const RECT*, DWORD );
-		using unlock_texture_fn_t = HRESULT( __stdcall* )( IDirect3DTexture9*, unsigned int );
-		using release_surface_fn_t = ULONG( __stdcall* )( IDirect3DSurface9* );
-		using lock_surface_fn_t = HRESULT( __stdcall* )( IDirect3DSurface9*, D3DLOCKED_RECT*, const RECT*, DWORD );
-		using unlock_surface_fn_t = HRESULT( __stdcall* )( IDirect3DSurface9* );
-		using bind_material_fn_t = void( __thiscall* )( void*, sdk::IMaterial*, void* );
-		using vgui_paint_fn_t = int( __thiscall* )( void*, int );
+		using lock_texture_fn_t      = HRESULT( __stdcall* )( IDirect3DTexture9*, unsigned int, D3DLOCKED_RECT*, const RECT*, DWORD );
+		using unlock_texture_fn_t    = HRESULT( __stdcall* )( IDirect3DTexture9*, unsigned int );
+		using release_surface_fn_t   = ULONG( __stdcall* )( IDirect3DSurface9* );
+		using lock_surface_fn_t      = HRESULT( __stdcall* )( IDirect3DSurface9*, D3DLOCKED_RECT*, const RECT*, DWORD );
+		using unlock_surface_fn_t    = HRESULT( __stdcall* )( IDirect3DSurface9* );
+		using bind_material_fn_t     = void( __thiscall* )( void*, sdk::IMaterial*, void* );
+		using vgui_paint_fn_t        = int( __thiscall* )( void*, int );
 
 		// install resource hooks lazily when the first object appears.
 		bool install_texture_hooks( IDirect3DTexture9* texture );
@@ -163,35 +163,35 @@ namespace p2boost {
 
 		// engine objects and chain-aware hooks installed on their VMTs.
 		sdk::IMaterialSystem* m_material_system{ };
-		sdk::IEngineVGui* m_engine_vgui{ };
-		IDirect3DDevice9* m_device{ };
-		IDirect3DTexture9* m_flat_normal{ };
-		void** m_texture_vmt{ };
-		void** m_surface_vmt{ };
-		VmtHook m_create_texture;
-		VmtHook m_update_surface;
-		VmtHook m_update_texture;
-		VmtHook m_set_texture;
-		VmtHook m_release_texture;
-		VmtHook m_get_surface_level;
-		VmtHook m_lock_texture;
-		VmtHook m_unlock_texture;
-		VmtHook m_release_surface;
-		VmtHook m_lock_surface;
-		VmtHook m_unlock_surface;
-		VmtHook m_bind_material;
-		VmtHook m_vgui_paint;
+		sdk::IEngineVGui*     m_engine_vgui{ };
+		IDirect3DDevice9*     m_device{ };
+		IDirect3DTexture9*    m_flat_normal{ };
+		void**                m_texture_vmt{ };
+		void**                m_surface_vmt{ };
+		VmtHook               m_create_texture;
+		VmtHook               m_update_surface;
+		VmtHook               m_update_texture;
+		VmtHook               m_set_texture;
+		VmtHook               m_release_texture;
+		VmtHook               m_get_surface_level;
+		VmtHook               m_lock_texture;
+		VmtHook               m_unlock_texture;
+		VmtHook               m_release_surface;
+		VmtHook               m_lock_surface;
+		VmtHook               m_unlock_surface;
+		VmtHook               m_bind_material;
+		VmtHook               m_vgui_paint;
 
 		// all resource maps share one lock because their lifetimes are coupled.
-		std::mutex m_hook_mutex;
+		std::mutex                m_hook_mutex;
 		mutable std::shared_mutex m_mutex;
-		texture_map_t m_textures;
-		texture_locks_t m_locks;
-		surface_map_t m_surfaces;
-		surface_locks_t m_surface_locks;
+		texture_map_t             m_textures;
+		texture_locks_t           m_locks;
+		surface_map_t             m_surfaces;
+		surface_locks_t           m_surface_locks;
 
 		// hot-path flags and counters remain lock-free.
-		std::atomic_bool m_enabled{ };
+		std::atomic_bool     m_enabled{ };
 		std::atomic_uint64_t m_substitutions{ };
 		std::atomic_uint64_t m_texture_uploads{ };
 		std::atomic_uint64_t m_surface_uploads{ };

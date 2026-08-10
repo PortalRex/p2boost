@@ -16,16 +16,16 @@ namespace p2boost::pattern {
 	// stores one readable byte constraint from an IDA-style signature.
 	struct pattern_byte_t {
 		std::uint8_t m_value{ };
-		bool m_wildcard{ };
+		bool         m_wildcard{ };
 	};
 
 	using bytes_t = std::vector< pattern_byte_t >;
 
 	// convert a readable ida-style signature once before scanning.
 	inline bytes_t parse( const std::string& signature ) {
-		bytes_t out;
+		bytes_t           out;
 		std::stringstream stream{ signature };
-		std::string token;
+		std::string       token;
 
 		while( stream >> token ) {
 			// a question mark accepts any byte, including relocated operands.
@@ -67,10 +67,10 @@ namespace p2boost::pattern {
 			return { };
 
 		auto* begin = start.as< std::uint8_t* >( );
-		auto* end = begin + length;
-		auto found = std::search( begin, end, signature.begin( ), signature.end( ), []( std::uint8_t value, const pattern_byte_t& expected ) {
-			return expected.m_wildcard || value == expected.m_value;
-		} );
+		auto* end   = begin + length;
+		auto  found = std::search( begin, end, signature.begin( ), signature.end( ), []( std::uint8_t value, const pattern_byte_t& expected ) {
+            return expected.m_wildcard || value == expected.m_value;
+        } );
 
 		return found == end ? Address{ } : Address{ found };
 	}
@@ -78,15 +78,15 @@ namespace p2boost::pattern {
 	// require exactly one match so a weak signature can never select a hook.
 	inline Address find_unique( Address module, const std::string& text ) {
 		// scanning the mapped image accounts for loader relocations wildcarded above.
-		const size_t length = image_size( module );
+		const size_t  length    = image_size( module );
 		const bytes_t signature = parse( text );
-		const Address first = find( module, length, signature );
+		const Address first     = find( module, length, signature );
 		if( !first )
 			return { };
 
 		// a second match makes the signature ambiguous and therefore unusable.
-		const Address next = first.add( 1 );
-		const size_t remaining = length - static_cast< size_t >( next.as< std::uintptr_t >( ) - module.as< std::uintptr_t >( ) );
+		const Address next      = first.add( 1 );
+		const size_t  remaining = length - static_cast< size_t >( next.as< std::uintptr_t >( ) - module.as< std::uintptr_t >( ) );
 		return find( next, remaining, signature ) ? Address{ } : first;
 	}
 

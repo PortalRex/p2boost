@@ -23,8 +23,8 @@ namespace p2boost {
 	// retain the exact failing call and code for useful in-game diagnostics.
 	struct nvidia_profile_result_t {
 		nvidia_profile_state_t m_state{ nvidia_profile_state_t::unknown };
-		const char* m_operation{ "none" };
-		int m_status{ };
+		const char*            m_operation{ "none" };
+		int                    m_status{ };
 	};
 
 	// check or update the profile using Portal 2's current process token.

@@ -21,10 +21,10 @@ namespace p2boost {
 		RECT m_destination{ };
 	};
 
-	bool scaled_viewport_rect( const D3DVIEWPORT9& viewport,
-	    const D3DSURFACE_DESC& target,
-	    float scale,
-	    viewport_scale_t& result ) noexcept;
+	bool scaled_viewport_rect( const D3DVIEWPORT9&    viewport,
+	                           const D3DSURFACE_DESC& target,
+	                           float                  scale,
+	                           viewport_scale_t&      result ) noexcept;
 
 	// restores two display controls that Portal 2's DXVK path does not finish:
 	// viewport scaling is expanded before VGUI, and monitor gamma is applied
@@ -33,8 +33,8 @@ namespace p2boost {
 	public:
 		~DisplayAdjustments( );
 
-		DisplayAdjustments( ) = default;
-		DisplayAdjustments( const DisplayAdjustments& ) = delete;
+		DisplayAdjustments( )                                      = default;
+		DisplayAdjustments( const DisplayAdjustments& )            = delete;
 		DisplayAdjustments& operator=( const DisplayAdjustments& ) = delete;
 
 		bool install( const ConsoleCommandRegistry& commands, IDirect3DDevice9* device );
@@ -53,17 +53,17 @@ namespace p2boost {
 		}
 
 	private:
-		using present_fn_t = HRESULT( __stdcall* )( IDirect3DDevice9*, const RECT*, const RECT*, HWND, const RGNDATA* );
-		using reset_fn_t = HRESULT( __stdcall* )( IDirect3DDevice9*, D3DPRESENT_PARAMETERS* );
+		using present_fn_t      = HRESULT( __stdcall* )( IDirect3DDevice9*, const RECT*, const RECT*, HWND, const RGNDATA* );
+		using reset_fn_t        = HRESULT( __stdcall* )( IDirect3DDevice9*, D3DPRESENT_PARAMETERS* );
 		using set_viewport_fn_t = HRESULT( __stdcall* )( IDirect3DDevice9*, const D3DVIEWPORT9* );
 
 		bool apply_gamma( IDirect3DDevice9* device );
 		bool apply_viewport_scale( IDirect3DDevice9* device, const viewport_scale_t& view );
 		bool rendering_to_back_buffer( IDirect3DDevice9* device, D3DSURFACE_DESC& description ) const;
-		bool copy_back_buffer( IDirect3DDevice9* device,
-		    const RECT* source,
-		    const RECT* destination,
-		    D3DTEXTUREFILTERTYPE filter );
+		bool copy_back_buffer( IDirect3DDevice9*    device,
+		                       const RECT*          source,
+		                       const RECT*          destination,
+		                       D3DTEXTUREFILTERTYPE filter );
 		bool restore_back_buffer( IDirect3DDevice9* device );
 		bool draw_fullscreen_copy( IDirect3DDevice9* device, float curve );
 		bool ensure_copy_target( IDirect3DDevice9* device, const D3DSURFACE_DESC& description );
@@ -75,24 +75,24 @@ namespace p2boost {
 		static HRESULT __stdcall SetViewport( IDirect3DDevice9* device, const D3DVIEWPORT9* viewport );
 
 		static DisplayAdjustments* m_instance;
-		con_var_t* m_monitor_gamma{ };
-		con_var_t* m_viewport_scale{ };
-		con_var_t* m_viewport_upscale{ };
-		IDirect3DDevice9* m_device{ };
-		IDirect3DTexture9* m_copy_texture{ };
-		IDirect3DPixelShader9* m_gamma_shader{ };
-		IDirect3DStateBlock9* m_state_block{ };
-		unsigned int m_copy_width{ };
-		unsigned int m_copy_height{ };
-		D3DFORMAT m_copy_format{ D3DFMT_UNKNOWN };
-		viewport_scale_t m_scaled_view{ };
-		bool m_scaled_view_pending{ };
-		bool m_internal_viewport{ };
-		VmtHook m_present;
-		VmtHook m_reset;
-		VmtHook m_set_viewport;
-		std::atomic_uint64_t m_gamma_passes{ };
-		std::atomic_uint64_t m_viewport_passes{ };
+		con_var_t*                 m_monitor_gamma{ };
+		con_var_t*                 m_viewport_scale{ };
+		con_var_t*                 m_viewport_upscale{ };
+		IDirect3DDevice9*          m_device{ };
+		IDirect3DTexture9*         m_copy_texture{ };
+		IDirect3DPixelShader9*     m_gamma_shader{ };
+		IDirect3DStateBlock9*      m_state_block{ };
+		unsigned int               m_copy_width{ };
+		unsigned int               m_copy_height{ };
+		D3DFORMAT                  m_copy_format{ D3DFMT_UNKNOWN };
+		viewport_scale_t           m_scaled_view{ };
+		bool                       m_scaled_view_pending{ };
+		bool                       m_internal_viewport{ };
+		VmtHook                    m_present;
+		VmtHook                    m_reset;
+		VmtHook                    m_set_viewport;
+		std::atomic_uint64_t       m_gamma_passes{ };
+		std::atomic_uint64_t       m_viewport_passes{ };
 	};
 
 }

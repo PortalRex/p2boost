@@ -15,8 +15,8 @@
 namespace p2boost {
 	namespace {
 
-		constexpr int panel_margin{ 20 };
-		constexpr unsigned long fps_font{ 15 };
+		constexpr int           panel_margin{ 12 };
+		constexpr unsigned long fps_font{ 20 };
 
 		// encode graph samples without depending on a custom font or texture.
 		char graph_character( double milliseconds ) noexcept {
@@ -37,8 +37,8 @@ namespace p2boost {
 
 	bool ProfilerOverlay::connect(
 	    const portal2_modules_t& modules, const Portal2Interfaces& interfaces, FrameMetrics* metrics ) noexcept {
-		auto* engine_client = interfaces.engine_client( );
-		auto* engine_vgui = interfaces.engine_vgui( );
+		auto* engine_client  = interfaces.engine_client( );
+		auto* engine_vgui    = interfaces.engine_vgui( );
 		auto* scheme_manager = interfaces.scheme_manager( );
 
 		if( m_instance || !metrics || !engine_client || !engine_vgui || !scheme_manager )
@@ -63,7 +63,7 @@ namespace p2boost {
 		const Address draw_colored_text{ m_surface->DrawColoredTextAddress( ) };
 		const Address get_kerned_char_width{ m_surface->GetKernedCharWidthAddress( ) };
 		const Address get_font_tall{ m_surface->GetFontTallAddress( ) };
-		const Address start_operand = paint_traverse.add( portal2::surface::start_drawing_operand );
+		const Address start_operand  = paint_traverse.add( portal2::surface::start_drawing_operand );
 		const Address finish_operand = paint_traverse.add( portal2::surface::finish_drawing_operand );
 		if( !modules.m_surface.matches( paint_traverse, portal2::signature::overlay_surface_paint_traverse ) ||
 		    !modules.m_surface.matches( draw_colored_text, portal2::signature::overlay_surface_draw_colored_text ) ||
@@ -75,7 +75,7 @@ namespace p2boost {
 			return false;
 		}
 
-		const Address start_drawing = start_operand.rel32( );
+		const Address start_drawing  = start_operand.rel32( );
 		const Address finish_drawing = finish_operand.rel32( );
 		if( !modules.m_surface.matches( start_drawing, portal2::signature::overlay_surface_start_drawing ) ||
 		    !modules.m_surface.matches( finish_drawing, portal2::signature::overlay_surface_finish_drawing ) ) {
@@ -99,33 +99,33 @@ namespace p2boost {
 			return false;
 		}
 
-		const Module sar{ L"sar.dll" };
+		const Module  sar{ L"sar.dll" };
 		const Address engine_paint = engine_vgui->PaintAddress( );
-		const bool engine_owned = modules.m_engine.contains( engine_paint );
+		const bool    engine_owned = modules.m_engine.contains( engine_paint );
 		if( ( !engine_owned && !sar.contains( engine_paint ) ) ||
 		    ( engine_owned && !modules.m_engine.matches( engine_paint, portal2::signature::overlay_engine_vgui_paint ) ) ) {
-			m_surface = nullptr;
+			m_surface    = nullptr;
 			m_panel_font = 0;
 			return false;
 		}
 
-		m_start_drawing = start_drawing.as< start_drawing_fn_t >( );
+		m_start_drawing  = start_drawing.as< start_drawing_fn_t >( );
 		m_finish_drawing = finish_drawing.as< finish_drawing_fn_t >( );
-		m_line_height = std::max( m_surface->GetFontTall( m_panel_font ) + 2, 12 );
-		m_metrics = metrics;
-		m_engine_client = engine_client;
-		m_instance = this;
+		m_line_height    = std::max( m_surface->GetFontTall( m_panel_font ) + 2, 12 );
+		m_metrics        = metrics;
+		m_engine_client  = engine_client;
+		m_instance       = this;
 
 		if( m_engine_vgui_paint.install( engine_vgui->PaintSlot( ), reinterpret_cast< void* >( &EngineVGuiPaint ) ) )
 			return true;
 
-		m_instance = nullptr;
-		m_metrics = nullptr;
-		m_engine_client = nullptr;
-		m_surface = nullptr;
-		m_start_drawing = nullptr;
+		m_instance       = nullptr;
+		m_metrics        = nullptr;
+		m_engine_client  = nullptr;
+		m_surface        = nullptr;
+		m_start_drawing  = nullptr;
 		m_finish_drawing = nullptr;
-		m_panel_font = 0;
+		m_panel_font     = 0;
 		return false;
 	}
 
@@ -134,18 +134,18 @@ namespace p2boost {
 		if( m_instance == this )
 			m_instance = nullptr;
 
-		m_surface = nullptr;
-		m_engine_client = nullptr;
-		m_metrics = nullptr;
-		m_start_drawing = nullptr;
+		m_surface        = nullptr;
+		m_engine_client  = nullptr;
+		m_metrics        = nullptr;
+		m_start_drawing  = nullptr;
 		m_finish_drawing = nullptr;
-		m_sample = { };
-		m_next_update = 0;
-		m_panel_font = 0;
-		m_line_height = 16;
-		m_have_sample = false;
-		m_fixes_enabled = false;
-		m_mode = profiler_mode_t::off;
+		m_sample         = { };
+		m_next_update    = 0;
+		m_panel_font     = 0;
+		m_line_height    = 16;
+		m_have_sample    = false;
+		m_fixes_enabled  = false;
+		m_mode           = profiler_mode_t::off;
 	}
 
 	void ProfilerOverlay::set_mode( profiler_mode_t mode, FrameMetrics& metrics ) noexcept {
@@ -187,7 +187,7 @@ namespace p2boost {
 			m_next_update = now + Qpc::ticks( 250.0 );
 			m_metrics->set_coop( m_engine_client && m_engine_client->GetMaxClients( ) > 1 );
 			m_metrics->set_focused( game_is_foreground( ) );
-			m_sample = m_metrics->overlay_metrics( );
+			m_sample      = m_metrics->overlay_metrics( );
 			m_have_sample = true;
 		}
 
@@ -210,7 +210,7 @@ namespace p2boost {
 		// measure every line independently so all modes share one exact right edge
 		// after any resolution, fullscreen, or split-screen layout change.
 		const int width = text_width( font, text );
-		const int x = std::max( panel_margin, screen_width - panel_margin - width );
+		const int x     = std::max( panel_margin, screen_width - panel_margin - width );
 		m_surface->DrawColoredText(
 		    font, x, panel_margin + line * m_line_height, color.red, color.green, color.blue, color.alpha, text );
 	}
@@ -218,10 +218,10 @@ namespace p2boost {
 	int ProfilerOverlay::text_width( unsigned long font, const char* text ) const noexcept {
 		int width{ };
 		for( size_t index = 0; text && text[ index ]; ++index ) {
-			const auto character = static_cast< wchar_t >( static_cast< unsigned char >( text[ index ] ) );
-			const wchar_t previous = index ? static_cast< wchar_t >( static_cast< unsigned char >( text[ index - 1 ] ) ) : wchar_t{ };
-			const auto next = static_cast< wchar_t >( static_cast< unsigned char >( text[ index + 1 ] ) );
-			const sdk::glyph_metrics_t glyph = m_surface->GetKernedCharWidth( font, character, previous, next );
+			const auto                 character = static_cast< wchar_t >( static_cast< unsigned char >( text[ index ] ) );
+			const wchar_t              previous  = index ? static_cast< wchar_t >( static_cast< unsigned char >( text[ index - 1 ] ) ) : wchar_t{ };
+			const auto                 next      = static_cast< wchar_t >( static_cast< unsigned char >( text[ index + 1 ] ) );
+			const sdk::glyph_metrics_t glyph     = m_surface->GetKernedCharWidth( font, character, previous, next );
 
 			// match SAR's pixel rounding so measurement and final VGUI drawing
 			// advance through every glyph by the same amount.
@@ -237,24 +237,24 @@ namespace p2boost {
 		static constexpr color_t warning{ 255, 191, 64, 255 };
 		static constexpr color_t bad{ 255, 77, 64, 255 };
 
-		char line[ 192 ]{ };
+		char         line[ 192 ]{ };
 		const double fps = sample.m_average_ms > 0.0 ? 1000.0 / sample.m_average_ms : 0.0;
 		std::snprintf( line,
-		    sizeof( line ),
-		    "P2BOOST / VULKAN  %s  |  %s  |  SAR %s",
-		    sample.m_coop ? "CO-OP" : "SINGLE PLAYER",
-		    fixes_enabled ? "FIXES ON" : "A/B OFF",
-		    sar_loaded ? "ON" : "OFF" );
+		               sizeof( line ),
+		               "P2BOOST / VULKAN  %s  |  %s  |  SAR %s",
+		               sample.m_coop ? "CO-OP" : "SINGLE PLAYER",
+		               fixes_enabled ? "FIXES ON" : "A/B OFF",
+		               sar_loaded ? "ON" : "OFF" );
 		draw_line( screen_width, m_panel_font, 0, neutral, line );
 
 		std::snprintf( line,
-		    sizeof( line ),
-		    "%5.0f FPS  |  FRAME %5.2f ms  |  P95 %5.2f  P99 %5.2f  MAX %5.2f",
-		    fps,
-		    sample.m_frame_ms,
-		    sample.m_p95_ms,
-		    sample.m_p99_ms,
-		    sample.m_max_ms );
+		               sizeof( line ),
+		               "%5.0f FPS  |  FRAME %5.2f ms  |  P95 %5.2f  P99 %5.2f  MAX %5.2f",
+		               fps,
+		               sample.m_frame_ms,
+		               sample.m_p95_ms,
+		               sample.m_p99_ms,
+		               sample.m_max_ms );
 		const auto& timing_color = sample.m_hitch_count > 0 ? bad : sample.m_p99_ms >= 4.0 ? warning
 		                                                                                   : good;
 		draw_line( screen_width, m_panel_font, 1, timing_color, line );
@@ -267,12 +267,12 @@ namespace p2boost {
 		draw_line( screen_width, m_panel_font, 2, timing_color, graph.data( ) );
 
 		std::snprintf( line,
-		    sizeof( line ),
-		    "LAST 1S  |  HITCHES >=8.3 ms: %u  |  SHADOW CACHE %u/%u  |  %s",
-		    sample.m_hitch_count,
-		    sample.m_shadow_hits,
-		    sample.m_shadow_updates,
-		    sample.m_focused ? "FOCUSED" : "UNFOCUSED" );
+		               sizeof( line ),
+		               "LAST 1S  |  HITCHES >=8.3 ms: %u  |  SHADOW CACHE %u/%u  |  %s",
+		               sample.m_hitch_count,
+		               sample.m_shadow_hits,
+		               sample.m_shadow_updates,
+		               sample.m_focused ? "FOCUSED" : "UNFOCUSED" );
 		draw_line( screen_width, m_panel_font, 3, sample.m_hitch_count > 0 ? bad : neutral, line );
 	}
 
@@ -281,12 +281,16 @@ namespace p2boost {
 		static constexpr color_t hitch{ 255, 77, 64, 255 };
 
 		const double fps = sample.m_average_ms > 0.0 ? 1000.0 / sample.m_average_ms : 0.0;
-		char text[ 32 ]{ };
-		std::snprintf( text, sizeof( text ), "%.0f fps", fps );
+		char         text[ 32 ]{ };
+		std::snprintf( text, sizeof( text ), "%.0ffps", fps );
 
 		// red means exactly one thing: the rolling one-second window contains a
 		// frame at or above the profiler's 8.3 ms hitch threshold.
-		draw_line( screen_width, fps_font, 0, sample.m_hitch_count > 0 ? hitch : normal, text );
+		const color_t color = sample.m_hitch_count > 0 ? hitch : normal;
+		const int     width = text_width( fps_font, text );
+		const int     x     = std::max( panel_margin, screen_width - panel_margin - width );
+		m_surface->DrawColoredText(
+		    fps_font, x, 0, color.red, color.green, color.blue, color.alpha, text );
 	}
 
 }

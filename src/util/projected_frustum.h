@@ -12,10 +12,10 @@ namespace p2boost::frustum {
 	struct camera_view_t {
 		vec3_t origin;
 		vec3_t angles;
-		float near_z{ };
-		float far_z{ };
-		float fov{ };
-		float aspect_ratio{ };
+		float  near_z{ };
+		float  far_z{ };
+		float  fov{ };
+		float  aspect_ratio{ };
 	};
 
 	// reconstruct the projected texture's convex world-space volume.

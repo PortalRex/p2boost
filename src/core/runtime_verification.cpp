@@ -65,20 +65,20 @@ namespace p2boost {
 	std::string sha256_file( const std::wstring& path ) {
 		// permit Steam updates while hashing the currently installed file.
 		const HANDLE file = CreateFileW( path.c_str( ),
-		    GENERIC_READ,
-		    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-		    nullptr,
-		    OPEN_EXISTING,
-		    FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN,
-		    nullptr );
+		                                 GENERIC_READ,
+		                                 FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+		                                 nullptr,
+		                                 OPEN_EXISTING,
+		                                 FILE_ATTRIBUTE_NORMAL | FILE_FLAG_SEQUENTIAL_SCAN,
+		                                 nullptr );
 		if( file == INVALID_HANDLE_VALUE )
 			throw std::runtime_error( "CreateFileW failed" );
 
-		BCRYPT_ALG_HANDLE algorithm{ };
-		BCRYPT_HASH_HANDLE hash{ };
-		DWORD object_size{ };
-		DWORD result_size{ };
-		std::vector< unsigned char > object;
+		BCRYPT_ALG_HANDLE               algorithm{ };
+		BCRYPT_HASH_HANDLE              hash{ };
+		DWORD                           object_size{ };
+		DWORD                           result_size{ };
+		std::vector< unsigned char >    object;
 		std::array< unsigned char, 32 > digest{ };
 
 		// own every BCrypt handle explicitly so all failure paths are reversible.
@@ -86,11 +86,11 @@ namespace p2boost {
 			if( BCryptOpenAlgorithmProvider( &algorithm, BCRYPT_SHA256_ALGORITHM, nullptr, 0 ) < 0 )
 				throw std::runtime_error( "BCryptOpenAlgorithmProvider failed" );
 			if( BCryptGetProperty( algorithm,
-			        BCRYPT_OBJECT_LENGTH,
-			        reinterpret_cast< PUCHAR >( &object_size ),
-			        sizeof( object_size ),
-			        &result_size,
-			        0 ) < 0 )
+			                       BCRYPT_OBJECT_LENGTH,
+			                       reinterpret_cast< PUCHAR >( &object_size ),
+			                       sizeof( object_size ),
+			                       &result_size,
+			                       0 ) < 0 )
 				throw std::runtime_error( "BCryptGetProperty failed" );
 
 			object.resize( object_size );
@@ -139,14 +139,14 @@ namespace p2boost {
 		}
 
 		const std::wstring engine_path = modules.m_engine.path( );
-		const std::wstring suffix = L"\\bin\\engine.dll";
+		const std::wstring suffix      = L"\\bin\\engine.dll";
 		if( engine_path.size( ) <= suffix.size( ) || lower( engine_path.substr( engine_path.size( ) - suffix.size( ) ) ) != suffix ) {
 			result.m_errors.emplace_back( "cannot derive the Portal 2 root from engine.dll" );
 			return result;
 		}
 
 		const std::wstring root = engine_path.substr( 0, engine_path.size( ) - suffix.size( ) );
-		result.m_game_root = narrow( root );
+		result.m_game_root      = narrow( root );
 
 		// reject any changed production dependency before hooks can be installed.
 		for( const auto& module : supported_build_23973718( ) ) {
@@ -163,8 +163,8 @@ namespace p2boost {
 		// private VMT hooks resolve methods from these mapped modules. hashing the
 		// on-disk files is insufficient if a different copy was loaded first.
 		const std::wstring material_system = root + L"\\bin\\materialsystem.dll";
-		const std::wstring surface = root + L"\\bin\\vguimatsurface.dll";
-		const std::wstring vgui = root + L"\\bin\\vgui2.dll";
+		const std::wstring surface         = root + L"\\bin\\vguimatsurface.dll";
+		const std::wstring vgui            = root + L"\\bin\\vgui2.dll";
 		if( !is_loaded_from( modules.m_material_system, material_system ) )
 			result.m_errors.emplace_back( "materialsystem.dll was not loaded from the verified Portal 2 installation" );
 		if( !is_loaded_from( modules.m_surface, surface ) )
@@ -174,9 +174,9 @@ namespace p2boost {
 
 		// filenames alone are insufficient; verify the loaded backend paths too.
 		const std::wstring shader_api = root + L"\\bin\\shaderapivk.dll";
-		const std::wstring dxvk = root + L"\\bin\\dxvk_d3d9.dll";
-		result.m_dxvk_vulkan = is_loaded_from( modules.m_shader_api, shader_api ) &&
-		    is_loaded_from( modules.m_dxvk_d3d9, dxvk ) && modules.m_vulkan;
+		const std::wstring dxvk       = root + L"\\bin\\dxvk_d3d9.dll";
+		result.m_dxvk_vulkan          = is_loaded_from( modules.m_shader_api, shader_api ) &&
+		                       is_loaded_from( modules.m_dxvk_d3d9, dxvk ) && modules.m_vulkan;
 		if( !result.m_dxvk_vulkan )
 			result.m_errors.emplace_back( "Portal 2's shipped DXVK/Vulkan backend is not active; launch with -vulkan" );
 

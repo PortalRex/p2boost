@@ -39,30 +39,30 @@ namespace p2boost {
 
 	private:
 		using engine_vgui_paint_fn_t = int( __thiscall* )( void*, int );
-		using start_drawing_fn_t = int( __thiscall* )( void* );
-		using finish_drawing_fn_t = int( __cdecl* )( );
+		using start_drawing_fn_t     = int( __thiscall* )( void* );
+		using finish_drawing_fn_t    = int( __cdecl* )( );
 		static int __fastcall EngineVGuiPaint( void* self, void*, int mode );
 		void draw( ) noexcept;
 		void draw_panel( int screen_width, const overlay_metrics_t& sample, bool fixes_enabled, bool sar_loaded ) noexcept;
 		void draw_fps( int screen_width, const overlay_metrics_t& sample ) noexcept;
 		void draw_line( int screen_width, unsigned long font, int line, const color_t& color, const char* text ) noexcept;
-		int text_width( unsigned long font, const char* text ) const noexcept;
+		int  text_width( unsigned long font, const char* text ) const noexcept;
 
 		static ProfilerOverlay* m_instance;
 
-		sdk::ISurface* m_surface{ };
+		sdk::ISurface*       m_surface{ };
 		sdk::IVEngineClient* m_engine_client{ };
-		FrameMetrics* m_metrics{ };
-		VmtHook m_engine_vgui_paint;
-		start_drawing_fn_t m_start_drawing{ };
-		finish_drawing_fn_t m_finish_drawing{ };
-		overlay_metrics_t m_sample{ };
-		Qpc::tick_t m_next_update{ };
-		unsigned long m_panel_font{ };
-		int m_line_height{ 16 };
-		bool m_have_sample{ };
-		bool m_fixes_enabled{ };
-		profiler_mode_t m_mode{ profiler_mode_t::off };
+		FrameMetrics*        m_metrics{ };
+		VmtHook              m_engine_vgui_paint;
+		start_drawing_fn_t   m_start_drawing{ };
+		finish_drawing_fn_t  m_finish_drawing{ };
+		overlay_metrics_t    m_sample{ };
+		Qpc::tick_t          m_next_update{ };
+		unsigned long        m_panel_font{ };
+		int                  m_line_height{ 16 };
+		bool                 m_have_sample{ };
+		bool                 m_fixes_enabled{ };
+		profiler_mode_t      m_mode{ profiler_mode_t::off };
 	};
 
 }

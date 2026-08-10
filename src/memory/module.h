@@ -60,7 +60,7 @@ namespace p2boost {
 				return { };
 
 			std::wstring value( 32768, L'\0' );
-			const DWORD length = GetModuleFileNameW( handle( ), value.data( ), static_cast< DWORD >( value.size( ) ) );
+			const DWORD  length = GetModuleFileNameW( handle( ), value.data( ), static_cast< DWORD >( value.size( ) ) );
 			if( !length || length >= value.size( ) )
 				return { };
 
@@ -85,7 +85,7 @@ namespace p2boost {
 
 			const pattern::bytes_t bytes = pattern::parse( signature );
 			return !bytes.empty( ) && contains( address, bytes.size( ) ) &&
-			    pattern::find( address, bytes.size( ), bytes ) == address;
+			       pattern::find( address, bytes.size( ), bytes ) == address;
 		}
 
 		// scan only this image and reject ambiguous signatures.
@@ -103,7 +103,7 @@ namespace p2boost {
 		}
 
 	private:
-		Address m_base{ };
+		Address     m_base{ };
 		std::size_t m_size{ };
 	};
 

@@ -10,7 +10,7 @@ namespace p2boost {
 	struct material_pass_t {
 		std::uint32_t m_flat_samplers{ };
 		std::uint32_t m_normal_samplers{ };
-		bool m_excluded{ };
+		bool          m_excluded{ };
 	};
 
 	// classify sampler roles from Valve's public material shader contracts.

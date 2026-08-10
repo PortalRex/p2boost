@@ -14,16 +14,16 @@ namespace p2boost {
 	};
 
 	// pure helpers keep texture decoding testable without Portal 2 or a device.
-	bool flat_texture_format_supported( D3DFORMAT format ) noexcept;
+	bool         flat_texture_format_supported( D3DFORMAT format ) noexcept;
 	flat_color_t classify_flat_texture(
 	    D3DFORMAT format, const void* bits, int pitch, unsigned int width, unsigned int height ) noexcept;
-	bool write_flat_texture( D3DFORMAT format,
-	    void* destination,
-	    int destination_pitch,
-	    const void* source,
-	    int source_pitch,
-	    unsigned int width,
-	    unsigned int height,
-	    flat_color_t color ) noexcept;
+	bool write_flat_texture( D3DFORMAT    format,
+	                         void*        destination,
+	                         int          destination_pitch,
+	                         const void*  source,
+	                         int          source_pitch,
+	                         unsigned int width,
+	                         unsigned int height,
+	                         flat_color_t color ) noexcept;
 
 }

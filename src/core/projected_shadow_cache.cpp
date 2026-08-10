@@ -46,10 +46,10 @@ namespace p2boost {
 		}
 
 		// this xref loads Portal 2's private CClientShadowMgr singleton.
-		const Address manager_xref = modules.m_client.find( portal2::signature::shadow_manager );
-		const Address manager = manager_xref.add( portal2::xref::shadow_manager_object ).at< Address >( );
+		const Address                      manager_xref = modules.m_client.find( portal2::signature::shadow_manager );
+		const Address                      manager      = manager_xref.add( portal2::xref::shadow_manager_object ).at< Address >( );
 		const client_shadow_manager_view_t manager_view{ manager.as< void* >( ) };
-		void** update_projected_slot = manager_view.update_projected_slot( );
+		void**                             update_projected_slot = manager_view.update_projected_slot( );
 		if( !manager_view || !update_projected_slot )
 			return false;
 
@@ -63,22 +63,22 @@ namespace p2boost {
 
 		// the private ConVar value controls model receiver projection even when
 		// the shadow entry is unchanged, so it remains part of the cache key.
-		const Address models_xref = modules.m_client.find( portal2::signature::flashlight_models );
+		const Address models_xref       = modules.m_client.find( portal2::signature::flashlight_models );
 		m_flashlight_models_cvar_parent = models_xref.add( portal2::xref::flashlight_models_global ).at< Address >( ).as< int** >( );
 
 		// hook only the verified call from ComputeShadowDepthTextures. calling the
 		// engine selector first preserves every stock visibility, split-screen,
 		// priority, and maximum-shadow rule before applying exact frustum culling.
 		const Address active_call_xref = modules.m_client.find( portal2::signature::active_shadow_depth_call );
-		const Address active_call = active_call_xref.add( portal2::xref::active_shadow_depth_call );
-		const Address active_target = active_call.rel32( 1 );
-		const Address expected_target = modules.m_client.find( portal2::signature::active_shadow_depth_list );
+		const Address active_call      = active_call_xref.add( portal2::xref::active_shadow_depth_call );
+		const Address active_target    = active_call.rel32( 1 );
+		const Address expected_target  = modules.m_client.find( portal2::signature::active_shadow_depth_list );
 		if( active_call.at< std::uint8_t >( ) != 0xe8 || active_target != expected_target )
 			return false;
 
-		const Address shadow_manager_xref = modules.m_client.find( portal2::signature::active_shadow_manager );
+		const Address shadow_manager_xref   = modules.m_client.find( portal2::signature::active_shadow_manager );
 		const Address shadow_manager_global = shadow_manager_xref.add( portal2::xref::active_shadow_manager_global );
-		m_shadow_manager_parent = shadow_manager_global.at< Address >( ).as< sdk::IShadowMgr** >( );
+		m_shadow_manager_parent             = shadow_manager_global.at< Address >( ).as< sdk::IShadowMgr** >( );
 		if( !m_remove_dirty || !m_flashlight_models_cvar_parent || !*m_flashlight_models_cvar_parent ||
 		    !m_shadow_manager_parent || !*m_shadow_manager_parent )
 			return false;
@@ -117,11 +117,11 @@ namespace p2boost {
 		m_update_projected.remove( );
 		m_change_instance.remove( );
 		invalidate( );
-		m_metrics = nullptr;
+		m_metrics                       = nullptr;
 		m_flashlight_models_cvar_parent = nullptr;
-		m_remove_dirty = nullptr;
-		m_original_build_active_depth = nullptr;
-		m_shadow_manager_parent = nullptr;
+		m_remove_dirty                  = nullptr;
+		m_original_build_active_depth   = nullptr;
+		m_shadow_manager_parent         = nullptr;
 		m_enabled.store( false, std::memory_order_relaxed );
 		m_hits.store( 0, std::memory_order_relaxed );
 		m_depth_culls.store( 0, std::memory_order_relaxed );
@@ -196,15 +196,15 @@ namespace p2boost {
 			return selected;
 
 		const client_shadow_manager_view_t manager{ self };
-		sdk::IShadowMgr* shadow_manager = cache->m_shadow_manager_parent ? *cache->m_shadow_manager_parent : nullptr;
+		sdk::IShadowMgr*                   shadow_manager = cache->m_shadow_manager_parent ? *cache->m_shadow_manager_parent : nullptr;
 		if( !shadow_manager )
 			return selected;
 
-		int retained = 0;
+		int retained               = 0;
 		int retained_high_priority = *high_priority_count;
 		for( int index = 0; index < selected; ++index ) {
-			const std::uint16_t handle = output[ index ];
-			const client_shadow_entry_view_t entry = manager.entry( handle );
+			const std::uint16_t              handle = output[ index ];
+			const client_shadow_entry_view_t entry  = manager.entry( handle );
 			if( !entry )
 				return selected;
 
@@ -268,19 +268,19 @@ namespace p2boost {
 		}
 
 		// resolve the shadow record through the one build-specific layout view.
-		const auto index = static_cast< std::uint16_t >( handle & 0xffffu );
+		const auto                         index = static_cast< std::uint16_t >( handle & 0xffffu );
 		const client_shadow_manager_view_t manager{ self };
-		client_shadow_entry_view_t entry = manager.entry( index );
+		client_shadow_entry_view_t         entry = manager.entry( index );
 		if( !entry ) {
 			original( self, handle, force );
 			return;
 		}
 
 		// read the reversed `r_flashlightmodels` ConVar value used by this path.
-		const int models_value = flashlight_models_value( cache->m_flashlight_models_cvar_parent );
-		const bool collecting = cache->m_metrics && cache->m_metrics->collecting( );
+		const int       models_value = flashlight_models_value( cache->m_flashlight_models_cvar_parent );
+		const bool      collecting   = cache->m_metrics && cache->m_metrics->collecting( );
 		const Stopwatch timer{ collecting };
-		std::uint64_t generation{ };
+		std::uint64_t   generation{ };
 
 		{
 			// invalidation and a cache hit must be one transaction. otherwise an
@@ -293,7 +293,7 @@ namespace p2boost {
 
 			const bool known_state = prior != cache->m_states.end( );
 			const bool same_models = known_state && prior->m_flashlight_models_value == models_value;
-			const bool same_entry = known_state && std::memcmp( prior->m_entry.data( ), entry.bytes( ), prior->m_entry.size( ) ) == 0;
+			const bool same_entry  = known_state && std::memcmp( prior->m_entry.data( ), entry.bytes( ), prior->m_entry.size( ) ) == 0;
 
 			// BSP/client-leaf receiver membership is not stored in ClientShadow_t.
 			// limiting reuse to one simulation generation keeps that hidden state
@@ -326,7 +326,7 @@ namespace p2boost {
 
 		if( prior == cache->m_states.end( ) ) {
 			cache->m_states.push_back( { } );
-			prior = cache->m_states.end( ) - 1;
+			prior           = cache->m_states.end( ) - 1;
 			prior->m_handle = index;
 		}
 

@@ -32,7 +32,7 @@ namespace p2boost {
 		if( !m_cvar || !m_command_vmt || !callback )
 			return false;
 
-		auto command = std::make_unique< con_command_t >( name, help, callback );
+		auto command   = std::make_unique< con_command_t >( name, help, callback );
 		command->m_vmt = m_command_vmt;
 		m_cvar->RegisterCommand( command.get( ) );
 		command->m_registered = true;
@@ -80,7 +80,7 @@ namespace p2boost {
 
 		m_commands.clear( );
 		m_command_vmt = nullptr;
-		m_cvar = nullptr;
+		m_cvar        = nullptr;
 	}
 
 }

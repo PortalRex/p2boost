@@ -39,8 +39,8 @@ namespace p2boost {
 
 		static FrameLimiter* m_instance;
 
-		CallSitePatch m_frame_complete;
-		FrameMetrics* m_metrics{ };
+		CallSitePatch    m_frame_complete;
+		FrameMetrics*    m_metrics{ };
 		std::atomic_bool m_enabled{ };
 	};
 

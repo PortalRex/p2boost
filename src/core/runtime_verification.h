@@ -15,9 +15,9 @@ namespace p2boost {
 	};
 
 	struct verification_result_t {
-		bool m_supported{ };
-		bool m_dxvk_vulkan{ };
-		std::string m_game_root;
+		bool                       m_supported{ };
+		bool                       m_dxvk_vulkan{ };
+		std::string                m_game_root;
 		std::vector< std::string > m_errors;
 	};
 

@@ -5,7 +5,7 @@ namespace p2boost {
 
 		struct window_search_t {
 			DWORD m_process{ };
-			HWND m_window{ };
+			HWND  m_window{ };
 		};
 
 		BOOL CALLBACK find_process_window( HWND window, LPARAM parameter ) {
@@ -35,10 +35,10 @@ namespace p2boost {
 
 	[[noreturn]] void restart_after_nvidia_profile_update( ) noexcept {
 		MessageBoxW( game_window( ),
-		    L"p2boost applied the NVIDIA settings required for reliable Vulkan alt-tabbing.\n\n"
-		    L"Portal 2 must restart and will now close.",
-		    L"p2boost - restart required",
-		    MB_OK | MB_ICONINFORMATION | MB_SETFOREGROUND );
+		             L"p2boost applied the NVIDIA settings required for reliable Vulkan alt-tabbing.\n\n"
+		             L"Portal 2 must restart and will now close.",
+		             L"p2boost - restart required",
+		             MB_OK | MB_ICONINFORMATION | MB_SETFOREGROUND );
 
 		// Source ignores WM_CLOSE while its startup command buffer is active.
 		ExitProcess( 0 );

@@ -47,9 +47,9 @@ namespace p2boost {
 		if( replacement_value > UINT32_MAX )
 			return false;
 
-		m_address = static_cast< std::uint8_t* >( address );
+		m_address  = static_cast< std::uint8_t* >( address );
 		m_original = expected;
-		m_patched = expected;
+		m_patched  = expected;
 
 		std::uint32_t previous{ };
 		std::memcpy( &previous, m_original.data( ) + pointer_offset, sizeof( previous ) );
@@ -60,7 +60,7 @@ namespace p2boost {
 
 		m_installed = write_bytes( m_address, m_original.data( ), m_patched.data( ), m_patched.size( ) ) == WriteResult::written;
 		if( !m_installed ) {
-			m_address = nullptr;
+			m_address  = nullptr;
 			m_previous = nullptr;
 		}
 
@@ -76,8 +76,8 @@ namespace p2boost {
 			return false;
 
 		m_installed = false;
-		m_address = nullptr;
-		m_previous = nullptr;
+		m_address   = nullptr;
+		m_previous  = nullptr;
 		return result == WriteResult::written;
 	}
 
@@ -109,7 +109,7 @@ namespace p2boost {
 		if( return_jump.empty( ) || m_patched.empty( ) ) {
 			VirtualFree( m_trampoline, 0, MEM_RELEASE );
 			m_trampoline = nullptr;
-			m_address = nullptr;
+			m_address    = nullptr;
 			return false;
 		}
 
@@ -120,7 +120,7 @@ namespace p2boost {
 		if( !m_installed ) {
 			VirtualFree( m_trampoline, 0, MEM_RELEASE );
 			m_trampoline = nullptr;
-			m_address = nullptr;
+			m_address    = nullptr;
 		}
 
 		return m_installed;
@@ -138,8 +138,8 @@ namespace p2boost {
 		if( result == WriteResult::written )
 			VirtualFree( m_trampoline, 0, MEM_RELEASE );
 
-		m_installed = false;
-		m_address = nullptr;
+		m_installed  = false;
+		m_address    = nullptr;
 		m_trampoline = nullptr;
 		return result == WriteResult::written;
 	}

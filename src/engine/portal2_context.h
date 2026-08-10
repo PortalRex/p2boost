@@ -66,14 +66,14 @@ namespace p2boost {
 		}
 
 	private:
-		sdk::ICvar* m_cvar{ };
-		sdk::IVEngineClient* m_engine_client{ };
-		sdk::IVModelRender* m_model_render{ };
-		sdk::IEngineVGui* m_engine_vgui{ };
-		sdk::IBaseClientDLL* m_base_client{ };
+		sdk::ICvar*           m_cvar{ };
+		sdk::IVEngineClient*  m_engine_client{ };
+		sdk::IVModelRender*   m_model_render{ };
+		sdk::IEngineVGui*     m_engine_vgui{ };
+		sdk::IBaseClientDLL*  m_base_client{ };
 		sdk::IMaterialSystem* m_material_system{ };
-		sdk::ISurface* m_surface{ };
-		sdk::ISchemeManager* m_scheme_manager{ };
+		sdk::ISurface*        m_surface{ };
+		sdk::ISchemeManager*  m_scheme_manager{ };
 	};
 
 	// resolve the one live D3D9 device stored by Portal 2's Vulkan shader API.

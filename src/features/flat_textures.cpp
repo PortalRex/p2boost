@@ -22,7 +22,7 @@ namespace p2boost {
 			return false;
 
 		auto* material_system = interfaces.material_system( );
-		auto* engine_vgui = interfaces.engine_vgui( );
+		auto* engine_vgui     = interfaces.engine_vgui( );
 		if( !material_system || !engine_vgui )
 			return false;
 
@@ -33,9 +33,9 @@ namespace p2boost {
 		    !modules.m_material_system.contains( material_system->GetRenderContextAddress( ) ) )
 			return false;
 
-		const Address paint = engine_vgui->PaintAddress( );
-		const bool engine_paint = modules.m_engine.matches( paint, portal2::signature::overlay_engine_vgui_paint );
-		const bool plugin_paint = modules.m_plugin.contains( paint );
+		const Address paint        = engine_vgui->PaintAddress( );
+		const bool    engine_paint = modules.m_engine.matches( paint, portal2::signature::overlay_engine_vgui_paint );
+		const bool    plugin_paint = modules.m_plugin.contains( paint );
 		if( !engine_paint && !plugin_paint )
 			return false;
 
@@ -55,17 +55,17 @@ namespace p2boost {
 		}
 
 		// publish borrowed objects before a newly installed hook can observe them.
-		m_device = device;
+		m_device          = device;
 		m_material_system = material_system;
-		m_engine_vgui = engine_vgui;
-		m_instance = this;
+		m_engine_vgui     = engine_vgui;
+		m_instance        = this;
 
 		const bool installed = m_bind_material.install( render_context->BindSlot( ), reinterpret_cast< void* >( &BindMaterial ) ) &&
-		    m_vgui_paint.install( engine_vgui->PaintSlot( ), reinterpret_cast< void* >( &VguiPaint ) ) &&
-		    m_create_texture.install( device_vmt + d3d9_slot::create_texture, reinterpret_cast< void* >( &CreateTexture ) ) &&
-		    m_update_surface.install( device_vmt + d3d9_slot::update_surface, reinterpret_cast< void* >( &UpdateSurface ) ) &&
-		    m_update_texture.install( device_vmt + d3d9_slot::update_texture, reinterpret_cast< void* >( &UpdateTexture ) ) &&
-		    m_set_texture.install( device_vmt + d3d9_slot::set_texture, reinterpret_cast< void* >( &SetTexture ) );
+		                       m_vgui_paint.install( engine_vgui->PaintSlot( ), reinterpret_cast< void* >( &VguiPaint ) ) &&
+		                       m_create_texture.install( device_vmt + d3d9_slot::create_texture, reinterpret_cast< void* >( &CreateTexture ) ) &&
+		                       m_update_surface.install( device_vmt + d3d9_slot::update_surface, reinterpret_cast< void* >( &UpdateSurface ) ) &&
+		                       m_update_texture.install( device_vmt + d3d9_slot::update_texture, reinterpret_cast< void* >( &UpdateTexture ) ) &&
+		                       m_set_texture.install( device_vmt + d3d9_slot::set_texture, reinterpret_cast< void* >( &SetTexture ) );
 		render_context->Release( );
 
 		if( installed )
@@ -94,10 +94,10 @@ namespace p2boost {
 		m_lock_texture.remove( );
 		m_get_surface_level.remove( );
 		m_release_texture.remove( );
-		m_texture_vmt = nullptr;
-		m_engine_vgui = nullptr;
+		m_texture_vmt     = nullptr;
+		m_engine_vgui     = nullptr;
 		m_material_system = nullptr;
-		m_device = nullptr;
+		m_device          = nullptr;
 		m_substitutions.store( 0, std::memory_order_relaxed );
 		m_texture_uploads.store( 0, std::memory_order_relaxed );
 		m_surface_uploads.store( 0, std::memory_order_relaxed );
@@ -165,7 +165,7 @@ namespace p2boost {
 			return false;
 
 		std::lock_guard hook_lock{ m_hook_mutex };
-		auto** vmt = vmt_of( texture );
+		auto**          vmt = vmt_of( texture );
 		if( m_texture_vmt )
 			return m_texture_vmt == vmt;
 
@@ -191,7 +191,7 @@ namespace p2boost {
 			return false;
 
 		std::lock_guard hook_lock{ m_hook_mutex };
-		auto** vmt = vmt_of( surface );
+		auto**          vmt = vmt_of( surface );
 		if( m_surface_vmt )
 			return m_surface_vmt == vmt;
 
@@ -269,23 +269,23 @@ namespace p2boost {
 		bool complete = true;
 		for( const auto& pair : pending ) {
 			const texture_record_t& record = pair.second;
-			IDirect3DTexture9* flat{ };
+			IDirect3DTexture9*      flat{ };
 			if( FAILED( create( m_device,
-			        record.m_width,
-			        record.m_height,
-			        record.m_levels,
-			        record.m_usage,
-			        record.m_format,
-			        record.m_pool,
-			        &flat,
-			        nullptr ) ) ||
+			                    record.m_width,
+			                    record.m_height,
+			                    record.m_levels,
+			                    record.m_usage,
+			                    record.m_format,
+			                    record.m_pool,
+			                    &flat,
+			                    nullptr ) ) ||
 			    !flat ) {
 				complete = false;
 				continue;
 			}
 
 			std::unique_lock lock{ m_mutex };
-			auto current = m_textures.find( pair.first );
+			auto             current = m_textures.find( pair.first );
 			if( current != m_textures.end( ) && !current->second.m_flat )
 				current->second.m_flat = flat;
 			else
@@ -312,12 +312,12 @@ namespace p2boost {
 
 	void FlatTextures::release_companions( companion_policy_t policy ) {
 		// detach under the lock and perform every COM release after unlocking.
-		auto release = m_release_texture.previous< release_texture_fn_t >( );
+		auto                              release = m_release_texture.previous< release_texture_fn_t >( );
 		std::vector< IDirect3DTexture9* > companions;
-		IDirect3DTexture9* flat_normal{ };
+		IDirect3DTexture9*                flat_normal{ };
 		{
 			std::unique_lock lock{ m_mutex };
-			flat_normal = m_flat_normal;
+			flat_normal   = m_flat_normal;
 			m_flat_normal = nullptr;
 			companions.reserve( m_textures.size( ) );
 			for( auto& pair : m_textures ) {
@@ -326,7 +326,7 @@ namespace p2boost {
 
 				// toggling off preserves Source's original resource bookkeeping.
 				if( policy == companion_policy_t::retain_originals ) {
-					pair.second.m_flat = nullptr;
+					pair.second.m_flat        = nullptr;
 					pair.second.m_color_valid = false;
 				}
 			}

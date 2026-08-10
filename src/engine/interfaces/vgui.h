@@ -34,7 +34,7 @@ namespace p2boost::sdk {
 
 		int DrawColoredText( unsigned long font, int x, int y, int red, int green, int blue, int alpha, const char* text ) {
 			using function_t = int( __cdecl* )( void*, unsigned long, int, int, int, int, int, int, const char*, ... );
-			auto target = DrawColoredTextAddress( ).as< function_t >( );
+			auto target      = DrawColoredTextAddress( ).as< function_t >( );
 			return target( this, font, x, y, red, green, blue, alpha, "%s", text );
 		}
 

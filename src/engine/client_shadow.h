@@ -82,7 +82,7 @@ namespace p2boost {
 		if( !owner )
 			return 0;
 
-		int value{ };
+		int         value{ };
 		const auto* bytes = reinterpret_cast< const std::uint8_t* >( owner );
 		std::memcpy( &value, bytes + portal2::shadow::flashlight_models, sizeof( value ) );
 		return value;

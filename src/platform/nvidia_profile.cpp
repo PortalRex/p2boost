@@ -14,10 +14,10 @@
 namespace p2boost {
 	namespace {
 
-		constexpr NvU32 present_method_id{ 0x20d690f8 };
-		constexpr NvU32 present_method_layered{ 0x00000001 };
-		constexpr NvU32 present_flags_id{ 0x20324987 };
-		constexpr NvU32 present_flags_dxvk_native{ 0x000802a5 };
+		constexpr NvU32   present_method_id{ 0x20d690f8 };
+		constexpr NvU32   present_method_layered{ 0x00000001 };
+		constexpr NvU32   present_flags_id{ 0x20324987 };
+		constexpr NvU32   present_flags_dxvk_native{ 0x000802a5 };
 		constexpr wchar_t profile_name[]{ L"p2boost Portal 2" };
 
 		constexpr DWORD elevated_configured{ 0 };
@@ -39,7 +39,7 @@ namespace p2boost {
 				return false;
 
 			D3DADAPTER_IDENTIFIER9 identifier{ };
-			const bool identified = SUCCEEDED( direct3d->GetAdapterIdentifier( parameters.AdapterOrdinal, 0, &identifier ) );
+			const bool             identified = SUCCEEDED( direct3d->GetAdapterIdentifier( parameters.AdapterOrdinal, 0, &identifier ) );
 			direct3d->Release( );
 			if( !identified )
 				return false;
@@ -71,7 +71,7 @@ namespace p2boost {
 				}
 
 				m_initialized = true;
-				status = NvAPI_DRS_CreateSession( &m_session );
+				status        = NvAPI_DRS_CreateSession( &m_session );
 				if( status != NVAPI_OK ) {
 					result = failure( "NvAPI_DRS_CreateSession", status );
 					return false;
@@ -92,13 +92,13 @@ namespace p2boost {
 
 		private:
 			NvDRSSessionHandle m_session{ };
-			bool m_initialized{ };
+			bool               m_initialized{ };
 		};
 
 		// obtain the exact executable path to avoid ambiguous same-name profiles.
 		std::wstring current_application_path( ) {
 			std::wstring path( 32768, L'\0' );
-			const DWORD length = GetModuleFileNameW( nullptr, path.data( ), static_cast< DWORD >( path.size( ) ) );
+			const DWORD  length = GetModuleFileNameW( nullptr, path.data( ), static_cast< DWORD >( path.size( ) ) );
 			if( !length || length >= path.size( ) )
 				return { };
 
@@ -128,7 +128,7 @@ namespace p2boost {
 		NvAPI_Status find_profile( NvDRSSessionHandle session, const std::wstring& application_path, NvDRSProfileHandle& profile ) noexcept {
 			NVDRS_APPLICATION application{ };
 			application.version = NVDRS_APPLICATION_VER;
-			auto* name = reinterpret_cast< NvU16* >( const_cast< wchar_t* >( application_path.c_str( ) ) );
+			auto* name          = reinterpret_cast< NvU16* >( const_cast< wchar_t* >( application_path.c_str( ) ) );
 			return NvAPI_DRS_FindApplicationByName( session, name, &profile, &application );
 		}
 
@@ -155,12 +155,12 @@ namespace p2boost {
 		}
 
 		NvAPI_Status read_setting( NvDRSSessionHandle session,
-		    NvDRSProfileHandle profile,
-		    NvU32 id,
-		    NvU32 default_value,
-		    NvU32& value ) noexcept {
+		                           NvDRSProfileHandle profile,
+		                           NvU32              id,
+		                           NvU32              default_value,
+		                           NvU32&             value ) noexcept {
 			NVDRS_SETTING setting{ };
-			setting.version = NVDRS_SETTING_VER;
+			setting.version           = NVDRS_SETTING_VER;
 			const NvAPI_Status status = NvAPI_DRS_GetSetting( session, profile, id, &setting );
 			if( status == NVAPI_SETTING_NOT_FOUND ) {
 				value = default_value;
@@ -174,9 +174,9 @@ namespace p2boost {
 
 		NvAPI_Status set_setting( NvDRSSessionHandle session, NvDRSProfileHandle profile, NvU32 id, NvU32 value ) noexcept {
 			NVDRS_SETTING setting{ };
-			setting.version = NVDRS_SETTING_VER;
-			setting.settingId = id;
-			setting.settingType = NVDRS_DWORD_TYPE;
+			setting.version         = NVDRS_SETTING_VER;
+			setting.settingId       = id;
+			setting.settingType     = NVDRS_DWORD_TYPE;
 			setting.u32CurrentValue = value;
 			return NvAPI_DRS_SetSetting( session, profile, &setting );
 		}
@@ -186,12 +186,12 @@ namespace p2boost {
 				return failure( "GetModuleFileNameW", static_cast< int >( GetLastError( ) ) );
 
 			nvidia_profile_result_t result;
-			DrsSession drs;
+			DrsSession              drs;
 			if( !drs.open( result ) )
 				return result;
 
 			NvDRSProfileHandle profile{ };
-			NvAPI_Status status = find_profile( drs.get( ), application_path, profile );
+			NvAPI_Status       status = find_profile( drs.get( ), application_path, profile );
 			if( status == NVAPI_EXECUTABLE_NOT_FOUND ) {
 				status = create_profile( drs.get( ), application_path, profile );
 				if( status != NVAPI_OK )
@@ -257,18 +257,18 @@ namespace p2boost {
 		const std::wstring parameters = L"\"" + module_path + L"\",ApplyNvidiaProfile";
 
 		SHELLEXECUTEINFOW launch{ };
-		launch.cbSize = sizeof( launch );
-		launch.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC;
-		launch.hwnd = GetForegroundWindow( );
-		launch.lpVerb = L"runas";
-		launch.lpFile = executable.c_str( );
+		launch.cbSize       = sizeof( launch );
+		launch.fMask        = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC;
+		launch.hwnd         = GetForegroundWindow( );
+		launch.lpVerb       = L"runas";
+		launch.lpFile       = executable.c_str( );
 		launch.lpParameters = parameters.c_str( );
-		launch.nShow = SW_HIDE;
+		launch.nShow        = SW_HIDE;
 		if( !ShellExecuteExW( &launch ) || !launch.hProcess )
 			return failure( "ShellExecuteExW(runas)", static_cast< int >( GetLastError( ) ) );
 
-		const DWORD wait = WaitForSingleObject( launch.hProcess, 120000 );
-		DWORD exit_code = elevated_failed;
+		const DWORD wait      = WaitForSingleObject( launch.hProcess, 120000 );
+		DWORD       exit_code = elevated_failed;
 		if( wait == WAIT_OBJECT_0 )
 			GetExitCodeProcess( launch.hProcess, &exit_code );
 		CloseHandle( launch.hProcess );

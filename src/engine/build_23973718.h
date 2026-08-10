@@ -12,12 +12,12 @@ namespace p2boost::portal2 {
 		// exact entry points reached through the overlay's private Windows ABIs.
 		// these guards make every recovered VMT index and PaintTraverseEx helper
 		// fail closed before the first HUD frame can call it.
-		constexpr auto overlay_engine_get_max_clients = "E8 ? ? ? ? 8B 80 10 01 00 00 C3";
-		constexpr auto overlay_engine_vgui_paint = "55 8B EC 83 EC 28 53 56 8B F1";
-		constexpr auto overlay_surface_get_font_tall = "55 8B EC 8B 45 08 50 E8 ? ? ? ? 8B C8 E8 ? ? ? ? 5D C2 04 00";
-		constexpr auto overlay_surface_paint_traverse = "55 8B EC 8B 55 08 83 EC 2C 56 8B F1";
-		constexpr auto overlay_surface_start_drawing = "55 8B EC 83 EC 10 80 3D ? ? ? ? 00 56 57 8B F9";
-		constexpr auto overlay_surface_finish_drawing = "56 6A 00 E8 ? ? ? ? 8B 0D ? ? ? ? 8B 01 8B 90 C4 01 00 00";
+		constexpr auto overlay_engine_get_max_clients    = "E8 ? ? ? ? 8B 80 10 01 00 00 C3";
+		constexpr auto overlay_engine_vgui_paint         = "55 8B EC 83 EC 28 53 56 8B F1";
+		constexpr auto overlay_surface_get_font_tall     = "55 8B EC 8B 45 08 50 E8 ? ? ? ? 8B C8 E8 ? ? ? ? 5D C2 04 00";
+		constexpr auto overlay_surface_paint_traverse    = "55 8B EC 8B 55 08 83 EC 2C 56 8B F1";
+		constexpr auto overlay_surface_start_drawing     = "55 8B EC 83 EC 10 80 3D ? ? ? ? 00 56 57 8B F9";
+		constexpr auto overlay_surface_finish_drawing    = "56 6A 00 E8 ? ? ? ? 8B 0D ? ? ? ? 8B 01 8B 90 C4 01 00 00";
 		constexpr auto overlay_surface_draw_colored_text = "55 8B EC 8B 4D 28 8B 55 24 8D 45 2C";
 
 		// CShaderDeviceDx8::CreateD3DDevice stores the returned DXVK device
@@ -61,13 +61,13 @@ namespace p2boost::portal2 {
 	// recovered class and stack fields used by the two production hooks.
 	namespace frame {
 		constexpr std::ptrdiff_t accumulator{ 0x18 };
-		constexpr size_t target_local{ 8 };
+		constexpr size_t         target_local{ 8 };
 	}
 
 	namespace shadow {
 		constexpr std::ptrdiff_t entries{ 0x2c };
 		constexpr std::ptrdiff_t flashlight_models{ 0x30 };
-		constexpr size_t entry_size{ 0x114 };
+		constexpr size_t         entry_size{ 0x114 };
 		constexpr std::ptrdiff_t remove_dirty_call{ 0x75 };
 		constexpr std::ptrdiff_t engine_handle{ 0x04 };
 		constexpr std::ptrdiff_t world_to_shadow{ 0x0c };
