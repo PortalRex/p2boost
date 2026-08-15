@@ -162,12 +162,12 @@ namespace p2boost {
 		for( const auto& module : supported_build_23973718( ) ) {
 			const std::wstring path = root + L"\\" + widen_ascii( module.m_relative_path );
 			try {
-				const std::string actual = sha256_file( path );
+				const std::string actual  = sha256_file( path );
 				const bool        is_dxvk = std::strcmp( module.m_name, "dxvk_d3d9.dll" ) == 0;
 
 				bool accepted = actual == module.m_sha256;
 				if( is_dxvk ) {
-					result.m_dxvk_sha256 = actual;
+					result.m_dxvk_sha256  = actual;
 					result.m_dxvk_shipped = accepted;
 					for( const char* replacement : supported_dxvk_replacements_23973718( ) ) {
 						if( actual == replacement ) {
