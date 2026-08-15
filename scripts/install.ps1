@@ -15,10 +15,12 @@ if (-not $BuildDirectory) {
 $source = Join-Path $BuildDirectory 'p2boost.dll'
 $pdb = Join-Path $BuildDirectory 'p2boost.pdb'
 $autoexec = Join-Path $GameRoot 'portal2\cfg\autoexec.cfg'
-$pluginDirectory = Join-Path $GameRoot 'portal2'
+$pluginDirectory = $GameRoot
 if (-not (Test-Path -LiteralPath $source)) { throw "build not found: $source" }
 if (-not (Test-Path -LiteralPath $autoexec)) { throw "autoexec not found: $autoexec" }
 
+# Plugin DLLs go in the game root beside portal2.exe and sar.dll; Source finds
+# them there before any game-directory copy.
 Copy-Item -LiteralPath $source -Destination (Join-Path $pluginDirectory 'p2boost.dll') -Force
 if (Test-Path -LiteralPath $pdb) { Copy-Item -LiteralPath $pdb -Destination (Join-Path $pluginDirectory 'p2boost.pdb') -Force }
 # Remove helper artifacts left by versions that configured NVAPI externally.
@@ -26,10 +28,10 @@ foreach ($name in 'p2boost_driver.exe','p2boost_driver_profile.state') {
     $legacy = Join-Path $pluginDirectory $name
     if (Test-Path -LiteralPath $legacy) { Remove-Item -LiteralPath $legacy -Force }
 }
-# Early development builds used the installation root. Remove only those
+# Older releases installed into the portal2 game directory. Remove only those
 # p2boost-owned legacy paths so plugin_load cannot select a stale DLL.
 foreach ($name in 'p2boost.dll','p2boost.pdb') {
-    $legacy = Join-Path $GameRoot $name
+    $legacy = Join-Path $GameRoot ("portal2\$name")
     if (Test-Path -LiteralPath $legacy) { Remove-Item -LiteralPath $legacy -Force }
 }
 $begin = '// p2boost installer begin'

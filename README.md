@@ -1,10 +1,26 @@
 # p2boost [![Build and release](https://github.com/aIIison/p2boost/actions/workflows/build-release.yml/badge.svg)](https://github.com/aIIison/p2boost/actions/workflows/build-release.yml)
 
-p2boost is an open-source Windows performance and display plugin for Portal 2.
-It targets Steam build `23973718`, requires the game's shipped or an approved
-replacement DXVK renderer, and loads through the ordinary Source
-`plugin_load p2boost` command. Launch the game with `-vulkan`; native D3D9 is
-deliberately rejected.
+**A drop-in performance plugin for Portal 2 on Windows** (Steam build
+`23973718`, Vulkan only). Portal 2's render path is CPU-bound: most of the work
+runs on one core, the GPU sits idle, and the bundled 2020-era DXVK adds large
+per-draw translation cost. p2boost removes that waste — a frame-pacing
+correction for `fps_max`, a projected-shadow cache, exact shadow-depth frustum
+culling, and an approved DXVK 3.0.2 replacement that doubles frame rate on
+CPU-bound scenes — without changing visuals, input, or simulation.
+
+**Install in under a minute:**
+
+1. Download `p2boost-nightly-win32.zip` from the latest nightly release.
+2. Extract it into your `Portal 2` game folder: `p2boost.dll` goes next to
+   `portal2.exe`, and `bin\dxvk_d3d9.dll` goes into `bin\`.
+3. Add `-vulkan` to Portal 2's Steam launch options.
+4. Check `p2boost_status` in the console to confirm everything is active.
+
+That is the entire release layout — the zip contains the plugin DLL, the
+approved DXVK replacement, and their licenses, already in the right folders.
+No launcher, no installer, no config edits. The plugin loads through the
+ordinary Source `plugin_load p2boost` command, which `scripts/install.ps1` adds
+to your autoexec when you build from source.
 
 > [!WARNING]
 > **p2boost is not currently approved for Portal 2 speedrun submissions.** The
@@ -137,7 +153,10 @@ one:
 Only the exact hash above is accepted; no approximate DXVK version check
 exists. `p2boost_status` prints `dxvk_shipped=0` and the exact `dxvk_hash` when
 the replacement is active so an A/B comparison always names the binary that
-produced it.
+produced it. The nightly zip and tagged releases already contain the approved
+DXVK 3.0.2 x86 binary in `bin\`, so a zip install does not need the script
+below; the scripts exist for restoring the shipped binary or updating the
+replacement on an existing game:
 
 Install or restore it with the two small scripts:
 
@@ -180,7 +199,9 @@ outputs separate.
 ```
 
 Add `-vulkan` to Portal 2's Steam launch options. The installer copies
-`p2boost.dll` and its symbols and adds one managed `plugin_load p2boost` block
+`p2boost.dll` and its symbols into the game root beside `portal2.exe` (the
+same folder the community drops `sar.dll` into, which is also where Source's
+plugin loader finds it first) and adds one managed `plugin_load p2boost` block
 to `portal2/cfg/autoexec.cfg`. Profile setup happens inside the DLL on its first
 load.
 

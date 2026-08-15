@@ -16,6 +16,9 @@ import library under its MIT license.
 - Eclipse Temurin is GPLv2 with the Classpath Exception.
 - NVIDIA's public NVAPI headers and x86 import library are MIT-licensed. Their
   complete license is included at `third_party/nvapi/LICENSE`.
-- DXVK is zlib-licensed software by Philip Rebohle and contributors.
-  `scripts/install-dxvk.ps1` downloads an official DXVK release archive, which
-  contains its license text. p2boost itself never vendors a DXVK binary.
+- DXVK is zlib-licensed software by Philip Rebohle and contributors. The
+  drop-in release package (produced by `scripts/package-dropin.ps1`) contains
+  the official DXVK x86 `d3d9.dll` renamed to `bin\dxvk_d3d9.dll`, together
+  with its complete license text as `LICENSE.dxvk.txt`.
+  `scripts/install-dxvk.ps1` downloads the same official DXVK release archive
+  for in-place updates; p2boost itself never vendors or modifies a DXVK binary.
