@@ -2,7 +2,7 @@ param(
 	[string]$Demo = 'a/PortalGun_2243_76561198795823814_348449',
 	[string]$OutputDirectory = 'artifacts\benchmarks\portalgun-vulkan',
 	[ValidateRange(20, 40)][int]$DurationSeconds = 24,
-	[ValidateSet(360, 500, 999)][int]$FpsMax = 999,
+	[ValidateSet(0, 360, 500, 999)][int]$FpsMax = 999,
 	[ValidateSet('Patched', 'Unpatched')][string]$Variant = 'Patched',
 	[string]$RconPassword = 'p2boostlab',
 	[string]$GameRoot = 'D:\SteamLibrary\steamapps\common\Portal 2',
@@ -63,6 +63,7 @@ if($runtime -notmatch 'supported=1' -or $runtime -notmatch 'dxvk_vulkan=1') {
 }
 
 $originalFpsMax = Read-Cvar 'fps_max'
+$originalFrametimeUncap = Read-Cvar 'sar_frametime_uncap'
 $presentCsv = Join-Path $output "portalgun-$slug.csv"
 $metricsCsv = Join-Path $output "portalgun-$slug-metrics.csv"
 $playbackLog = Join-Path $output "portalgun-$slug-playback.txt"
@@ -75,6 +76,7 @@ try {
 	Invoke-Game @(
 		'stopdemo',
 		"fps_max $FpsMax",
+		"sar_frametime_uncap $([int]($FpsMax -eq 0))",
 		"p2boost_enable $enabled",
 		'p2boost_trace 1'
 	) | Out-Null
@@ -147,6 +149,7 @@ finally {
 			'stopdemo',
 			'p2boost_trace 0',
 			'p2boost_enable 1',
+			"sar_frametime_uncap $originalFrametimeUncap",
 			"fps_max $originalFpsMax"
 		) 3 | Out-Null
 	}

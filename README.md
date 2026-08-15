@@ -1,9 +1,10 @@
 # p2boost [![Build and release](https://github.com/aIIison/p2boost/actions/workflows/build-release.yml/badge.svg)](https://github.com/aIIison/p2boost/actions/workflows/build-release.yml)
 
 p2boost is an open-source Windows performance and display plugin for Portal 2.
-It targets Steam build `23973718`, requires the game's shipped DXVK renderer,
-and loads through the ordinary Source `plugin_load p2boost` command. Launch the
-game with `-vulkan`; native D3D9 is deliberately rejected.
+It targets Steam build `23973718`, requires the game's shipped or an approved
+replacement DXVK renderer, and loads through the ordinary Source
+`plugin_load p2boost` command. Launch the game with `-vulkan`; native D3D9 is
+deliberately rejected.
 
 > [!WARNING]
 > **p2boost is not currently approved for Portal 2 speedrun submissions.** The
@@ -119,6 +120,53 @@ NVIDIA profile values is applied.
 Because the setting is now owned directly by the DLL, uninstalling p2boost does
 not reset the Portal 2 application profile.
 
+## Approved DXVK replacement
+
+Portal 2 ships a 2020-era DXVK build whose per-draw translation cost keeps the
+CPU-bound render path from feeding the GPU. On CPU-limited systems this shows up
+as low GPU utilization and frametime jitter at high `fps_max` values. A newer
+DXVK with a parallel command stream and lower overhead directly attacks that
+path, so p2boost accepts one exact replacement binary alongside the shipped
+one:
+
+| `bin\dxvk_d3d9.dll` | SHA-256 |
+|---|---:|
+| Shipped (Valve) | `7bf7c95d81ff33b951ff985037401ff5a792474f1e3b9c5d2f521affb92b9073` |
+| DXVK 3.0.2 (x86) | `44a2e749694128710cce3a545c954bd9d986dd6a8ea61bb08d931c2ef0190488` |
+
+Only the exact hash above is accepted; no approximate DXVK version check
+exists. `p2boost_status` prints `dxvk_shipped=0` and the exact `dxvk_hash` when
+the replacement is active so an A/B comparison always names the binary that
+produced it.
+
+Install or restore it with the two small scripts:
+
+```powershell
+.\scripts\install-dxvk.ps1 -GameRoot 'D:\SteamLibrary\steamapps\common\Portal 2'
+.\scripts\restore-dxvk.ps1 -GameRoot 'D:\SteamLibrary\steamapps\common\Portal 2'
+```
+
+Measured on the split-screen lobby scene (the same CPU-bound profile that
+limits the shipped binary), the replacement doubles frame rate (2.03x) and
+halves mean frame time (3.94 ms to 1.94 ms) with GPU-busy time unchanged, so
+the saving is entirely in DXVK's per-draw CPU cost. In a light 1400 FPS demo
+scene the two binaries are within noise, confirming the replacement's benefit
+is specific to CPU-bound render paths. See [benchmarks/report.md](benchmarks/report.md).
+
+`install-dxvk.ps1` backs up the shipped binary to
+`bin\dxvk_d3d9.dll.p2boost-original`, downloads the official GitHub release,
+verifies the exact hash above before copying, and refuses to overwrite any
+unrecognized binary. `restore-dxvk.ps1` restores the backed-up shipped build.
+The rest of the fingerprint (`engine.dll`, `client.dll`, `shaderapivk.dll`,
+and the other shipped modules) is unchanged and still required; `shaderapivk`
+imports only the ordinary D3D9 export surface, which DXVK 3.0.2 provides.
+
+> [!WARNING]
+> Some antivirus products flag DXVK binaries (especially 32-bit ones). The
+> installed file's SHA-256 must match the official release hash above. Verify
+> the DXVK replacement before recording a speedrun, exactly as you would
+> verify any other plugin state.
+
 ## Build and install
 
 Requirements are Visual Studio 2019 or newer, CMake 3.24 or newer, an x86
@@ -144,10 +192,11 @@ To remove the plugin:
 
 ## Commands
 
-- `p2boost_status` prints the build fingerprint, DXVK/Vulkan and NVIDIA-profile
-  state, enabled fixes, projected-shadow cache hits and exact-frustum culls,
-  display-pass counts, demo-marker readiness, SAR state, overlay availability,
-  and metric count.
+- `p2boost_status` prints the build fingerprint, DXVK/Vulkan state (including
+  whether the approved replacement DXVK is active and its exact hash),
+  NVIDIA-profile state, enabled fixes, projected-shadow cache hits and
+  exact-frustum culls, display-pass counts, demo-marker readiness, SAR state,
+  overlay availability, and metric count.
 - `p2boost_enable 0|1` provides a reversible runtime A/B switch.
 - `p2boost_flat_textures 0|1` replaces proven color-bearing world/model samplers
   with their dominant tone and substitutes a valid neutral texture for normal/
@@ -213,7 +262,8 @@ custom demo message or changing simulation data.
 The compact Vulkan PortalGun smoke runner is
 `scripts/run-portalgun-demo.ps1`. It plays the exact 22.433-second intro3 demo
 and reports the 12-18 second successful-portal window instead of treating the
-runner's first attack input as a placed portal.
+runner's first attack input as a placed portal. `-FpsMax 0` selects an uncapped
+run and enables `sar_frametime_uncap 1` for the measurement window.
 
 See [benchmarks/report.md](benchmarks/report.md) for current Vulkan validation
 and [research/report.md](research/report.md) for the archived reverse-engineering

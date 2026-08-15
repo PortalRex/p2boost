@@ -1,5 +1,37 @@
 # Vulkan validation report
 
+## DXVK replacement A/B
+
+The approved `bin\dxvk_d3d9.dll` replacement (DXVK 3.0.2 x86) was measured
+against the shipped binary with every p2boost fix enabled, SAR loaded,
+`fps_max 0` and `sar_frametime_uncap 1` on the intro3 runner, and `fps_max 999`
+on the split-screen lobby. Each process was warmed with one full demo playback
+or scene setup before its capture.
+
+### Intro3 PortalGun demo (light scene, 12-18 s window)
+
+| DXVK | Frames | Average FPS | p99 ms | Maximum ms | >=8.3 ms |
+|---|---:|---:|---:|---:|---:|
+| Shipped (Valve) | 8563 | 1427.28 | 1.3207 | 2.1230 | 0 |
+| 3.0.2 x86 | 8441 | 1406.78 | 1.3702 | 2.6272 | 0 |
+
+This scene presents at 1400+ FPS with ~0.65 ms GPU time; neither binary is the
+bottleneck, and the ~1.5% difference sits inside run-to-run noise. Median GPU
+busy was 0.632 ms (shipped) vs 0.646 ms (3.0.2), confirming identical GPU work.
+
+### Split-screen lobby (CPU-bound scene)
+
+| DXVK | Frames | Mean ms | p50 ms | p90 ms | p99 ms | Max ms | GPU busy med |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Shipped (Valve) | 2537 | 3.9368 | 3.5411 | 6.5986 | 9.0057 | 13.4952 | 1.222 |
+| 3.0.2 x86 | 5140 | 1.9420 | 1.8311 | 2.5426 | 3.1382 | 4.1719 | 1.164 |
+
+The replacement doubles frame rate (2.03x) while GPU-busy time is unchanged,
+which isolates the saving to DXVK's per-draw CPU translation cost. The engine
+trace agrees: 588 samples at 3.927 ms mean (shipped) vs 1182 at 1.915 ms
+(3.0.2), with shadow-cache hit rate 76.4% vs 88.5%. This is the same
+CPU-limited profile the shipped binary showed in earlier runs, now halved.
+
 ## Target
 
 - Portal 2 Windows x86 build `23973718`

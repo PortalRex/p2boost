@@ -62,6 +62,15 @@ namespace p2boost {
 		return modules;
 	}
 
+	const std::array< const char*, 1 >& supported_dxvk_replacements_23973718( ) {
+		// DXVK 3.0.2 x86 build. its parallel command stream and lower per-draw
+		// translation cost directly reduce Portal 2's CPU-bound render path.
+		static const std::array< const char*, 1 > replacements{ {
+		    "44a2e749694128710cce3a545c954bd9d986dd6a8ea61bb08d931c2ef0190488",
+		} };
+		return replacements;
+	}
+
 	std::string sha256_file( const std::wstring& path ) {
 		// permit Steam updates while hashing the currently installed file.
 		const HANDLE file = CreateFileW( path.c_str( ),
@@ -149,11 +158,26 @@ namespace p2boost {
 		result.m_game_root      = narrow( root );
 
 		// reject any changed production dependency before hooks can be installed.
+		// bin\dxvk_d3d9.dll additionally accepts the approved replacement hashes.
 		for( const auto& module : supported_build_23973718( ) ) {
 			const std::wstring path = root + L"\\" + widen_ascii( module.m_relative_path );
 			try {
 				const std::string actual = sha256_file( path );
-				if( actual != module.m_sha256 )
+				const bool        is_dxvk = std::strcmp( module.m_name, "dxvk_d3d9.dll" ) == 0;
+
+				bool accepted = actual == module.m_sha256;
+				if( is_dxvk ) {
+					result.m_dxvk_sha256 = actual;
+					result.m_dxvk_shipped = accepted;
+					for( const char* replacement : supported_dxvk_replacements_23973718( ) ) {
+						if( actual == replacement ) {
+							accepted = true;
+							break;
+						}
+					}
+				}
+
+				if( !accepted )
 					result.m_errors.emplace_back( std::string( module.m_name ) + " SHA-256 mismatch: " + actual );
 			} catch( const std::exception& error ) {
 				result.m_errors.emplace_back( std::string( module.m_name ) + " verification failed: " + error.what( ) );

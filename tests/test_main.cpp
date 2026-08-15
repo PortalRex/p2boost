@@ -15,6 +15,7 @@
 
 #include <Windows.h>
 #include <array>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -338,6 +339,39 @@ namespace {
 		       !p2boost::needs_nvidia_profile( 0x8086 ) && !p2boost::needs_nvidia_profile( 0 );
 	}
 
+	bool test_dxvk_fingerprints( ) {
+		// the shipped build must stay fingerprinted with its exact hash.
+		bool shipped_dxvk{ };
+		for( const auto& module : p2boost::supported_build_23973718( ) ) {
+			if( std::strcmp( module.m_name, "dxvk_d3d9.dll" ) == 0 ) {
+				shipped_dxvk = true;
+				if( std::strlen( module.m_sha256 ) != 64 )
+					return false;
+			}
+		}
+		if( !shipped_dxvk )
+			return false;
+
+		// every approved replacement must be an exact 64-hex hash that differs
+		// from the shipped binary, so verification can never approximate.
+		const auto& replacements = p2boost::supported_dxvk_replacements_23973718( );
+		if( replacements.empty( ) )
+			return false;
+		for( const char* replacement : replacements ) {
+			if( !replacement || std::strlen( replacement ) != 64 )
+				return false;
+			for( size_t index = 0; replacement[ index ]; ++index ) {
+				if( !std::isxdigit( static_cast< unsigned char >( replacement[ index ] ) ) )
+					return false;
+			}
+			for( const auto& module : p2boost::supported_build_23973718( ) ) {
+				if( std::strcmp( module.m_name, "dxvk_d3d9.dll" ) == 0 && std::strcmp( replacement, module.m_sha256 ) == 0 )
+					return false;
+			}
+		}
+		return true;
+	}
+
 	bool test_projected_frustum_views( ) {
 		// encode the exact private view fields once, then consume them only through
 		// the build-specific wrapper used by the production shadow optimizer.
@@ -393,10 +427,11 @@ int main( ) {
 	const bool gamma_curve    = test_monitor_gamma_curve( );
 	const bool viewport_scale = test_viewport_scale_rects( );
 	const bool nvidia_vendor  = test_nvidia_vendor_filter( );
+	const bool dxvk_fp        = test_dxvk_fingerprints( );
 	const bool frustum        = test_projected_frustum_views( );
 	std::printf( "address=%s rel32=%s pattern=%s hook_chain=%s callsite=%s callsite_chain=%s "
 	             "hash=%s overlay_abi=%s metrics=%s overlay=%s "
-	             "phase=%s qpc=%s flat_alpha=%s flat_color=%s gamma_curve=%s viewport_scale=%s nvidia_vendor=%s frustum=%s\n",
+	             "phase=%s qpc=%s flat_alpha=%s flat_color=%s gamma_curve=%s viewport_scale=%s nvidia_vendor=%s dxvk_fp=%s frustum=%s\n",
 	             address ? "ok" : "FAIL",
 	             relative_call ? "ok" : "FAIL",
 	             pattern ? "ok" : "FAIL",
@@ -414,9 +449,10 @@ int main( ) {
 	             gamma_curve ? "ok" : "FAIL",
 	             viewport_scale ? "ok" : "FAIL",
 	             nvidia_vendor ? "ok" : "FAIL",
+	             dxvk_fp ? "ok" : "FAIL",
 	             frustum ? "ok" : "FAIL" );
 	return address && relative_call && pattern && hook && callsite && callsite_chain && hash && overlay_abi && metrics && overlay && phase && qpc && flat_alpha && flat_color && gamma_curve &&
-	               viewport_scale && nvidia_vendor && frustum
+	               viewport_scale && nvidia_vendor && dxvk_fp && frustum
 	           ? 0
 	           : 1;
 }

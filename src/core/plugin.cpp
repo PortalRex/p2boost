@@ -91,6 +91,9 @@ namespace p2boost {
 			               m_enabled ? "enabled" : "disabled" );
 			for( const auto& error : m_verification.m_errors )
 				console_print( "[p2boost] %s\n", error.c_str( ) );
+			if( m_verification.m_dxvk_vulkan && !m_verification.m_dxvk_shipped )
+				console_print( "[p2boost] dxvk_d3d9.dll is an approved replacement build (%s); performance measurements use this exact binary\n",
+				               m_verification.m_dxvk_sha256.c_str( ) );
 			if( m_nvidia_profile.m_state == nvidia_profile_state_t::unavailable || m_nvidia_profile.m_state == nvidia_profile_state_t::failed )
 				console_print( "[p2boost] NVIDIA profile setup %s at %s (%d); no driver settings were changed\n",
 				               nvidia_profile_state_name( m_nvidia_profile.m_state ),
@@ -293,13 +296,15 @@ namespace p2boost {
 
 		// print one machine-readable snapshot for support and automated tests.
 		sdk::PluginResult status_command( ) const {
-			console_print( "[p2boost] build=23973718 supported=%d dxvk_vulkan=%d nvidia_profile=%s nvidia_detail=%s:%d enabled=%d "
+			console_print( "[p2boost] build=23973718 supported=%d dxvk_vulkan=%d dxvk_shipped=%d dxvk_hash=%s nvidia_profile=%s nvidia_detail=%s:%d enabled=%d "
 			               "limiter=%d shadow_cache=%d shadow_hits=%u shadow_culled=%u tracing=%d overlay=%d overlay_available=%d "
 			               "display_available=%d gamma_passes=%llu viewport_passes=%llu demo_marker=%d "
 			               "flat_available=%d flat=%d flat_textures=%zu flat_ready=%zu flat_normal=%d flat_binds=%llu "
 			               "flat_uploads=%llu/%llu/%llu sar=%d samples=%zu root=%s\n",
 			               m_verification.m_supported,
 			               m_verification.m_dxvk_vulkan,
+			               m_verification.m_dxvk_shipped,
+			               m_verification.m_dxvk_sha256.c_str( ),
 			               nvidia_profile_state_name( m_nvidia_profile.m_state ),
 			               m_nvidia_profile.m_operation,
 			               m_nvidia_profile.m_status,
