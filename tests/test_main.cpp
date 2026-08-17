@@ -301,6 +301,19 @@ namespace {
 		return std::fabs( neutral - 1.0f ) < 0.0001f && bright < neutral && dark > neutral;
 	}
 
+	bool test_r_intensity_clamp( ) {
+		// r_intensity is clamped to Quake Live's 0.0..2.0 range and 1.0 is neutral.
+		p2boost::DisplayAdjustments adjustments;
+		adjustments.set_intensity( 1.25f );
+		if( std::fabs( adjustments.intensity( ) - 1.25f ) > 0.0001f )
+			return false;
+		adjustments.set_intensity( 3.0f );
+		if( std::fabs( adjustments.intensity( ) - p2boost::max_intensity ) > 0.0001f )
+			return false;
+		adjustments.set_intensity( -1.0f );
+		return std::fabs( adjustments.intensity( ) - p2boost::min_intensity ) < 0.0001f;
+	}
+
 	bool test_viewport_scale_rects( ) {
 		const D3DSURFACE_DESC     target{ D3DFMT_A8R8G8B8, D3DRTYPE_SURFACE, 0, D3DPOOL_DEFAULT, D3DMULTISAMPLE_NONE, 0, 2560, 1440 };
 		p2boost::viewport_scale_t result{ };
@@ -425,13 +438,14 @@ int main( ) {
 	const bool flat_alpha     = test_flat_texture_alpha( );
 	const bool flat_color     = test_flat_texture_dominant_color( );
 	const bool gamma_curve    = test_monitor_gamma_curve( );
+	const bool intensity      = test_r_intensity_clamp( );
 	const bool viewport_scale = test_viewport_scale_rects( );
 	const bool nvidia_vendor  = test_nvidia_vendor_filter( );
 	const bool dxvk_fp        = test_dxvk_fingerprints( );
 	const bool frustum        = test_projected_frustum_views( );
 	std::printf( "address=%s rel32=%s pattern=%s hook_chain=%s callsite=%s callsite_chain=%s "
 	             "hash=%s overlay_abi=%s metrics=%s overlay=%s "
-	             "phase=%s qpc=%s flat_alpha=%s flat_color=%s gamma_curve=%s viewport_scale=%s nvidia_vendor=%s dxvk_fp=%s frustum=%s\n",
+	             "phase=%s qpc=%s flat_alpha=%s flat_color=%s gamma_curve=%s intensity=%s viewport_scale=%s nvidia_vendor=%s dxvk_fp=%s frustum=%s\n",
 	             address ? "ok" : "FAIL",
 	             relative_call ? "ok" : "FAIL",
 	             pattern ? "ok" : "FAIL",
@@ -447,12 +461,13 @@ int main( ) {
 	             flat_alpha ? "ok" : "FAIL",
 	             flat_color ? "ok" : "FAIL",
 	             gamma_curve ? "ok" : "FAIL",
+	             intensity ? "ok" : "FAIL",
 	             viewport_scale ? "ok" : "FAIL",
 	             nvidia_vendor ? "ok" : "FAIL",
 	             dxvk_fp ? "ok" : "FAIL",
 	             frustum ? "ok" : "FAIL" );
 	return address && relative_call && pattern && hook && callsite && callsite_chain && hash && overlay_abi && metrics && overlay && phase && qpc && flat_alpha && flat_color && gamma_curve &&
-	               viewport_scale && nvidia_vendor && dxvk_fp && frustum
+	               intensity && viewport_scale && nvidia_vendor && dxvk_fp && frustum
 	           ? 0
 	           : 1;
 }

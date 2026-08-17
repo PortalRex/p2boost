@@ -16,6 +16,7 @@
 #include <Windows.h>
 
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 
@@ -212,6 +213,8 @@ namespace p2boost {
 				return overlay_command( args );
 			if( _stricmp( command, "p2boost_dump_metrics" ) == 0 )
 				return dump_metrics_command( );
+			if( _stricmp( command, "r_intensity" ) == 0 )
+				return intensity_command( args );
 
 			return sdk::Continue;
 		}
@@ -247,6 +250,7 @@ namespace p2boost {
 			    { "p2boost_trace", "Enable or disable frame tracing." },
 			    { "p2boost_overlay", "Select the full or FPS-only frame profiler." },
 			    { "p2boost_dump_metrics", "Write frame metrics to CSV." },
+			    { "r_intensity", "Scale final-frame RGB brightness (0.0 to 2.0, 1.0 neutral)." },
 			};
 
 			if( !m_commands.connect( m_interfaces.cvar( ) ) )
@@ -298,7 +302,7 @@ namespace p2boost {
 		sdk::PluginResult status_command( ) const {
 			console_print( "[p2boost] build=23973718 supported=%d dxvk_vulkan=%d dxvk_shipped=%d dxvk_hash=%s nvidia_profile=%s nvidia_detail=%s:%d enabled=%d "
 			               "limiter=%d shadow_cache=%d shadow_hits=%u shadow_culled=%u tracing=%d overlay=%d overlay_available=%d "
-			               "display_available=%d gamma_passes=%llu viewport_passes=%llu demo_marker=%d "
+			               "display_available=%d gamma_passes=%llu viewport_passes=%llu intensity=%g demo_marker=%d "
 			               "flat_available=%d flat=%d flat_textures=%zu flat_ready=%zu flat_normal=%d flat_binds=%llu "
 			               "flat_uploads=%llu/%llu/%llu sar=%d samples=%zu root=%s\n",
 			               m_verification.m_supported,
@@ -319,6 +323,7 @@ namespace p2boost {
 			               m_display_adjustments.available( ),
 			               static_cast< unsigned long long >( m_display_adjustments.gamma_passes( ) ),
 			               static_cast< unsigned long long >( m_display_adjustments.viewport_passes( ) ),
+			               m_display_adjustments.intensity( ),
 			               m_demo_provenance.available( ),
 			               m_flat_textures.available( ),
 			               m_flat_textures.enabled( ),
@@ -400,6 +405,30 @@ namespace p2boost {
 		sdk::PluginResult dump_metrics_command( ) const {
 			const std::string path = m_verification.m_game_root + "\\p2boost_metrics.csv";
 			console_print( "[p2boost] metrics %s: %s\n", m_metrics.dump( path ) ? "written" : "write failed", path.c_str( ) );
+			return sdk::Stop;
+		}
+
+		// set or print the Quake-style final-frame RGB brightness multiplier.
+		sdk::PluginResult intensity_command( const sdk::CCommand& args ) {
+			if( args.ArgC( ) == 1 ) {
+				console_print( "[p2boost] r_intensity = %g (0.0 to 2.0, 1.0 neutral)\n", m_display_adjustments.intensity( ) );
+				return sdk::Stop;
+			}
+
+			if( args.ArgC( ) != 2 ) {
+				console_print( "usage: r_intensity <0.0..2.0>\n" );
+				return sdk::Stop;
+			}
+
+			char*       end{ };
+			const float value = std::strtof( args.Arg( 1 ), &end );
+			if( end == args.Arg( 1 ) || *end != '\0' || value != value || value < p2boost::min_intensity || value > p2boost::max_intensity ) {
+				console_print( "usage: r_intensity <0.0..2.0>\n" );
+				return sdk::Stop;
+			}
+
+			m_display_adjustments.set_intensity( value );
+			console_print( "[p2boost] r_intensity = %g\n", m_display_adjustments.intensity( ) );
 			return sdk::Stop;
 		}
 

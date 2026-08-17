@@ -7,10 +7,15 @@
 #include <Windows.h>
 #include <d3d9.h>
 
+#include <algorithm>
 #include <atomic>
 #include <cstdint>
 
 namespace p2boost {
+	// r_intensity bounds, matching Quake Live's 0.0..2.0 range with 1.0 neutral.
+	constexpr float min_intensity{ 0.0f };
+	constexpr float max_intensity{ 2.0f };
+
 	// return the final-frame exponent relative to Source's neutral 2.2 curve.
 	float monitor_gamma_curve( float monitor_gamma ) noexcept;
 
@@ -52,6 +57,16 @@ namespace p2boost {
 			return m_viewport_passes.load( std::memory_order_relaxed );
 		}
 
+		// Quake-style r_intensity: a linear RGB multiplier applied to the final
+		// frame before the monitor-gamma curve. 1.0 is neutral.
+		float intensity( ) const noexcept {
+			return m_intensity.load( std::memory_order_relaxed );
+		}
+
+		void set_intensity( float intensity ) noexcept {
+			m_intensity.store( std::clamp( intensity, min_intensity, max_intensity ), std::memory_order_relaxed );
+		}
+
 	private:
 		using present_fn_t      = HRESULT( __stdcall* )( IDirect3DDevice9*, const RECT*, const RECT*, HWND, const RGNDATA* );
 		using reset_fn_t        = HRESULT( __stdcall* )( IDirect3DDevice9*, D3DPRESENT_PARAMETERS* );
@@ -65,7 +80,7 @@ namespace p2boost {
 		                       const RECT*          destination,
 		                       D3DTEXTUREFILTERTYPE filter );
 		bool restore_back_buffer( IDirect3DDevice9* device );
-		bool draw_fullscreen_copy( IDirect3DDevice9* device, float curve );
+		bool draw_fullscreen_copy( IDirect3DDevice9* device, float curve, float intensity );
 		bool ensure_copy_target( IDirect3DDevice9* device, const D3DSURFACE_DESC& description );
 		bool ensure_gamma_resources( IDirect3DDevice9* device );
 		void release_resources( );
@@ -91,6 +106,7 @@ namespace p2boost {
 		VmtHook                    m_present;
 		VmtHook                    m_reset;
 		VmtHook                    m_set_viewport;
+		std::atomic< float >       m_intensity{ 1.0f };
 		std::atomic_uint64_t       m_gamma_passes{ };
 		std::atomic_uint64_t       m_viewport_passes{ };
 	};

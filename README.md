@@ -40,7 +40,9 @@ to your autoexec when you build from source.
   remote view. Model-instance transfers invalidate p2boost's receiver cache
   after the supported engine performs Valve's model-shadow cleanup.
 - Working `mat_monitorgamma` and `mat_viewportscale` output on DXVK, including
-  independent local split-screen viewports and remote-view composition.
+  independent local split-screen viewports and remote-view composition. The same
+  final-frame pass accepts Quake-style `r_intensity` brightness scaling (neutral
+  at its default `1.0`).
 - Optional alpha-safe flat textures through `p2boost_flat_textures`, disabled
   by default and kept separate from the performance fixes. Its VGUI exclusion
   chains the verified engine paint callback; it never intercepts render-view
@@ -92,6 +94,8 @@ final gamma pass makes `mat_monitorgamma` functional, while the missing viewport
 transition expands `mat_viewportscale` before full-resolution UI is painted.
 Both paths remain dormant at their default values. The separate flat-texture
 command is an explicit visual option rather than a claimed performance fix.
+`r_intensity` reuses the same final-frame pass as an explicit brightness
+multiplier and is likewise dormant at its default `1.0`.
 
 ## Why Vulkan only
 
@@ -235,6 +239,11 @@ To remove the plugin:
   64-frame graph, one-second hitch count, and shadow-cache activity.
 - `p2boost_trace 0|1` records bounded frame and shadow-cache metrics.
 - `p2boost_dump_metrics` writes `p2boost_metrics.csv` in the game root.
+- `r_intensity <0.0..2.0>` scales final-frame RGB brightness before the
+  monitor-gamma curve, matching Quake Live's command of the same name. The
+  default `1.0` is neutral and costs no extra pass; values above `1.0`
+  brighten and values below darken. It is a display tweak, not a performance
+  change, and is independent of `p2boost_enable`.
 
 `mat_monitorgamma` now changes only the frame handed to DXVK and restores the
 untouched back buffer after presentation, so retained loading frames cannot

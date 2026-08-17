@@ -1,4 +1,4 @@
-#include "display_adjustments.h"
+﻿#include "display_adjustments.h"
 
 #include "d3d9_slots.h"
 #include "monitor_gamma_shader.h"
@@ -109,6 +109,7 @@ namespace p2boost {
 		m_scaled_view         = { };
 		m_scaled_view_pending = false;
 		m_internal_viewport   = false;
+		m_intensity.store( 1.0f, std::memory_order_relaxed );
 		if( m_instance == this )
 			m_instance = nullptr;
 	}
@@ -189,7 +190,7 @@ namespace p2boost {
 
 		// reverse StretchRect support is driver-dependent, and a multisampled
 		// destination can reject it. an identity draw restores the same source.
-		return draw_fullscreen_copy( device, 1.0f );
+		return draw_fullscreen_copy( device, 1.0f, 1.0f );
 	}
 
 	bool DisplayAdjustments::apply_viewport_scale( IDirect3DDevice9* device, const viewport_scale_t& view ) {
@@ -228,7 +229,7 @@ namespace p2boost {
 		return matches;
 	}
 
-	bool DisplayAdjustments::draw_fullscreen_copy( IDirect3DDevice9* device, float curve_value ) {
+	bool DisplayAdjustments::draw_fullscreen_copy( IDirect3DDevice9* device, float curve_value, float intensity ) {
 		if( !m_copy_texture || !m_gamma_shader || !m_state_block || FAILED( m_state_block->Capture( ) ) )
 			return false;
 
@@ -241,7 +242,7 @@ namespace p2boost {
 		    { width - 0.5f, height - 0.5f, 0.0f, 1.0f, 1.0f, 1.0f },
 		};
 		const D3DVIEWPORT9 viewport{ 0, 0, m_copy_width, m_copy_height, 0.0f, 1.0f };
-		const float        curve[ 4 ]{ curve_value, 0.0f, 0.0f, 0.0f };
+		const float        curve[ 4 ]{ curve_value, intensity, 0.0f, 0.0f };
 
 		m_internal_viewport = true;
 		device->SetViewport( &viewport );
@@ -270,12 +271,15 @@ namespace p2boost {
 		if( !m_monitor_gamma )
 			return false;
 
-		const float monitor_gamma = std::clamp( m_monitor_gamma->value_float( ), 1.6f, 2.6f );
-		if( std::fabs( monitor_gamma - neutral_monitor_gamma ) <= gamma_epsilon )
+		const float monitor_gamma    = std::clamp( m_monitor_gamma->value_float( ), 1.6f, 2.6f );
+		const float intensity        = std::clamp( m_intensity.load( std::memory_order_relaxed ), min_intensity, max_intensity );
+		const bool  gamma_active     = std::fabs( monitor_gamma - neutral_monitor_gamma ) > gamma_epsilon;
+		const bool  intensity_active = std::fabs( intensity - 1.0f ) > gamma_epsilon;
+		if( !gamma_active && !intensity_active )
 			return false;
 		if( !copy_back_buffer( device, nullptr, nullptr, D3DTEXF_NONE ) || !ensure_gamma_resources( device ) )
 			return false;
-		return draw_fullscreen_copy( device, monitor_gamma_curve( monitor_gamma ) );
+		return draw_fullscreen_copy( device, monitor_gamma_curve( monitor_gamma ), intensity );
 	}
 
 	void DisplayAdjustments::release_resources( ) {
