@@ -180,6 +180,64 @@ namespace p2boost {
 		return true;
 	}
 
+	bool DisplayAdjustments::ensure_upscale_target( IDirect3DDevice9* device, LONG width, LONG height ) {
+		const LONG padded_width  = width + 2;
+		const LONG padded_height = height + 2;
+		if( m_upscale_texture && m_upscale_width == static_cast< unsigned int >( padded_width ) &&
+		    m_upscale_height == static_cast< unsigned int >( padded_height ) )
+			return true;
+
+		if( m_upscale_texture )
+			m_upscale_texture->Release( );
+		m_upscale_texture = nullptr;
+
+		// one pixel of black padding on every side gives the linear expansion
+		// a guaranteed-clean sample at the source boundary. the region outside
+		// the source rect is cleared once here and never written again, so the
+		// border stays black even when the scale changes mid-frame.
+		D3DSURFACE_DESC    description{ };
+		IDirect3DSurface9* back_buffer{ };
+		if( !SUCCEEDED( device->GetBackBuffer( 0, 0, D3DBACKBUFFER_TYPE_MONO, &back_buffer ) ) || !back_buffer ||
+		    FAILED( back_buffer->GetDesc( &description ) ) ) {
+			if( back_buffer )
+				back_buffer->Release( );
+			return false;
+		}
+		back_buffer->Release( );
+
+		if( FAILED( device->CreateTexture( static_cast< UINT >( padded_width ),
+		                                   static_cast< UINT >( padded_height ),
+		                                   1,
+		                                   D3DUSAGE_RENDERTARGET,
+		                                   description.Format,
+		                                   D3DPOOL_DEFAULT,
+		                                   &m_upscale_texture,
+		                                   nullptr ) ) )
+			return false;
+
+		m_upscale_width  = static_cast< unsigned int >( padded_width );
+		m_upscale_height = static_cast< unsigned int >( padded_height );
+
+		// clear the padding while the surface is bound, then restore the
+		// device's original render target so the engine's next draw is safe.
+		IDirect3DSurface9* surface{ };
+		IDirect3DSurface9* previous_target{ };
+		if( SUCCEEDED( m_upscale_texture->GetSurfaceLevel( 0, &surface ) ) && surface ) {
+			if( SUCCEEDED( device->GetRenderTarget( 0, &previous_target ) ) ) {
+				const D3DVIEWPORT9 padded_viewport{ 0, 0, m_upscale_width, m_upscale_height, 0.0f, 1.0f };
+				m_internal_viewport = true;
+				device->SetViewport( &padded_viewport );
+				device->SetRenderTarget( 0, surface );
+				device->Clear( 0, nullptr, D3DCLEAR_TARGET, 0x00000000, 1.0f, 0 );
+				device->SetRenderTarget( 0, previous_target );
+				previous_target->Release( );
+				m_internal_viewport = false;
+			}
+			surface->Release( );
+		}
+		return true;
+	}
+
 	bool DisplayAdjustments::ensure_gamma_resources( IDirect3DDevice9* device ) {
 		if( !m_gamma_shader && FAILED( device->CreatePixelShader( reinterpret_cast< const DWORD* >( g_monitor_gamma_shader ), &m_gamma_shader ) ) )
 			return false;
@@ -245,28 +303,37 @@ namespace p2boost {
 		if( scale >= 1.0f - gamma_epsilon )
 			return false;
 
-		// the linear expansion samples one texel past the source rect, and that
-		// strip still holds the previous frame's pixels. blank the L-shaped
-		// border so the expanded right and bottom edges stay clean instead of
-		// blending stale content into a faint gradient.
-		const D3DRECT border[ 2 ]{
-		    { view.m_source.right, view.m_source.top, view.m_destination.right, view.m_destination.bottom },
-		    { view.m_source.left, view.m_source.bottom, view.m_destination.right, view.m_destination.bottom },
-		};
-		clear_back_buffer_rects( device, border, 2 );
-
-		if( !copy_back_buffer( device, &view.m_source, &view.m_destination, D3DTEXF_LINEAR ) )
+		const LONG source_width  = view.m_source.right - view.m_source.left;
+		const LONG source_height = view.m_source.bottom - view.m_source.top;
+		if( source_width <= 0 || source_height <= 0 )
 			return false;
 
-		IDirect3DSurface9* copy_surface{ };
-		IDirect3DSurface9* destination{ };
-		const bool         ready = SUCCEEDED( m_copy_texture->GetSurfaceLevel( 0, &copy_surface ) ) && copy_surface &&
-		                   SUCCEEDED( device->GetBackBuffer( 0, 0, D3DBACKBUFFER_TYPE_MONO, &destination ) ) && destination;
-		const bool expanded = ready && SUCCEEDED( device->StretchRect( copy_surface, &view.m_destination, destination, &view.m_destination, D3DTEXF_NONE ) );
-		if( destination )
-			destination->Release( );
-		if( copy_surface )
-			copy_surface->Release( );
+		// stage the scaled scene in a source-sized texture wrapped in a one-pixel
+		// black border. the linear expansion then samples only scene pixels (or
+		// the border) instead of whatever the back buffer holds beside the source
+		// rect, which otherwise bleeds stale content into the expanded edges.
+		if( !ensure_upscale_target( device, source_width, source_height ) )
+			return false;
+
+		IDirect3DSurface9* stage_surface{ };
+		IDirect3DSurface9* back_buffer{ };
+		if( !SUCCEEDED( m_upscale_texture->GetSurfaceLevel( 0, &stage_surface ) ) || !stage_surface ||
+		    !SUCCEEDED( device->GetBackBuffer( 0, 0, D3DBACKBUFFER_TYPE_MONO, &back_buffer ) ) || !back_buffer ) {
+			if( stage_surface )
+				stage_surface->Release( );
+			if( back_buffer )
+				back_buffer->Release( );
+			return false;
+		}
+
+		const RECT stage_rect{ 1, 1, source_width + 1, source_height + 1 };
+		const bool captured = SUCCEEDED( device->StretchRect( back_buffer, &view.m_source, stage_surface, &stage_rect, D3DTEXF_NONE ) );
+		bool       expanded = false;
+		if( captured )
+			expanded = SUCCEEDED( device->StretchRect( stage_surface, &stage_rect, back_buffer, &view.m_destination, D3DTEXF_LINEAR ) );
+
+		back_buffer->Release( );
+		stage_surface->Release( );
 		return expanded;
 	}
 
@@ -374,12 +441,17 @@ namespace p2boost {
 			m_gamma_shader->Release( );
 		if( m_copy_texture )
 			m_copy_texture->Release( );
-		m_state_block  = nullptr;
-		m_gamma_shader = nullptr;
-		m_copy_texture = nullptr;
-		m_copy_width   = 0;
-		m_copy_height  = 0;
-		m_copy_format  = D3DFMT_UNKNOWN;
+		if( m_upscale_texture )
+			m_upscale_texture->Release( );
+		m_state_block     = nullptr;
+		m_gamma_shader    = nullptr;
+		m_copy_texture    = nullptr;
+		m_upscale_texture = nullptr;
+		m_copy_width      = 0;
+		m_copy_height     = 0;
+		m_copy_format     = D3DFMT_UNKNOWN;
+		m_upscale_width   = 0;
+		m_upscale_height  = 0;
 	}
 
 	HRESULT __stdcall DisplayAdjustments::Present( IDirect3DDevice9* device,

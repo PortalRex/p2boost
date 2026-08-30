@@ -89,6 +89,7 @@ namespace p2boost {
 		bool apply_gamma( IDirect3DDevice9* device );
 		bool apply_viewport_scale( IDirect3DDevice9* device, const viewport_scale_t& view );
 		bool rendering_to_back_buffer( IDirect3DDevice9* device, D3DSURFACE_DESC& description ) const;
+		bool ensure_upscale_target( IDirect3DDevice9* device, LONG width, LONG height );
 		void clear_back_buffer_rects( IDirect3DDevice9* device, const D3DRECT* rects, DWORD count );
 		bool copy_back_buffer( IDirect3DDevice9*    device,
 		                       const RECT*          source,
@@ -110,10 +111,13 @@ namespace p2boost {
 		con_var_t*                 m_viewport_upscale{ };
 		IDirect3DDevice9*          m_device{ };
 		IDirect3DTexture9*         m_copy_texture{ };
+		IDirect3DTexture9*         m_upscale_texture{ };
 		IDirect3DPixelShader9*     m_gamma_shader{ };
 		IDirect3DStateBlock9*      m_state_block{ };
 		unsigned int               m_copy_width{ };
 		unsigned int               m_copy_height{ };
+		unsigned int               m_upscale_width{ };
+		unsigned int               m_upscale_height{ };
 		D3DFORMAT                  m_copy_format{ D3DFMT_UNKNOWN };
 		viewport_scale_t           m_scaled_view{ };
 		bool                       m_scaled_view_pending{ };
