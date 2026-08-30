@@ -89,6 +89,7 @@ namespace p2boost {
 		bool apply_gamma( IDirect3DDevice9* device );
 		bool apply_viewport_scale( IDirect3DDevice9* device, const viewport_scale_t& view );
 		bool rendering_to_back_buffer( IDirect3DDevice9* device, D3DSURFACE_DESC& description ) const;
+		void clear_back_buffer_rects( IDirect3DDevice9* device, const D3DRECT* rects, DWORD count );
 		bool copy_back_buffer( IDirect3DDevice9*    device,
 		                       const RECT*          source,
 		                       const RECT*          destination,

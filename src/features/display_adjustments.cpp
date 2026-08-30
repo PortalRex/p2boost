@@ -253,7 +253,7 @@ namespace p2boost {
 		    { view.m_source.right, view.m_source.top, view.m_destination.right, view.m_destination.bottom },
 		    { view.m_source.left, view.m_source.bottom, view.m_destination.right, view.m_destination.bottom },
 		};
-		device->Clear( 2, border, D3DCLEAR_TARGET, 0x00000000, 1.0f, 0 );
+		clear_back_buffer_rects( device, border, 2 );
 
 		if( !copy_back_buffer( device, &view.m_source, &view.m_destination, D3DTEXF_LINEAR ) )
 			return false;
@@ -281,6 +281,37 @@ namespace p2boost {
 		if( render_target )
 			render_target->Release( );
 		return matches;
+	}
+
+	// D3D9 interprets Clear pRects relative to the current viewport, which at
+	// viewport-boundary time is still the scaled 3D rect (or one of the engine's
+	// 1px border-clear rects). normalize to the full back buffer before the
+	// clear and restore afterwards, so p2boost's rects always land where the
+	// expansion expects them.
+	void DisplayAdjustments::clear_back_buffer_rects( IDirect3DDevice9* device, const D3DRECT* rects, DWORD count ) {
+		if( !device || !rects || !count )
+			return;
+
+		D3DVIEWPORT9 previous{ };
+		const bool   has_previous = SUCCEEDED( device->GetViewport( &previous ) );
+
+		D3DSURFACE_DESC    description{ };
+		IDirect3DSurface9* back_buffer{ };
+		if( !SUCCEEDED( device->GetBackBuffer( 0, 0, D3DBACKBUFFER_TYPE_MONO, &back_buffer ) ) || !back_buffer ||
+		    FAILED( back_buffer->GetDesc( &description ) ) ) {
+			if( back_buffer )
+				back_buffer->Release( );
+			return;
+		}
+		back_buffer->Release( );
+
+		const D3DVIEWPORT9 fullscreen{ 0, 0, description.Width, description.Height, 0.0f, 1.0f };
+		m_internal_viewport = true;
+		device->SetViewport( &fullscreen );
+		device->Clear( count, rects, D3DCLEAR_TARGET, 0x00000000, 1.0f, 0 );
+		if( has_previous )
+			device->SetViewport( &previous );
+		m_internal_viewport = false;
 	}
 
 	bool DisplayAdjustments::draw_fullscreen_copy( IDirect3DDevice9* device, float curve_value, float intensity ) {
@@ -451,7 +482,7 @@ namespace p2boost {
 					                      static_cast< LONG >( viewport->Y ),
 					                      static_cast< LONG >( viewport->X + viewport->Width ),
 					                      static_cast< LONG >( viewport->Y + viewport->Height ) };
-					device->Clear( 1, &region, D3DCLEAR_TARGET, 0x00000000, 1.0f, 0 );
+					instance->clear_back_buffer_rects( device, &region, 1 );
 				}
 			}
 		}
