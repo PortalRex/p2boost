@@ -126,4 +126,37 @@ namespace p2boost {
 		return result == write_result_t::written;
 	}
 
+	BytePatch::~BytePatch( ) {
+		remove( );
+	}
+
+	bool BytePatch::install( void* address, const std::vector< std::uint8_t >& expected, const std::vector< std::uint8_t >& replacement ) {
+		if( m_installed || !address || expected.empty( ) || expected.size( ) != replacement.size( ) )
+			return false;
+
+		m_address  = static_cast< std::uint8_t* >( address );
+		m_original = expected;
+		m_patched  = replacement;
+
+		m_installed = write_bytes( m_address, m_original.data( ), m_patched.data( ), m_patched.size( ), PAGE_EXECUTE_READWRITE ) == write_result_t::written;
+		if( !m_installed )
+			m_address = nullptr;
+
+		return m_installed;
+	}
+
+	bool BytePatch::remove( ) {
+		if( !m_installed )
+			return true;
+
+		// a later owner wins; never overwrite bytes changed after installation.
+		write_result_t result{ write_bytes( m_address, m_patched.data( ), m_original.data( ), m_original.size( ), PAGE_EXECUTE_READWRITE ) };
+		if( result == write_result_t::protection_failed )
+			return false;
+
+		m_installed = false;
+		m_address   = nullptr;
+		return result == write_result_t::written;
+	}
+
 }

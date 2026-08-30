@@ -66,4 +66,29 @@ namespace p2boost {
 		}
 	};
 
+	// rewrites one verified byte sequence in place, e.g. a conditional branch.
+	class BytePatch {
+	private:
+		std::uint8_t*               m_address{ };
+		std::vector< std::uint8_t > m_original;
+		std::vector< std::uint8_t > m_patched;
+		bool                        m_installed{ };
+
+	public:
+		// default ctor / dtor.
+		BytePatch( ) = default;
+		~BytePatch( );
+
+		BytePatch( const BytePatch& )            = delete;
+		BytePatch& operator=( const BytePatch& ) = delete;
+
+		// install or remove this in-place patch. expected must match exactly.
+		bool install( void* address, const std::vector< std::uint8_t >& expected, const std::vector< std::uint8_t >& replacement );
+		bool remove( );
+
+		bool installed( ) const noexcept {
+			return m_installed;
+		}
+	};
+
 }

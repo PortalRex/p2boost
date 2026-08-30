@@ -1,11 +1,15 @@
 ﻿#include "display_adjustments.h"
 
+#include "build_23973718.h"
 #include "d3d9_slots.h"
 #include "monitor_gamma_shader.h"
+#include "portal2_context.h"
 #include "vmt.h"
 
+#include <Windows.h>
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 
 namespace p2boost {
 	namespace {
@@ -29,6 +33,15 @@ namespace p2boost {
 	}
 
 	DisplayAdjustments* DisplayAdjustments::m_instance{ };
+
+	D3DVIEWPORT9 clamp_degenerate_viewport( const D3DVIEWPORT9& viewport ) noexcept {
+		D3DVIEWPORT9 clamped = viewport;
+		if( clamped.Width == 0 || clamped.Height == 0 ) {
+			clamped.Width  = 1;
+			clamped.Height = 1;
+		}
+		return clamped;
+	}
 
 	float monitor_gamma_curve( float monitor_gamma ) noexcept {
 		return std::clamp( monitor_gamma, 1.6f, 2.6f ) / neutral_monitor_gamma;
@@ -97,7 +110,28 @@ namespace p2boost {
 		return true;
 	}
 
+	bool DisplayAdjustments::install_viewport_commit_patch( const portal2_modules_t& modules ) {
+		if( m_viewport_commit.installed( ) )
+			return true;
+
+		// CommitSetViewports guards both dimensions with conditional branches:
+		//   83 7E 08 00 74 33   cmp [esi+8],0 ; je skip    (width)
+		//   83 7E 0C 00 74 2D   cmp [esi+0xc],0 ; je skip  (height)
+		// the D3D9 device therefore never sees the hidden slot's 0-size viewport
+		// and keeps the fullscreen boundary viewport active. neutralising both
+		// branches (NOP) falls through to the device dispatch so the degenerate
+		// rect reaches the device, where SetViewport clamps it to one pixel.
+		const Address commit = modules.m_shader_api.find( portal2::signature::viewport_commit_skip );
+		if( !commit )
+			return false;
+
+		const std::vector< std::uint8_t > expected{ 0x83, 0x7e, 0x08, 0x00, 0x74, 0x33, 0x83, 0x7e, 0x0c, 0x00, 0x74, 0x2d };
+		const std::vector< std::uint8_t > patched{ 0x83, 0x7e, 0x08, 0x00, 0x90, 0x90, 0x83, 0x7e, 0x0c, 0x00, 0x90, 0x90 };
+		return m_viewport_commit.install( commit.as< void* >( ), expected, patched );
+	}
+
 	void DisplayAdjustments::remove( ) {
+		m_viewport_commit.remove( );
 		m_set_viewport.remove( );
 		m_present.remove( );
 		m_reset.remove( );
@@ -346,6 +380,15 @@ namespace p2boost {
 		const auto          next     = instance ? instance->m_set_viewport.previous< set_viewport_fn_t >( ) : nullptr;
 		if( !instance || instance->m_internal_viewport || !viewport )
 			return next ? next( device, viewport ) : D3DERR_INVALIDCALL;
+
+		// With ss_force_primary_fullscreen the hidden secondary slot is a 1x1 box
+		// at the corner. After viewport scaling that becomes a 0-size viewport,
+		// which the engine's CommitSetViewports normally swallows. the companion
+		// engine patch forwards it to the device, and D3D9 rejects a zero rect and
+		// keeps the previous (fullscreen) one. clamp the degenerate rect to one
+		// pixel so the hidden 3D scene clips to nothing, exactly as intended.
+		const D3DVIEWPORT9 clamped = clamp_degenerate_viewport( *viewport );
+		viewport                   = &clamped;
 
 		// the default value is 1.0, so ordinary gameplay takes this inexpensive
 		// branch without querying COM surfaces on every SetViewport call.

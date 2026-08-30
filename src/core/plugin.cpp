@@ -79,6 +79,8 @@ namespace p2boost {
 				m_verification.m_errors.emplace_back( "optional flat-texture hooks unavailable" );
 			if( m_verification.m_supported && !m_display_adjustments.install( m_commands, m_device ) )
 				m_verification.m_errors.emplace_back( "display-adjustment hooks unavailable" );
+			if( m_verification.m_supported && !m_display_adjustments.install_viewport_commit_patch( m_modules ) )
+				m_verification.m_errors.emplace_back( "viewport-commit signature mismatch" );
 
 			// enable performance fixes only when the complete supported set is ready.
 			m_enabled = can_enable( );
@@ -302,7 +304,7 @@ namespace p2boost {
 		sdk::PluginResult status_command( ) const {
 			console_print( "[p2boost] build=23973718 supported=%d dxvk_vulkan=%d dxvk_shipped=%d dxvk_hash=%s nvidia_profile=%s nvidia_detail=%s:%d enabled=%d "
 			               "limiter=%d shadow_cache=%d shadow_hits=%u shadow_culled=%u tracing=%d overlay=%d overlay_available=%d "
-			               "display_available=%d gamma_passes=%llu viewport_passes=%llu intensity=%g demo_marker=%d "
+			               "display_available=%d viewport_commit=%d gamma_passes=%llu viewport_passes=%llu intensity=%g demo_marker=%d "
 			               "flat_available=%d flat=%d flat_textures=%zu flat_ready=%zu flat_normal=%d flat_binds=%llu "
 			               "flat_uploads=%llu/%llu/%llu sar=%d samples=%zu root=%s\n",
 			               m_verification.m_supported,
@@ -321,6 +323,7 @@ namespace p2boost {
 			               m_overlay.mode( ),
 			               m_overlay.available( ),
 			               m_display_adjustments.available( ),
+			               m_display_adjustments.viewport_commit_patched( ),
 			               static_cast< unsigned long long >( m_display_adjustments.gamma_passes( ) ),
 			               static_cast< unsigned long long >( m_display_adjustments.viewport_passes( ) ),
 			               m_display_adjustments.intensity( ),

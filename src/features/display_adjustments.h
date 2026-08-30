@@ -3,6 +3,7 @@
 #include "console_commands.h"
 #include "hook.h"
 #include "interfaces.h"
+#include "portal2_context.h"
 
 #include <Windows.h>
 #include <d3d9.h>
@@ -31,6 +32,10 @@ namespace p2boost {
 	                           float                  scale,
 	                           viewport_scale_t&      result ) noexcept;
 
+	// clamp a degenerate 0-size viewport to one pixel so D3D9 does not silently
+	// keep the previous (possibly fullscreen) viewport for a hidden split-slot.
+	D3DVIEWPORT9 clamp_degenerate_viewport( const D3DVIEWPORT9& viewport ) noexcept;
+
 	// restores two display controls that Portal 2's DXVK path does not finish:
 	// viewport scaling is expanded before VGUI, and monitor gamma is applied
 	// after every final UI draw.
@@ -44,6 +49,15 @@ namespace p2boost {
 
 		bool install( const ConsoleCommandRegistry& commands, IDirect3DDevice9* device );
 		void remove( );
+
+		// the shader API's CommitSetViewports skips zero-size viewports, which
+		// leaves the previous (possibly fullscreen) viewport active when a hidden
+		// split-screen slot renders. this is the engine-side companion to the
+		// degenerate-viewport clamp in SetViewport.
+		bool install_viewport_commit_patch( const portal2_modules_t& modules );
+		bool viewport_commit_patched( ) const noexcept {
+			return m_viewport_commit.installed( );
+		}
 
 		bool available( ) const noexcept {
 			return m_present.installed( ) && m_reset.installed( ) && m_set_viewport.installed( );
@@ -106,6 +120,7 @@ namespace p2boost {
 		VmtHook                    m_present;
 		VmtHook                    m_reset;
 		VmtHook                    m_set_viewport;
+		BytePatch                  m_viewport_commit;
 		std::atomic< float >       m_intensity{ 1.0f };
 		std::atomic_uint64_t       m_gamma_passes{ };
 		std::atomic_uint64_t       m_viewport_passes{ };
