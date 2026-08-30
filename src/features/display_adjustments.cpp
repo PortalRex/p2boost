@@ -54,12 +54,22 @@ namespace p2boost {
 		if( scale <= 0.0f || scale >= 1.0f - gamma_epsilon || viewport.Width < 16 || viewport.Height < 16 )
 			return false;
 
-		const unsigned int width  = std::max( 1u, static_cast< unsigned int >( std::lround( viewport.Width / scale ) ) );
-		const unsigned int height = std::max( 1u, static_cast< unsigned int >( std::lround( viewport.Height / scale ) ) );
+		unsigned int width  = std::max( 1u, static_cast< unsigned int >( std::lround( viewport.Width / scale ) ) );
+		unsigned int height = std::max( 1u, static_cast< unsigned int >( std::lround( viewport.Height / scale ) ) );
 		if( width <= viewport.Width || height <= viewport.Height )
 			return false;
 		if( viewport.X + width > target.Width + 1u || viewport.Y + height > target.Height + 1u )
 			return false;
+
+		// lround can leave the destination a pixel or two short of the target
+		// edge at non-even scales; that stale strip of the previous frame would
+		// show through beside the expanded image. snap to the exact edge.
+		const LONG dest_right  = static_cast< LONG >( viewport.X + width );
+		const LONG dest_bottom = static_cast< LONG >( viewport.Y + height );
+		if( dest_right < static_cast< LONG >( target.Width ) && static_cast< LONG >( target.Width ) - dest_right <= 2 )
+			width += static_cast< unsigned int >( static_cast< LONG >( target.Width ) - dest_right );
+		if( dest_bottom < static_cast< LONG >( target.Height ) && static_cast< LONG >( target.Height ) - dest_bottom <= 2 )
+			height += static_cast< unsigned int >( static_cast< LONG >( target.Height ) - dest_bottom );
 
 		result.m_source      = { static_cast< LONG >( viewport.X ),
 		                         static_cast< LONG >( viewport.Y ),
@@ -234,6 +244,16 @@ namespace p2boost {
 		const float scale = std::clamp( m_viewport_scale->value_float( ), 1.0f / 640.0f, 1.0f );
 		if( scale >= 1.0f - gamma_epsilon )
 			return false;
+
+		// the linear expansion samples one texel past the source rect, and that
+		// strip still holds the previous frame's pixels. blank the L-shaped
+		// border so the expanded right and bottom edges stay clean instead of
+		// blending stale content into a faint gradient.
+		const D3DRECT border[ 2 ]{
+		    { view.m_source.right, view.m_source.top, view.m_destination.right, view.m_destination.bottom },
+		    { view.m_source.left, view.m_source.bottom, view.m_destination.right, view.m_destination.bottom },
+		};
+		device->Clear( 2, border, D3DCLEAR_TARGET, 0x00000000, 1.0f, 0 );
 
 		if( !copy_back_buffer( device, &view.m_source, &view.m_destination, D3DTEXF_LINEAR ) )
 			return false;
@@ -415,6 +435,17 @@ namespace p2boost {
 			if( scaled_viewport_rect( *viewport, description, scale, candidate ) ) {
 				instance->m_scaled_view         = candidate;
 				instance->m_scaled_view_pending = true;
+
+				// Source never clears color, so a scaled slot that paints nothing
+				// (e.g. a nodraw void) retains the previous frame's expanded image.
+				// recopying that through the expansion magnifies it every frame into
+				// the repeating-screen feedback pattern. blank the region before the
+				// 3D scene repaints it so unpainted pixels stay black.
+				const D3DRECT region{ static_cast< LONG >( viewport->X ),
+				                      static_cast< LONG >( viewport->Y ),
+				                      static_cast< LONG >( viewport->X + viewport->Width ),
+				                      static_cast< LONG >( viewport->Y + viewport->Height ) };
+				device->Clear( 1, &region, D3DCLEAR_TARGET, 0x00000000, 1.0f, 0 );
 			}
 		}
 

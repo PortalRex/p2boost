@@ -338,6 +338,13 @@ namespace {
 		    result.m_destination.bottom != 1440 )
 			return false;
 
+		// a non-even scale leaves the lround destination a pixel short of the
+		// target edge; it must snap to the exact edge so no stale strip shows.
+		const D3DVIEWPORT9 odd_view{ 0, 0, 844, 475, 0.0f, 1.0f };
+		if( !p2boost::scaled_viewport_rect( odd_view, target, 0.33f, result ) || result.m_destination.right != 2560 ||
+		    result.m_destination.bottom != 1440 )
+			return false;
+
 		// Tiny engine borders and rectangles that would leave the render target
 		// must never be mistaken for scaled gameplay views.
 		const D3DVIEWPORT9 border{ 0, 0, 1, 1440, 0.0f, 1.0f };
