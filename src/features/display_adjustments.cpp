@@ -433,19 +433,26 @@ namespace p2boost {
 
 			viewport_scale_t candidate{ };
 			if( scaled_viewport_rect( *viewport, description, scale, candidate ) ) {
+				// only the first scaled view of a pending cycle owns the clear.
+				// later same-size viewports (viewmodel, portal passes) arrive after
+				// their scene rendered, and blanking them again would erase the
+				// frame the boundary upscale is about to expand.
+				const bool fresh                = !instance->m_scaled_view_pending;
 				instance->m_scaled_view         = candidate;
 				instance->m_scaled_view_pending = true;
 
-				// Source never clears color, so a scaled slot that paints nothing
-				// (e.g. a nodraw void) retains the previous frame's expanded image.
-				// recopying that through the expansion magnifies it every frame into
-				// the repeating-screen feedback pattern. blank the region before the
-				// 3D scene repaints it so unpainted pixels stay black.
-				const D3DRECT region{ static_cast< LONG >( viewport->X ),
-				                      static_cast< LONG >( viewport->Y ),
-				                      static_cast< LONG >( viewport->X + viewport->Width ),
-				                      static_cast< LONG >( viewport->Y + viewport->Height ) };
-				device->Clear( 1, &region, D3DCLEAR_TARGET, 0x00000000, 1.0f, 0 );
+				if( fresh ) {
+					// Source never clears color, so a scaled slot that paints nothing
+					// (e.g. a nodraw void) retains the previous frame's expanded image.
+					// recopying that through the expansion magnifies it every frame into
+					// the repeating-screen feedback pattern. blank the region before the
+					// 3D scene repaints it so unpainted pixels stay black.
+					const D3DRECT region{ static_cast< LONG >( viewport->X ),
+					                      static_cast< LONG >( viewport->Y ),
+					                      static_cast< LONG >( viewport->X + viewport->Width ),
+					                      static_cast< LONG >( viewport->Y + viewport->Height ) };
+					device->Clear( 1, &region, D3DCLEAR_TARGET, 0x00000000, 1.0f, 0 );
+				}
 			}
 		}
 
