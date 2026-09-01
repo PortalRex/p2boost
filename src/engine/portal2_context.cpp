@@ -63,7 +63,10 @@ namespace p2boost {
 		if( !device_xref )
 			return nullptr;
 
-		return device_xref.at< IDirect3DDevice9* >( portal2::xref::flat_texture_device_global );
+		// the instruction operand stores the address of the device global, and
+		// that global holds the D3D9 device: two dereferences, never one.
+		const Address device_global = device_xref.at< Address >( portal2::xref::flat_texture_device_global );
+		return device_global.to< IDirect3DDevice9* >( );
 	}
 
 }
