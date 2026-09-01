@@ -97,6 +97,14 @@ command is an explicit visual option rather than a claimed performance fix.
 `r_intensity` reuses the same final-frame pass as an explicit brightness
 multiplier and is likewise dormant at its default `1.0`.
 
+With `ss_force_primary_fullscreen 1`, the hidden secondary slot is a 1x1 box at
+the corner; viewport scaling reduces it to a 0-size rect that the shader API's
+`CommitSetViewports` silently swallows, leaving the previous fullscreen
+viewport active and painting the hidden 3D scene stretched across the screen.
+p2boost patches both zero-size guards to unconditional so the degenerate
+viewport reaches the device, then clamps it to one pixel so the hidden slot
+stays clipped exactly as the engine intends.
+
 ## Why Vulkan only
 
 Native-D3D9 tracing reproduced the first connected-portal hitch inside NVIDIA's

@@ -3,6 +3,7 @@
 #include "console_commands.h"
 #include "hook.h"
 #include "interfaces.h"
+#include "portal2_context.h"
 
 #include <Windows.h>
 #include <d3d9.h>
@@ -31,6 +32,10 @@ namespace p2boost {
 	                           float                  scale,
 	                           viewport_scale_t&      result ) noexcept;
 
+	// clamp a degenerate 0-size viewport to one pixel so D3D9 does not silently
+	// keep the previous (possibly fullscreen) viewport for a hidden split-slot.
+	D3DVIEWPORT9 clamp_degenerate_viewport( const D3DVIEWPORT9& viewport ) noexcept;
+
 	// restores two display controls that Portal 2's DXVK path does not finish:
 	// viewport scaling is expanded before VGUI, and monitor gamma is applied
 	// after every final UI draw.
@@ -44,6 +49,15 @@ namespace p2boost {
 
 		bool install( const ConsoleCommandRegistry& commands, IDirect3DDevice9* device );
 		void remove( );
+
+		// the shader API's CommitSetViewports skips zero-size viewports, which
+		// leaves the previous (possibly fullscreen) viewport active when a hidden
+		// split-screen slot renders. this is the engine-side companion to the
+		// degenerate-viewport clamp in SetViewport.
+		bool install_viewport_commit_patch( const portal2_modules_t& modules );
+		bool viewport_commit_patched( ) const noexcept {
+			return m_viewport_commit.installed( );
+		}
 
 		bool available( ) const noexcept {
 			return m_present.installed( ) && m_reset.installed( ) && m_set_viewport.installed( );
@@ -75,6 +89,8 @@ namespace p2boost {
 		bool apply_gamma( IDirect3DDevice9* device );
 		bool apply_viewport_scale( IDirect3DDevice9* device, const viewport_scale_t& view );
 		bool rendering_to_back_buffer( IDirect3DDevice9* device, D3DSURFACE_DESC& description ) const;
+		bool ensure_upscale_target( IDirect3DDevice9* device, LONG width, LONG height );
+		void clear_back_buffer_rects( IDirect3DDevice9* device, const D3DRECT* rects, DWORD count );
 		bool copy_back_buffer( IDirect3DDevice9*    device,
 		                       const RECT*          source,
 		                       const RECT*          destination,
@@ -95,10 +111,13 @@ namespace p2boost {
 		con_var_t*                 m_viewport_upscale{ };
 		IDirect3DDevice9*          m_device{ };
 		IDirect3DTexture9*         m_copy_texture{ };
+		IDirect3DTexture9*         m_upscale_texture{ };
 		IDirect3DPixelShader9*     m_gamma_shader{ };
 		IDirect3DStateBlock9*      m_state_block{ };
 		unsigned int               m_copy_width{ };
 		unsigned int               m_copy_height{ };
+		unsigned int               m_upscale_width{ };
+		unsigned int               m_upscale_height{ };
 		D3DFORMAT                  m_copy_format{ D3DFMT_UNKNOWN };
 		viewport_scale_t           m_scaled_view{ };
 		bool                       m_scaled_view_pending{ };
@@ -106,6 +125,7 @@ namespace p2boost {
 		VmtHook                    m_present;
 		VmtHook                    m_reset;
 		VmtHook                    m_set_viewport;
+		BytePatch                  m_viewport_commit;
 		std::atomic< float >       m_intensity{ 1.0f };
 		std::atomic_uint64_t       m_gamma_passes{ };
 		std::atomic_uint64_t       m_viewport_passes{ };

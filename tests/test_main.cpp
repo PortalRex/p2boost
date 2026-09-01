@@ -338,12 +338,76 @@ namespace {
 		    result.m_destination.bottom != 1440 )
 			return false;
 
+		// a non-even scale leaves the lround destination a pixel short of the
+		// target edge; it must snap to the exact edge so no stale strip shows.
+		const D3DVIEWPORT9 odd_view{ 0, 0, 844, 475, 0.0f, 1.0f };
+		if( !p2boost::scaled_viewport_rect( odd_view, target, 0.33f, result ) || result.m_destination.right != 2560 ||
+		    result.m_destination.bottom != 1440 )
+			return false;
+
 		// Tiny engine borders and rectangles that would leave the render target
 		// must never be mistaken for scaled gameplay views.
 		const D3DVIEWPORT9 border{ 0, 0, 1, 1440, 0.0f, 1.0f };
 		const D3DVIEWPORT9 outside{ 1920, 0, 640, 720, 0.0f, 1.0f };
 		return !p2boost::scaled_viewport_rect( border, target, 0.5f, result ) &&
 		       !p2boost::scaled_viewport_rect( outside, target, 0.5f, result );
+	}
+
+	bool test_degenerate_viewport_clamp( ) {
+		// ss_force_primary_fullscreen gives the hidden slot a 1x1 corner that
+		// scales to 0x0; D3D9 would keep the previous fullscreen viewport and
+		// paint the hidden 3D scene stretched across the screen. The clamp must
+		// restore a minimal one-pixel rect while leaving real viewports alone.
+		const D3DVIEWPORT9 hidden_corner{ 2560, 1440, 0, 0, 0.0f, 1.0f };
+		const auto         clamped = p2boost::clamp_degenerate_viewport( hidden_corner );
+		if( clamped.Width != 1 || clamped.Height != 1 || clamped.X != 2560 || clamped.Y != 1440 )
+			return false;
+
+		const D3DVIEWPORT9 missing_width{ 2560, 1440, 0, 720, 0.0f, 1.0f };
+		if( p2boost::clamp_degenerate_viewport( missing_width ).Width != 1 )
+			return false;
+
+		const D3DVIEWPORT9 missing_height{ 2560, 1440, 640, 0, 0.0f, 1.0f };
+		if( p2boost::clamp_degenerate_viewport( missing_height ).Height != 1 )
+			return false;
+
+		const D3DVIEWPORT9 real_split{ 0, 0, 640, 720, 0.0f, 1.0f };
+		const auto         unchanged = p2boost::clamp_degenerate_viewport( real_split );
+		return unchanged.Width == 640 && unchanged.Height == 720 && unchanged.X == 0 && unchanged.Y == 0;
+	}
+	bool test_viewport_commit_signature( ) {
+		// the exact CommitSetViewports prologue verified in build 23973718's
+		// shaderapivk.dll at 0x100127b7. two conditional branches guard the
+		// D3D9 SetViewport dispatch and swallow zero-size viewports.
+		constexpr std::uint8_t commit_bytes[]{
+		    0x83, 0x7e, 0x08, 0x00, 0x74, 0x33, 0x83, 0x7e, 0x0c, 0x00, 0x74, 0x2d, 0xa1, 0xd8, 0xa5, 0x0d,
+		    0x10, 0x8b, 0x08, 0x8b, 0x91, 0xbc, 0x00, 0x00, 0x00 };
+
+		const auto signature = p2boost::pattern::parse( p2boost::portal2::signature::viewport_commit_skip );
+		if( signature.empty( ) )
+			return false;
+
+		const auto match = p2boost::pattern::find( p2boost::Address( commit_bytes ), sizeof( commit_bytes ), signature );
+		if( !match || match.as< std::uint8_t* >( ) != commit_bytes )
+			return false;
+
+		// the signature's first and second branches land exactly on the JZ bytes.
+		const std::uint8_t* first  = match.as< std::uint8_t* >( ) + 4;
+		const std::uint8_t* second = match.as< std::uint8_t* >( ) + 10;
+		if( first[ 0 ] != 0x74 || second[ 0 ] != 0x74 )
+			return false;
+
+		// neutralising both JZ branches with NOPs falls through to the device
+		// dispatch for zero-size viewports; non-zero viewports take the exact
+		// same path they did before the patch.
+		std::uint8_t patched[ sizeof( commit_bytes ) ];
+		std::memcpy( patched, commit_bytes, sizeof( commit_bytes ) );
+		patched[ 4 ]  = 0x90;
+		patched[ 5 ]  = 0x90;
+		patched[ 10 ] = 0x90;
+		patched[ 11 ] = 0x90;
+		return patched[ 4 ] == 0x90 && patched[ 5 ] == 0x90 && patched[ 10 ] == 0x90 && patched[ 11 ] == 0x90 &&
+		       patched[ 0 ] == 0x83 && patched[ 12 ] == 0xa1;
 	}
 
 	bool test_nvidia_vendor_filter( ) {
@@ -423,29 +487,31 @@ namespace {
 }
 
 int main( ) {
-	const bool address        = test_address_and_stack_frame( );
-	const bool relative_call  = test_relative_call_encoding( );
-	const bool pattern        = test_pattern_scanner( );
-	const bool hook           = test_hook_chain( );
-	const bool callsite       = test_call_site_patch( );
-	const bool callsite_chain = test_call_site_chain( );
-	const bool hash           = test_known_hash( );
-	const bool overlay_abi    = test_overlay_abi_contract( );
-	const bool metrics        = test_metrics( );
-	const bool overlay        = test_overlay_metrics( );
-	const bool phase          = test_frame_phase_carry( );
-	const bool qpc            = test_qpc( );
-	const bool flat_alpha     = test_flat_texture_alpha( );
-	const bool flat_color     = test_flat_texture_dominant_color( );
-	const bool gamma_curve    = test_monitor_gamma_curve( );
-	const bool intensity      = test_r_intensity_clamp( );
-	const bool viewport_scale = test_viewport_scale_rects( );
-	const bool nvidia_vendor  = test_nvidia_vendor_filter( );
-	const bool dxvk_fp        = test_dxvk_fingerprints( );
-	const bool frustum        = test_projected_frustum_views( );
+	const bool address          = test_address_and_stack_frame( );
+	const bool relative_call    = test_relative_call_encoding( );
+	const bool pattern          = test_pattern_scanner( );
+	const bool hook             = test_hook_chain( );
+	const bool callsite         = test_call_site_patch( );
+	const bool callsite_chain   = test_call_site_chain( );
+	const bool hash             = test_known_hash( );
+	const bool overlay_abi      = test_overlay_abi_contract( );
+	const bool metrics          = test_metrics( );
+	const bool overlay          = test_overlay_metrics( );
+	const bool phase            = test_frame_phase_carry( );
+	const bool qpc              = test_qpc( );
+	const bool flat_alpha       = test_flat_texture_alpha( );
+	const bool flat_color       = test_flat_texture_dominant_color( );
+	const bool gamma_curve      = test_monitor_gamma_curve( );
+	const bool intensity        = test_r_intensity_clamp( );
+	const bool viewport_scale   = test_viewport_scale_rects( );
+	const bool degenerate_clamp = test_degenerate_viewport_clamp( );
+	const bool commit_patch     = test_viewport_commit_signature( );
+	const bool nvidia_vendor    = test_nvidia_vendor_filter( );
+	const bool dxvk_fp          = test_dxvk_fingerprints( );
+	const bool frustum          = test_projected_frustum_views( );
 	std::printf( "address=%s rel32=%s pattern=%s hook_chain=%s callsite=%s callsite_chain=%s "
 	             "hash=%s overlay_abi=%s metrics=%s overlay=%s "
-	             "phase=%s qpc=%s flat_alpha=%s flat_color=%s gamma_curve=%s intensity=%s viewport_scale=%s nvidia_vendor=%s dxvk_fp=%s frustum=%s\n",
+	             "phase=%s qpc=%s flat_alpha=%s flat_color=%s gamma_curve=%s intensity=%s viewport_scale=%s degenerate_clamp=%s commit_patch=%s nvidia_vendor=%s dxvk_fp=%s frustum=%s\n",
 	             address ? "ok" : "FAIL",
 	             relative_call ? "ok" : "FAIL",
 	             pattern ? "ok" : "FAIL",
@@ -463,11 +529,13 @@ int main( ) {
 	             gamma_curve ? "ok" : "FAIL",
 	             intensity ? "ok" : "FAIL",
 	             viewport_scale ? "ok" : "FAIL",
+	             degenerate_clamp ? "ok" : "FAIL",
+	             commit_patch ? "ok" : "FAIL",
 	             nvidia_vendor ? "ok" : "FAIL",
 	             dxvk_fp ? "ok" : "FAIL",
 	             frustum ? "ok" : "FAIL" );
 	return address && relative_call && pattern && hook && callsite && callsite_chain && hash && overlay_abi && metrics && overlay && phase && qpc && flat_alpha && flat_color && gamma_curve &&
-	               intensity && viewport_scale && nvidia_vendor && dxvk_fp && frustum
+	               intensity && viewport_scale && degenerate_clamp && commit_patch && nvidia_vendor && dxvk_fp && frustum
 	           ? 0
 	           : 1;
 }

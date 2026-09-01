@@ -24,6 +24,12 @@ namespace p2boost::portal2 {
 		// immediately before initializing its concrete shader-device wrapper.
 		constexpr auto flat_texture_device = "53 8B CE E8 ? ? ? ? 68 ? ? ? ? 8B CE 89 1D ? ? ? ? E8 ? ? ? ? 8B 55 08";
 
+		// shaderapivk's CommitSetViewports skips zero-size viewports with two
+		// conditional branches before the D3D9 SetViewport dispatch. patching
+		// both to unconditional lets the degenerate hidden split-screen slot
+		// reach the device, where the D3D9 hook clamps it to one pixel.
+		constexpr auto viewport_commit_skip = "83 7E 08 00 74 ?? 83 7E 0C 00 74 ?? A1 ?? ?? ?? ?? 8B 08 8B 91 BC 00 00 00";
+
 		constexpr auto shadow_manager = "50 57 53 B9 ? ? ? ? E8 ? ? ? ? 5F 5B 5E 5D C3";
 
 		constexpr auto flashlight_models = "6A 00 68 ? ? ? ? FF 15 ? ? ? ? 8B 0D ? ? ? ? 83 79 30 00 8D 86 A0 00 00 00";
