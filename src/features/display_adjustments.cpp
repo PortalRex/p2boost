@@ -9,7 +9,6 @@
 #include <Windows.h>
 #include <algorithm>
 #include <cmath>
-#include <cstdio>
 
 namespace p2boost {
 	namespace {
@@ -516,7 +515,7 @@ namespace p2boost {
 		// the default value is 1.0, so ordinary gameplay takes this inexpensive
 		// branch without querying COM surfaces on every SetViewport call.
 		const float scale = std::clamp( instance->m_viewport_scale->value_float( ), 1.0f / 640.0f, 1.0f );
-		if( scale >= 1.0f - gamma_epsilon || !instance->m_viewport_upscale->value_integer( ) )
+		if( scale >= 1.0f - gamma_epsilon )
 			return next ? next( device, viewport ) : D3DERR_INVALIDCALL;
 
 		D3DSURFACE_DESC description{ };
@@ -526,36 +525,32 @@ namespace p2boost {
 			                     static_cast< LONG >( viewport->X + viewport->Width ),
 			                     static_cast< LONG >( viewport->Y + viewport->Height ) };
 
+			viewport_scale_t candidate{ };
+			const bool       scaled = scaled_viewport_rect( *viewport, description, scale, candidate );
+
+			// Source never clears color. blank the whole scaled slot once per
+			// frame, before its 3D scene paints: pixels below or beside the scaled
+			// viewport would otherwise freeze the previous fullscreen frame there
+			// forever, and unpainted pixels inside it would feed the expansion
+			// feedback loop. this runs with upscaling disabled too.
+			if( scaled && !instance->m_scaled_view_pending ) {
+				const D3DRECT region{ candidate.m_destination.left,
+				                      candidate.m_destination.top,
+				                      candidate.m_destination.right,
+				                      candidate.m_destination.bottom };
+				instance->clear_back_buffer_rects( device, &region, 1 );
+			}
+			if( scaled ) {
+				instance->m_scaled_view         = candidate;
+				instance->m_scaled_view_pending = true;
+			}
+
 			// the next unscaled viewport marks the exact boundary between 3D and
 			// native-resolution HUD work for this split-screen slot.
 			if( instance->m_scaled_view_pending && same_rect( incoming, instance->m_scaled_view.m_destination ) ) {
-				if( instance->apply_viewport_scale( device, instance->m_scaled_view ) )
+				if( instance->m_viewport_upscale->value_integer( ) && instance->apply_viewport_scale( device, instance->m_scaled_view ) )
 					instance->m_viewport_passes.fetch_add( 1, std::memory_order_relaxed );
 				instance->m_scaled_view_pending = false;
-			}
-
-			viewport_scale_t candidate{ };
-			if( scaled_viewport_rect( *viewport, description, scale, candidate ) ) {
-				// only the first scaled view of a pending cycle owns the clear.
-				// later same-size viewports (viewmodel, portal passes) arrive after
-				// their scene rendered, and blanking them again would erase the
-				// frame the boundary upscale is about to expand.
-				const bool fresh                = !instance->m_scaled_view_pending;
-				instance->m_scaled_view         = candidate;
-				instance->m_scaled_view_pending = true;
-
-				if( fresh ) {
-					// Source never clears color, so a scaled slot that paints nothing
-					// (e.g. a nodraw void) retains the previous frame's expanded image.
-					// recopying that through the expansion magnifies it every frame into
-					// the repeating-screen feedback pattern. blank the region before the
-					// 3D scene repaints it so unpainted pixels stay black.
-					const D3DRECT region{ static_cast< LONG >( viewport->X ),
-					                      static_cast< LONG >( viewport->Y ),
-					                      static_cast< LONG >( viewport->X + viewport->Width ),
-					                      static_cast< LONG >( viewport->Y + viewport->Height ) };
-					instance->clear_back_buffer_rects( device, &region, 1 );
-				}
 			}
 		}
 
