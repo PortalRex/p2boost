@@ -58,6 +58,14 @@ jobs:
           }
           ./scripts/package-dropin.ps1 -Configuration Release -Output "out/$name"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          # the in-game updater (p2boost_update) downloads the raw DLL and its
+          # checksum beside the zip, so it never needs archive handling.
+          $built = Get-ChildItem (Join-Path $env:GITHUB_WORKSPACE 'build') -Recurse -Filter 'p2boost.dll' |
+            Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          Copy-Item -LiteralPath $built.FullName 'out/p2boost.dll' -Force
+          (Get-FileHash -LiteralPath 'out/p2boost.dll' -Algorithm SHA256).Hash.ToLower() `
+            | Out-File -Encoding ascii 'out/p2boost.dll.sha256'
           "archive=$name" >> $env:GITHUB_OUTPUT
 
       - name: Upload workflow artifact
@@ -79,6 +87,8 @@ jobs:
           gh release create "$env:GITHUB_REF_NAME" `
             "out/${{ steps.assets.outputs.archive }}" `
             "out/${{ steps.assets.outputs.archive }}.sha256" `
+            "out/p2boost.dll" `
+            "out/p2boost.dll.sha256" `
             --verify-tag --generate-notes --title "p2boost $env:GITHUB_REF_NAME"
 
       - name: Publish rolling nightly release
@@ -106,13 +116,17 @@ jobs:
               --notes "Automated build of $env:GITHUB_SHA from the default branch."
             gh release upload nightly --repo $repo --clobber `
               "out/${{ steps.assets.outputs.archive }}" `
-              "out/${{ steps.assets.outputs.archive }}.sha256"
+              "out/${{ steps.assets.outputs.archive }}.sha256" `
+              "out/p2boost.dll" `
+              "out/p2boost.dll.sha256"
           } else {
             gh release create nightly --repo $repo --prerelease --latest=false `
               --target "$env:GITHUB_SHA" --title "p2boost nightly" `
               --notes "Automated build of $env:GITHUB_SHA from the default branch." `
               "out/${{ steps.assets.outputs.archive }}" `
-              "out/${{ steps.assets.outputs.archive }}.sha256"
+              "out/${{ steps.assets.outputs.archive }}.sha256" `
+              "out/p2boost.dll" `
+              "out/p2boost.dll.sha256"
           }
 
     permissions:

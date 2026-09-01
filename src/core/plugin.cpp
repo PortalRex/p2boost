@@ -1,5 +1,6 @@
 #include "console.h"
 #include "console_commands.h"
+#include "auto_update.h"
 #include "demo_provenance.h"
 #include "display_adjustments.h"
 #include "flat_textures.h"
@@ -215,6 +216,8 @@ namespace p2boost {
 				return overlay_command( args );
 			if( _stricmp( command, "p2boost_dump_metrics" ) == 0 )
 				return dump_metrics_command( );
+			if( _stricmp( command, "p2boost_update" ) == 0 )
+				return update_command( args );
 			if( _stricmp( command, "r_intensity" ) == 0 )
 				return intensity_command( args );
 
@@ -252,6 +255,7 @@ namespace p2boost {
 			    { "p2boost_trace", "Enable or disable frame tracing." },
 			    { "p2boost_overlay", "Select the full or FPS-only frame profiler." },
 			    { "p2boost_dump_metrics", "Write frame metrics to CSV." },
+			    { "p2boost_update", "Update p2boost to the latest release. Optional 'force' reinstalls." },
 			    { "r_intensity", "Scale final-frame RGB brightness (0.0 to 2.0, 1.0 neutral)." },
 			};
 
@@ -411,6 +415,29 @@ namespace p2boost {
 			return sdk::Stop;
 		}
 
+		// download and install the latest p2boost release in the background.
+		sdk::PluginResult update_command( const sdk::CCommand& args ) {
+			bool force = false;
+			if( args.ArgC( ) == 2 ) {
+				if( _stricmp( args.Arg( 1 ), "force" ) != 0 ) {
+					console_print( "usage: p2boost_update [force]\n" );
+					return sdk::Stop;
+				}
+				force = true;
+			} else if( args.ArgC( ) != 1 ) {
+				console_print( "usage: p2boost_update [force]\n" );
+				return sdk::Stop;
+			}
+
+			if( m_auto_update.busy( ) ) {
+				console_print( "[p2boost] an update is already in progress\n" );
+				return sdk::Stop;
+			}
+
+			m_auto_update.update( force );
+			return sdk::Stop;
+		}
+
 		// set or print the Quake-style final-frame RGB brightness multiplier.
 		sdk::PluginResult intensity_command( const sdk::CCommand& args ) {
 			if( args.ArgC( ) == 1 ) {
@@ -464,6 +491,7 @@ namespace p2boost {
 		FrameLimiter            m_frame_limiter;
 		ProjectedShadowCache    m_shadow_cache;
 		DisplayAdjustments      m_display_adjustments;
+		AutoUpdate              m_auto_update;
 		DemoProvenance          m_demo_provenance;
 		FlatTextures            m_flat_textures;
 		ProfilerOverlay         m_overlay;

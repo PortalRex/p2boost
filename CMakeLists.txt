@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(p2boost VERSION 1.1.0 LANGUAGES CXX)
+project(p2boost VERSION 1.2.0 LANGUAGES CXX)
 
 option(P2BOOST_BUILD_RESEARCH_TOOLS "Build offline profiling tools from research/" OFF)
 
@@ -60,6 +60,7 @@ add_library(p2boost_core STATIC
   src/core/projected_shadow_cache.cpp
   src/core/profiler_overlay.cpp
   src/core/runtime_verification.cpp
+  src/core/auto_update.cpp
   src/engine/portal2_context.cpp
   src/memory/hook.cpp
   src/platform/game_window.cpp
@@ -67,7 +68,7 @@ add_library(p2boost_core STATIC
 )
 target_include_directories(p2boost_core PUBLIC ${P2BOOST_INCLUDE_DIRECTORIES})
 target_include_directories(p2boost_core PRIVATE "${P2BOOST_GENERATED_DIRECTORY}")
-target_compile_definitions(p2boost_core PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_compile_definitions(p2boost_core PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX P2BOOST_VERSION="${PROJECT_VERSION}" _WIN32_WINNT=0x0601)
 target_compile_options(p2boost_core PRIVATE /W4 /WX /permissive- /Zc:__cplusplus /guard:cf)
 target_link_libraries(p2boost_core PRIVATE bcrypt)
 

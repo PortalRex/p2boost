@@ -247,6 +247,12 @@ To remove the plugin:
   64-frame graph, one-second hitch count, and shadow-cache activity.
 - `p2boost_trace 0|1` records bounded frame and shadow-cache metrics.
 - `p2boost_dump_metrics` writes `p2boost_metrics.csv` in the game root.
+- `p2boost_update [force]` downloads the latest GitHub release in the
+  background, verifies its SHA-256 against the published checksum, and swaps
+  the installed `p2boost.dll` next to the game executable (the previous copy is
+  kept as `p2boost.dll.old-auto`). The running image stays valid until the game
+  is restarted. Pass `force` to reinstall the current version. Updates run on a
+  worker thread and never block the render loop.
 - `r_intensity <0.0..2.0>` scales final-frame RGB brightness before the
   monitor-gamma curve, matching Quake Live's command of the same name. The
   default `1.0` is neutral and costs no extra pass; values above `1.0`
