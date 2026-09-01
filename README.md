@@ -252,7 +252,11 @@ To remove the plugin:
   the installed `p2boost.dll` next to the game executable (the previous copy is
   kept as `p2boost.dll.old-auto`). The running image stays valid until the game
   is restarted. Pass `force` to reinstall the current version. Updates run on a
-  worker thread and never block the render loop.
+  worker thread and never block the render loop. The release repository is
+  private during development, so the updater authenticates with the
+  `GITHUB_TOKEN` (or `GH_TOKEN`) environment variable when present; set it in
+  your environment before launching the game to update from a private
+  repository, or leave it unset once the repository is public.
 - `r_intensity <0.0..2.0>` scales final-frame RGB brightness before the
   monitor-gamma curve, matching Quake Live's command of the same name. The
   default `1.0` is neutral and costs no extra pass; values above `1.0`

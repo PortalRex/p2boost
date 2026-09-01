@@ -5,12 +5,13 @@
 #include "runtime_verification.h"
 
 #include <Windows.h>
-#include <wininet.h>
+#include <winhttp.h>
 
 #include <algorithm>
 #include <charconv>
 #include <cctype>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -18,7 +19,7 @@
 #include <thread>
 #include <vector>
 
-#pragma comment( lib, "wininet.lib" )
+#pragma comment( lib, "winhttp.lib" )
 
 namespace p2boost {
 	namespace {
@@ -59,30 +60,104 @@ namespace p2boost {
 			return false;
 		}
 
-		// read one HTTP response into memory with WinINet. returns false on any
-		// transport or status failure so callers never trust partial data.
-		bool http_get( const char* url, std::string& body ) {
-			const HINTERNET session = InternetOpenW( L"p2boost-updater", INTERNET_OPEN_TYPE_PRECONFIG, nullptr, nullptr, 0 );
-			if( !session )
+		// split "https://host/path" into its host and path components for WinHTTP.
+		bool split_url( const char* url, std::wstring& host, std::wstring& path ) {
+			const char* scheme_end = std::strstr( url, "://" );
+			if( !scheme_end )
 				return false;
 
-			bool            success = false;
-			const HINTERNET request = InternetOpenUrlA( session, url, nullptr, 0, INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE, 0 );
-			if( request ) {
-				char  buffer[ 1 << 15 ];
-				DWORD bytes_read{ };
-				while( InternetReadFile( request, buffer, sizeof( buffer ), &bytes_read ) && bytes_read ) {
-					body.append( buffer, bytes_read );
-					bytes_read = 0;
-				}
+			const char* host_start = scheme_end + 3;
+			const char* path_start = std::strchr( host_start, '/' );
+			if( !path_start )
+				return false;
 
-				DWORD status_code{ };
-				DWORD status_size = sizeof( status_code );
-				success           = HttpQueryInfo( request, HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER, &status_code, &status_size, nullptr ) &&
-				          status_code == 200;
-				InternetCloseHandle( request );
+			const std::string host_part{ host_start, path_start };
+			const std::string path_part{ path_start };
+
+			host = std::wstring( host_part.begin( ), host_part.end( ) );
+			path = std::wstring( path_part.begin( ), path_part.end( ) );
+			return !host.empty( ) && !path.empty( );
+		}
+
+		// read one HTTP response into memory with WinHTTP. returns false on any
+		// transport or status failure so callers never trust partial data.
+		bool http_get( const char* url, std::string& body ) {
+			std::wstring host;
+			std::wstring path;
+			if( !split_url( url, host, path ) )
+				return false;
+
+			const HINTERNET session = WinHttpOpen( L"p2boost-updater",
+			                                       WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
+			                                       WINHTTP_NO_PROXY_NAME,
+			                                       WINHTTP_NO_PROXY_BYPASS,
+			                                       0 );
+			if( !session ) {
+				console_print( "[p2boost] WinHttpOpen failed (%lu)\n", GetLastError( ) );
+				return false;
 			}
-			InternetCloseHandle( session );
+
+			// keep the check snappy instead of waiting on WinHTTP's defaults.
+			WinHttpSetTimeouts( session, 10000, 10000, 10000, 10000 );
+
+			bool            success = false;
+			const HINTERNET connect = WinHttpConnect( session, host.c_str( ), INTERNET_DEFAULT_HTTPS_PORT, 0 );
+			if( connect ) {
+				const HINTERNET request = WinHttpOpenRequest( connect,
+				                                              L"GET",
+				                                              path.c_str( ),
+				                                              nullptr,
+				                                              WINHTTP_NO_REFERER,
+				                                              WINHTTP_DEFAULT_ACCEPT_TYPES,
+				                                              WINHTTP_FLAG_SECURE | WINHTTP_FLAG_REFRESH );
+				if( request ) {
+					// GitHub requires a descriptive User-Agent on API requests and
+					// authenticates private repositories through an optional token.
+					std::wstring headers = L"User-Agent: p2boost/" P2BOOST_VERSION L"\r\n";
+					char         token[ 256 ]{ };
+					if( GetEnvironmentVariableA( "GITHUB_TOKEN", token, sizeof( token ) ) <= 0 )
+						GetEnvironmentVariableA( "GH_TOKEN", token, sizeof( token ) );
+					if( token[ 0 ] ) {
+						headers += L"Authorization: Bearer ";
+						headers.append( token, token + std::strlen( token ) );
+						headers += L"\r\n";
+					}
+
+					if( WinHttpSendRequest( request, headers.c_str( ), (DWORD)-1L, WINHTTP_NO_REQUEST_DATA, 0, 0, 0 ) &&
+					    WinHttpReceiveResponse( request, nullptr ) ) {
+						DWORD status_code{ };
+						DWORD status_size = sizeof( status_code );
+						if( WinHttpQueryHeaders( request,
+						                         WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+						                         WINHTTP_HEADER_NAME_BY_INDEX,
+						                         &status_code,
+						                         &status_size,
+						                         WINHTTP_NO_HEADER_INDEX ) &&
+						    status_code == 200 ) {
+							char  buffer[ 1 << 15 ];
+							DWORD bytes_read{ };
+							while( WinHttpReadData( request, buffer, sizeof( buffer ), &bytes_read ) && bytes_read ) {
+								body.append( buffer, bytes_read );
+								bytes_read = 0;
+							}
+							success = true;
+						} else if( status_code == 404 ) {
+							console_print( "[p2boost] the p2boost repository or its releases are not publicly reachable\n" );
+						} else {
+							console_print( "[p2boost] update request returned status %lu\n", status_code );
+						}
+					} else {
+						console_print( "[p2boost] WinHttpSendRequest failed (%lu)\n", GetLastError( ) );
+					}
+					WinHttpCloseHandle( request );
+				} else {
+					console_print( "[p2boost] WinHttpOpenRequest failed (%lu)\n", GetLastError( ) );
+				}
+				WinHttpCloseHandle( connect );
+			} else {
+				console_print( "[p2boost] WinHttpConnect failed (%lu)\n", GetLastError( ) );
+			}
+			WinHttpCloseHandle( session );
 			return success;
 		}
 
