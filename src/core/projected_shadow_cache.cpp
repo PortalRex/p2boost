@@ -47,7 +47,7 @@ namespace p2boost {
 
 		// this xref loads Portal 2's private CClientShadowMgr singleton.
 		const Address                      manager_xref = modules.m_client.find( portal2::signature::shadow_manager );
-		const Address                      manager      = manager_xref.add( portal2::xref::shadow_manager_object ).at< Address >( );
+		const Address                      manager      = manager_xref.at< Address >( portal2::xref::shadow_manager_object );
 		const client_shadow_manager_view_t manager_view{ manager.as< void* >( ) };
 		void**                             update_projected_slot = manager_view.update_projected_slot( );
 		if( !manager_view || !update_projected_slot )
@@ -64,7 +64,7 @@ namespace p2boost {
 		// the private ConVar value controls model receiver projection even when
 		// the shadow entry is unchanged, so it remains part of the cache key.
 		const Address models_xref       = modules.m_client.find( portal2::signature::flashlight_models );
-		m_flashlight_models_cvar_parent = models_xref.add( portal2::xref::flashlight_models_global ).at< Address >( ).as< int** >( );
+		m_flashlight_models_cvar_parent = models_xref.at< int** >( portal2::xref::flashlight_models_global );
 
 		// hook only the verified call from ComputeShadowDepthTextures. calling the
 		// engine selector first preserves every stock visibility, split-screen,
@@ -76,9 +76,8 @@ namespace p2boost {
 		if( active_call.at< std::uint8_t >( ) != 0xe8 || active_target != expected_target )
 			return false;
 
-		const Address shadow_manager_xref   = modules.m_client.find( portal2::signature::active_shadow_manager );
-		const Address shadow_manager_global = shadow_manager_xref.add( portal2::xref::active_shadow_manager_global );
-		m_shadow_manager_parent             = shadow_manager_global.at< Address >( ).as< sdk::IShadowMgr** >( );
+		const Address shadow_manager_xref = modules.m_client.find( portal2::signature::active_shadow_manager );
+		m_shadow_manager_parent           = shadow_manager_xref.at< sdk::IShadowMgr** >( portal2::xref::active_shadow_manager_global );
 		if( !m_remove_dirty || !m_flashlight_models_cvar_parent || !*m_flashlight_models_cvar_parent ||
 		    !m_shadow_manager_parent || !*m_shadow_manager_parent )
 			return false;

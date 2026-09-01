@@ -63,8 +63,7 @@ namespace p2boost {
 		if( !device_xref )
 			return nullptr;
 
-		const Address device_global = device_xref.add( portal2::xref::flat_texture_device_global ).at< Address >( );
-		return device_global.to< IDirect3DDevice9* >( );
+		return device_xref.at< IDirect3DDevice9* >( portal2::xref::flat_texture_device_global );
 	}
 
 }
