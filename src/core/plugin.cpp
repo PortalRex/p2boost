@@ -323,11 +323,13 @@ namespace p2boost {
 
 		// print one machine-readable snapshot for support and automated tests.
 		sdk::PluginResult status_command( ) const {
+			const con_var_t* queue_mode = m_commands.find_variable( "mat_queue_mode" );
+			const int        queue      = queue_mode ? queue_mode->value_integer( ) : -999;
 			console_print( "[p2boost] supported=%d dxvk_vulkan=%d dxvk_shipped=%d dxvk_hash=%s nvidia_profile=%s nvidia_detail=%s:%d enabled=%d "
 			               "limiter=%d shadow_cache=%d shadow_hits=%u shadow_culled=%u tracing=%d overlay=%d overlay_available=%d "
 			               "display_available=%d viewport_commit=%d gamma_passes=%llu viewport_passes=%llu intensity=%g demo_marker=%d "
 			               "flat_available=%d flat=%d flat_textures=%zu flat_ready=%zu flat_normal=%d flat_binds=%llu "
-			               "flat_uploads=%llu/%llu/%llu sar=%d samples=%zu root=%s\n",
+			               "flat_uploads=%llu/%llu/%llu sar=%d samples=%zu mat_queue_mode=%d root=%s\n",
 			               m_verification.m_supported,
 			               m_verification.m_dxvk_vulkan,
 			               m_verification.m_dxvk_shipped,
@@ -360,6 +362,7 @@ namespace p2boost {
 			               static_cast< unsigned long long >( m_flat_textures.device_upload_count( ) ),
 			               static_cast< bool >( Module{ L"sar.dll" } ),
 			               m_metrics.count( ),
+			               queue,
 			               m_verification.m_game_root.c_str( ) );
 
 			const std::string game_label = m_verification.m_game.empty( ) ? std::string{ } : std::string{ " (" } + m_verification.m_game + ")";
