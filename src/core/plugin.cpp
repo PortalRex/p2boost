@@ -140,6 +140,8 @@ namespace p2boost {
 			m_interfaces.disconnect( );
 			m_device   = nullptr;
 			m_instance = nullptr;
+			m_queue_mode       = nullptr;
+			m_last_queue_mode  = -1;
 			console_print( "[p2boost] unloaded\n" );
 		}
 
@@ -158,29 +160,30 @@ namespace p2boost {
 		}
 
 		// Portal 2's mat_queue_mode auto-detection resolves to 0 (single
-		// threaded rendering) on modern CPUs, serialising the whole render
-		// path on the main thread. forcing 2 moves draw submission onto the
-		// render worker. the engine re-evaluates the mode at map load and
-		// device reset, so this runs at every LevelInit and Reset. the
-		// command is executed through the engine's own client-command path so
-		// the change callback always runs without depending on a recovered
-		// ConVar vtable slot.
+		// threaded rendering) on modern CPUs, and Portal Stories: Mel's maps
+		// additionally force 0 through a logic_auto entity on every spawn,
+		// which runs after LevelInit. forcing 2 moves draw submission onto the
+		// render worker. the command is executed through the engine's own
+		// client-command path so the change callback always runs; the per-frame
+		// check re-asserts the mode after any map or device reset overrides it.
 		void enforce_render_threading( ) const noexcept {
 			if( !m_force_multicore )
 				return;
 
-			const con_var_t* queue_mode = m_commands.find_variable( "mat_queue_mode" );
-			if( !queue_mode || queue_mode->value_integer( ) >= 2 )
+			if( !m_queue_mode )
+				m_queue_mode = m_commands.find_variable( "mat_queue_mode" );
+			if( !m_queue_mode || m_queue_mode->value_integer( ) >= 2 )
 				return;
 
 			if( sdk::IVEngineClient* engine_client = m_interfaces.engine_client( ) ) {
-				const int before = queue_mode->value_integer( );
+				const int before = m_queue_mode->value_integer( );
 				engine_client->ExecuteClientCmd( "mat_queue_mode 2" );
-				const int after = m_commands.find_variable( "mat_queue_mode" )->value_integer( );
+				const int after = m_queue_mode->value_integer( );
 				if( after != 2 )
 					console_print( "[p2boost] mat_queue_mode %d -> 2 failed\n", before );
-				else if( before != 2 )
+				else if( before != 2 && before != m_last_queue_mode )
 					console_print( "[p2boost] mat_queue_mode %d -> 2 (multicore rendering enabled)\n", before );
+				m_last_queue_mode = after;
 			}
 		}
 
@@ -200,6 +203,10 @@ namespace p2boost {
 			// mirror only the state needed by diagnostics.
 			m_metrics.set_simulating( simulating );
 			m_demo_provenance.update( P2BOOST_VERSION, m_enabled, m_flat_textures.enabled( ) );
+
+			// PSM's logic_auto re-forces mat_queue_mode 0 after map spawn;
+			// re-assert multicore every frame so the override never sticks.
+			enforce_render_threading( );
 
 			const bool focused = game_is_foreground( );
 			m_metrics.set_focused( focused );
@@ -360,7 +367,7 @@ namespace p2boost {
 
 		// print one machine-readable snapshot for support and automated tests.
 		sdk::PluginResult status_command( ) const {
-			const con_var_t* queue_mode = m_commands.find_variable( "mat_queue_mode" );
+			const con_var_t* queue_mode = m_queue_mode ? m_queue_mode : m_commands.find_variable( "mat_queue_mode" );
 			const int        queue      = queue_mode ? queue_mode->value_integer( ) : -999;
 			console_print( "[p2boost] supported=%d dxvk_vulkan=%d dxvk_shipped=%d dxvk_hash=%s nvidia_profile=%s nvidia_detail=%s:%d enabled=%d "
 			               "limiter=%d shadow_cache=%d shadow_hits=%u shadow_culled=%u tracing=%d overlay=%d overlay_available=%d "
@@ -614,6 +621,8 @@ namespace p2boost {
 		bool                    m_enabled{ };
 		bool                    m_last_focused{ };
 		bool                    m_force_multicore{ true };
+		mutable con_var_t*      m_queue_mode{ };
+		mutable int             m_last_queue_mode{ -1 };
 	};
 
 	Plugin* Plugin::m_instance{ };
