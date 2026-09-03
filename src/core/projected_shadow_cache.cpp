@@ -46,8 +46,8 @@ namespace p2boost {
 		}
 
 		// this xref loads Portal 2's private CClientShadowMgr singleton.
-		const Address                      manager_xref = modules.m_client.find( portal2::signature::shadow_manager );
-		const Address                      manager      = manager_xref.at< Address >( portal2::xref::shadow_manager_object );
+		const Address                      manager_xref = modules.m_client.find( game::active( )->shadow_manager );
+		const Address                      manager      = manager_xref.at< Address >( game::active( )->xref_shadow_manager_object );
 		const client_shadow_manager_view_t manager_view{ manager.as< void* >( ) };
 		void**                             update_projected_slot = manager_view.update_projected_slot( );
 		if( !manager_view || !update_projected_slot )
@@ -56,28 +56,28 @@ namespace p2boost {
 		// method 24 is CClientShadowMgr::UpdateProjectedTexture. its second direct
 		// call removes the handle from both dirty trees and must never be skipped.
 		const Address update_projected{ *update_projected_slot };
-		const Address remove_dirty_call = update_projected.add( portal2::shadow::remove_dirty_call );
+		const Address remove_dirty_call = update_projected.add( game::active( )->shadow_remove_dirty_call );
 		if( remove_dirty_call.at< std::uint8_t >( ) != 0xe8 )
 			return false;
 		m_remove_dirty = remove_dirty_call.rel32( 1 ).as< remove_dirty_fn_t >( );
 
 		// the private ConVar value controls model receiver projection even when
 		// the shadow entry is unchanged, so it remains part of the cache key.
-		const Address models_xref       = modules.m_client.find( portal2::signature::flashlight_models );
-		m_flashlight_models_cvar_parent = models_xref.at< int** >( portal2::xref::flashlight_models_global );
+		const Address models_xref       = modules.m_client.find( game::active( )->flashlight_models );
+		m_flashlight_models_cvar_parent = models_xref.at< int** >( game::active( )->xref_flashlight_models_global );
 
 		// hook only the verified call from ComputeShadowDepthTextures. calling the
 		// engine selector first preserves every stock visibility, split-screen,
 		// priority, and maximum-shadow rule before applying exact frustum culling.
-		const Address active_call_xref = modules.m_client.find( portal2::signature::active_shadow_depth_call );
-		const Address active_call      = active_call_xref.add( portal2::xref::active_shadow_depth_call );
+		const Address active_call_xref = modules.m_client.find( game::active( )->active_shadow_depth_call );
+		const Address active_call      = active_call_xref.add( game::active( )->xref_active_shadow_depth_call );
 		const Address active_target    = active_call.rel32( 1 );
-		const Address expected_target  = modules.m_client.find( portal2::signature::active_shadow_depth_list );
+		const Address expected_target  = modules.m_client.find( game::active( )->active_shadow_depth_list );
 		if( active_call.at< std::uint8_t >( ) != 0xe8 || active_target != expected_target )
 			return false;
 
-		const Address shadow_manager_xref = modules.m_client.find( portal2::signature::active_shadow_manager );
-		m_shadow_manager_parent           = shadow_manager_xref.at< sdk::IShadowMgr** >( portal2::xref::active_shadow_manager_global );
+		const Address shadow_manager_xref = modules.m_client.find( game::active( )->active_shadow_manager );
+		m_shadow_manager_parent           = shadow_manager_xref.at< sdk::IShadowMgr** >( game::active( )->xref_active_shadow_manager_global );
 		if( !m_remove_dirty || !m_flashlight_models_cvar_parent || !*m_flashlight_models_cvar_parent ||
 		    !m_shadow_manager_parent || !*m_shadow_manager_parent )
 			return false;
@@ -161,14 +161,14 @@ namespace p2boost {
 
 		// drop the previous receiver generation before any OnDataChanged handler
 		// can replace a player with its goo-death ragdoll.
-		if( stage == portal2::frame_stage::net_update_start )
+		if( stage == game::frame_stage_net_update_start )
 			cache->invalidate( );
 
 		original( self, stage );
 
 		// drop any intermediate receiver list built while the packet was being
 		// applied. Rendering begins with the final client entity topology only.
-		if( stage == portal2::frame_stage::net_update_end )
+		if( stage == game::frame_stage_net_update_end )
 			cache->invalidate( );
 	}
 
@@ -214,7 +214,7 @@ namespace p2boost {
 				// Portal 2 reserved for them before this exact visibility test.
 				const auto* state = static_cast< const std::uint8_t* >(
 				    shadow_manager->GetFlashlightState( entry.engine_handle( ) ) );
-				if( state && state[ portal2::shadow::high_priority ] != 0 && retained_high_priority > 0 )
+				if( state && state[ game::active( )->shadow_high_priority ] != 0 && retained_high_priority > 0 )
 					--retained_high_priority;
 
 				cache->m_depth_culls.fetch_add( 1, std::memory_order_relaxed );

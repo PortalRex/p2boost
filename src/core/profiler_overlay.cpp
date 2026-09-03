@@ -1,7 +1,7 @@
-#include "profiler_overlay.h"
+﻿#include "profiler_overlay.h"
 
 #include "address.h"
-#include "build_23973718.h"
+#include "game_profile.h"
 #include "game_window.h"
 #include "module.h"
 
@@ -48,7 +48,7 @@ namespace p2boost {
 			return false;
 
 		if( !modules.m_engine.contains( engine_client->GetScreenSizeAddress( ) ) ||
-		    !modules.m_engine.matches( engine_client->GetMaxClientsAddress( ), portal2::signature::overlay_engine_get_max_clients ) )
+		    !modules.m_engine.matches( engine_client->GetMaxClientsAddress( ), game::active( )->overlay_engine_get_max_clients ) )
 			return false;
 
 		m_surface = interfaces.surface( );
@@ -63,12 +63,12 @@ namespace p2boost {
 		const Address draw_colored_text{ m_surface->DrawColoredTextAddress( ) };
 		const Address get_kerned_char_width{ m_surface->GetKernedCharWidthAddress( ) };
 		const Address get_font_tall{ m_surface->GetFontTallAddress( ) };
-		const Address start_operand  = paint_traverse.add( portal2::surface::start_drawing_operand );
-		const Address finish_operand = paint_traverse.add( portal2::surface::finish_drawing_operand );
-		if( !modules.m_surface.matches( paint_traverse, portal2::signature::overlay_surface_paint_traverse ) ||
-		    !modules.m_surface.matches( draw_colored_text, portal2::signature::overlay_surface_draw_colored_text ) ||
+		const Address start_operand  = paint_traverse.add( game::active( )->surface_start_drawing_operand );
+		const Address finish_operand = paint_traverse.add( game::active( )->surface_finish_drawing_operand );
+		if( !modules.m_surface.matches( paint_traverse, game::active( )->overlay_surface_paint_traverse ) ||
+		    !modules.m_surface.matches( draw_colored_text, game::active( )->overlay_surface_draw_colored_text ) ||
 		    !modules.m_surface.contains( get_kerned_char_width ) ||
-		    !modules.m_surface.matches( get_font_tall, portal2::signature::overlay_surface_get_font_tall ) ||
+		    !modules.m_surface.matches( get_font_tall, game::active( )->overlay_surface_get_font_tall ) ||
 		    start_operand.sub( 1 ).at< std::uint8_t >( ) != 0xe8 ||
 		    finish_operand.sub( 1 ).at< std::uint8_t >( ) != 0xe8 ) {
 			m_surface = nullptr;
@@ -77,8 +77,8 @@ namespace p2boost {
 
 		const Address start_drawing  = start_operand.rel32( );
 		const Address finish_drawing = finish_operand.rel32( );
-		if( !modules.m_surface.matches( start_drawing, portal2::signature::overlay_surface_start_drawing ) ||
-		    !modules.m_surface.matches( finish_drawing, portal2::signature::overlay_surface_finish_drawing ) ) {
+		if( !modules.m_surface.matches( start_drawing, game::active( )->overlay_surface_start_drawing ) ||
+		    !modules.m_surface.matches( finish_drawing, game::active( )->overlay_surface_finish_drawing ) ) {
 			m_surface = nullptr;
 			return false;
 		}
@@ -103,7 +103,7 @@ namespace p2boost {
 		const Address engine_paint = engine_vgui->PaintAddress( );
 		const bool    engine_owned = modules.m_engine.contains( engine_paint );
 		if( ( !engine_owned && !sar.contains( engine_paint ) ) ||
-		    ( engine_owned && !modules.m_engine.matches( engine_paint, portal2::signature::overlay_engine_vgui_paint ) ) ) {
+		    ( engine_owned && !modules.m_engine.matches( engine_paint, game::active( )->overlay_engine_vgui_paint ) ) ) {
 			m_surface    = nullptr;
 			m_panel_font = 0;
 			return false;
@@ -171,7 +171,7 @@ namespace p2boost {
 		// match SAR's ordering: let the engine paint its panels, then draw the
 		// plugin HUD directly on the material-system surface.
 		const int result = original( self, mode );
-		if( mode & portal2::paint_mode::ui_panels )
+		if( mode & game::paint_mode_ui_panels )
 			overlay->draw( );
 		return result;
 	}

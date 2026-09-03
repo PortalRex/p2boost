@@ -1,7 +1,7 @@
-#pragma once
+﻿#pragma once
 
 #include "hook.h"
-#include "build_23973718.h"
+#include "game_profile.h"
 #include "portal2_context.h"
 #include "sdk.h"
 
@@ -40,9 +40,9 @@ namespace p2boost {
 
 	private:
 		struct cached_state_t {
-			std::uint16_t                                           m_handle{ };
-			std::array< std::uint8_t, portal2::shadow::entry_size > m_entry{ };
-			int                                                     m_flashlight_models_value{ };
+			std::uint16_t                                       m_handle{ };
+			std::array< std::uint8_t, game::shadow_entry_size > m_entry{ };
+			int                                                 m_flashlight_models_value{ };
 		};
 
 		using state_iterator_t = std::vector< cached_state_t >::iterator;

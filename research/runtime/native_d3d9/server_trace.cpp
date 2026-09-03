@@ -1,9 +1,9 @@
-#include "server_trace.h"
+﻿#include "server_trace.h"
 
 #include "address.h"
 #include "metrics.h"
 #include "pattern.h"
-#include "build_23973718.h"
+#include "portal2_research.h"
 #include "qpc.h"
 
 #include <Windows.h>

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(p2boost VERSION 1.2.4 LANGUAGES CXX)
+project(p2boost VERSION 1.2.5 LANGUAGES CXX)
 
 option(P2BOOST_BUILD_RESEARCH_TOOLS "Build offline profiling tools from research/" OFF)
 
@@ -61,7 +61,9 @@ add_library(p2boost_core STATIC
   src/core/profiler_overlay.cpp
   src/core/runtime_verification.cpp
   src/core/auto_update.cpp
+  src/engine/game_profile.cpp
   src/engine/portal2_context.cpp
+  src/engine/portal_stories_mel.cpp
   src/memory/hook.cpp
   src/platform/game_window.cpp
   src/util/projected_frustum.cpp

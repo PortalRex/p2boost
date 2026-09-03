@@ -1,7 +1,7 @@
-#include "demo_provenance.h"
+﻿#include "demo_provenance.h"
 
 #include "address.h"
-#include "build_23973718.h"
+#include "game_profile.h"
 
 #include <cstdio>
 
@@ -15,7 +15,7 @@ namespace p2boost {
 		// follow ClientCmd's verified rel32 instead of storing Cbuf_AddText's RVA.
 		// the opcode check fails closed if a future build changes this call site.
 		const Address client_cmd = engine_client->ClientCmdAddress( );
-		const Address operand    = client_cmd.add( portal2::xref::engine_client_cmd_cbuf_add_text_operand );
+		const Address operand    = client_cmd.add( game::active( )->xref_engine_client_cmd_cbuf_add_text_operand );
 		if( operand.sub( 1 ).at< unsigned char >( ) != 0xe8 )
 			return false;
 

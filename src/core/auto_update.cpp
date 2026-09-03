@@ -367,7 +367,7 @@ namespace p2boost {
 		console_print( "[p2boost] latest version is %s (running %s)\n", latest_tag.c_str( ), P2BOOST_VERSION );
 
 		if( !force && !release_newer( latest_tag, P2BOOST_VERSION ) ) {
-			console_print( "[p2boost] already up to date\n" );
+			console_print_color( console_color::green, "[p2boost] already up to date\n" );
 			updater->m_busy.store( false, std::memory_order_relaxed );
 			return;
 		}
@@ -460,7 +460,7 @@ namespace p2boost {
 			return;
 		}
 
-		console_print( "[p2boost] installed %s. restart the game to load it.\n", latest_tag.c_str( ) );
+		console_print_color( console_color::green, "[p2boost] installed %s. restart the game to load it.\n", latest_tag.c_str( ) );
 		std::filesystem::remove( sha_temp );
 
 		updater->m_busy.store( false, std::memory_order_relaxed );

@@ -1,6 +1,6 @@
-#include "portal2_context.h"
+﻿#include "portal2_context.h"
 
-#include "build_23973718.h"
+#include "game_profile.h"
 #include "interface_factory.h"
 
 namespace p2boost {
@@ -59,13 +59,13 @@ namespace p2boost {
 	}
 
 	IDirect3DDevice9* find_dxvk_device( const portal2_modules_t& modules ) noexcept {
-		const Address device_xref = modules.m_shader_api.find( portal2::signature::flat_texture_device );
+		const Address device_xref = modules.m_shader_api.find( game::active( )->flat_texture_device );
 		if( !device_xref )
 			return nullptr;
 
 		// the instruction operand stores the address of the device global, and
 		// that global holds the D3D9 device: two dereferences, never one.
-		const Address device_global = device_xref.at< Address >( portal2::xref::flat_texture_device_global );
+		const Address device_global = device_xref.at< Address >( game::active( )->xref_flat_texture_device_global );
 		return device_global.to< IDirect3DDevice9* >( );
 	}
 
