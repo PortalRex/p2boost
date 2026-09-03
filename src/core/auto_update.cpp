@@ -81,14 +81,10 @@ namespace p2boost {
 			return !host.empty( ) && !path.empty( );
 		}
 
-		// read one HTTP response into memory with WinHTTP. returns false on any
-		// transport or status failure so callers never trust partial data.
-		bool http_get( const char* url, std::string& body ) {
-			std::wstring host;
-			std::wstring path;
-			if( !split_url( url, host, path ) )
-				return false;
-
+		// read one HTTP response into memory with WinHTTP. follows redirects manually
+		// because WinHTTP drops the Authorization header when redirecting across
+		// hosts, and GitHub moves release downloads to objects.githubusercontent.com.
+		bool http_get( const char* url, std::string& body, bool binary ) {
 			const HINTERNET session = WinHttpOpen( L"p2boost-updater",
 			                                       WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
 			                                       WINHTTP_NO_PROXY_NAME,
@@ -102,9 +98,35 @@ namespace p2boost {
 			// keep the check snappy instead of waiting on WinHTTP's defaults.
 			WinHttpSetTimeouts( session, 10000, 10000, 10000, 10000 );
 
-			bool            success = false;
-			const HINTERNET connect = WinHttpConnect( session, host.c_str( ), INTERNET_DEFAULT_HTTPS_PORT, 0 );
-			if( connect ) {
+			// GitHub requires a descriptive User-Agent on API requests and
+			// authenticates private repositories through an optional token. the
+			// asset endpoint returns the binary only with the octet-stream accept,
+			// while the metadata endpoints reject that media type.
+			std::wstring headers = L"User-Agent: p2boost/" P2BOOST_VERSION L"\r\n";
+			headers += binary ? L"Accept: application/octet-stream\r\n" : L"Accept: application/vnd.github+json\r\n";
+			char token[ 256 ]{ };
+			if( GetEnvironmentVariableA( "GITHUB_TOKEN", token, sizeof( token ) ) <= 0 )
+				GetEnvironmentVariableA( "GH_TOKEN", token, sizeof( token ) );
+			if( token[ 0 ] ) {
+				headers += L"Authorization: Bearer ";
+				headers.append( token, token + std::strlen( token ) );
+				headers += L"\r\n";
+			}
+
+			std::string current = url;
+			bool        success = false;
+			for( int hop = 0; hop < 5 && !success; ++hop ) {
+				std::wstring host;
+				std::wstring path;
+				if( !split_url( current.c_str( ), host, path ) )
+					break;
+
+				const HINTERNET connect = WinHttpConnect( session, host.c_str( ), INTERNET_DEFAULT_HTTPS_PORT, 0 );
+				if( !connect ) {
+					console_print( "[p2boost] WinHttpConnect failed (%lu)\n", GetLastError( ) );
+					break;
+				}
+
 				const HINTERNET request = WinHttpOpenRequest( connect,
 				                                              L"GET",
 				                                              path.c_str( ),
@@ -112,67 +134,90 @@ namespace p2boost {
 				                                              WINHTTP_NO_REFERER,
 				                                              WINHTTP_DEFAULT_ACCEPT_TYPES,
 				                                              WINHTTP_FLAG_SECURE | WINHTTP_FLAG_REFRESH );
-				if( request ) {
-					// GitHub requires a descriptive User-Agent on API requests and
-					// authenticates private repositories through an optional token.
-					std::wstring headers = L"User-Agent: p2boost/" P2BOOST_VERSION L"\r\n";
-					char         token[ 256 ]{ };
-					if( GetEnvironmentVariableA( "GITHUB_TOKEN", token, sizeof( token ) ) <= 0 )
-						GetEnvironmentVariableA( "GH_TOKEN", token, sizeof( token ) );
-					if( token[ 0 ] ) {
-						headers += L"Authorization: Bearer ";
-						headers.append( token, token + std::strlen( token ) );
-						headers += L"\r\n";
-					}
-
-					if( WinHttpSendRequest( request, headers.c_str( ), (DWORD)-1L, WINHTTP_NO_REQUEST_DATA, 0, 0, 0 ) &&
-					    WinHttpReceiveResponse( request, nullptr ) ) {
-						DWORD status_code{ };
-						DWORD status_size = sizeof( status_code );
-						if( WinHttpQueryHeaders( request,
-						                         WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
-						                         WINHTTP_HEADER_NAME_BY_INDEX,
-						                         &status_code,
-						                         &status_size,
-						                         WINHTTP_NO_HEADER_INDEX ) &&
-						    status_code == 200 ) {
-							char  buffer[ 1 << 15 ];
-							DWORD bytes_read{ };
-							while( WinHttpReadData( request, buffer, sizeof( buffer ), &bytes_read ) && bytes_read ) {
-								body.append( buffer, bytes_read );
-								bytes_read = 0;
-							}
-							success = true;
-						} else if( status_code == 404 ) {
-							console_print( "[p2boost] the p2boost repository or its releases are not publicly reachable\n" );
-						} else {
-							console_print( "[p2boost] update request returned status %lu\n", status_code );
-						}
-					} else {
-						console_print( "[p2boost] WinHttpSendRequest failed (%lu)\n", GetLastError( ) );
-					}
-					WinHttpCloseHandle( request );
-				} else {
+				if( !request ) {
 					console_print( "[p2boost] WinHttpOpenRequest failed (%lu)\n", GetLastError( ) );
+					WinHttpCloseHandle( connect );
+					break;
 				}
+
+				if( !WinHttpSendRequest( request, headers.c_str( ), (DWORD)-1L, WINHTTP_NO_REQUEST_DATA, 0, 0, 0 ) ||
+				    !WinHttpReceiveResponse( request, nullptr ) ) {
+					console_print( "[p2boost] WinHttpSendRequest failed (%lu)\n", GetLastError( ) );
+					WinHttpCloseHandle( request );
+					WinHttpCloseHandle( connect );
+					break;
+				}
+
+				DWORD status_code{ };
+				DWORD status_size = sizeof( status_code );
+				if( !WinHttpQueryHeaders( request,
+				                          WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+				                          WINHTTP_HEADER_NAME_BY_INDEX,
+				                          &status_code,
+				                          &status_size,
+				                          WINHTTP_NO_HEADER_INDEX ) ) {
+					WinHttpCloseHandle( request );
+					WinHttpCloseHandle( connect );
+					break;
+				}
+
+				if( status_code >= 300 && status_code < 400 ) {
+					// read the Location header and re-issue with the token intact.
+					wchar_t    location[ 1024 ]{ };
+					DWORD      location_size = sizeof( location );
+					const bool located       = WinHttpQueryHeaders( request,
+					                                                WINHTTP_QUERY_LOCATION,
+					                                                WINHTTP_HEADER_NAME_BY_INDEX,
+					                                                location,
+					                                                &location_size,
+					                                                WINHTTP_NO_HEADER_INDEX );
+					WinHttpCloseHandle( request );
+					WinHttpCloseHandle( connect );
+					if( !located || !location[ 0 ] )
+						break;
+
+					location[ 1023 ] = L'\0';
+					std::string redirected;
+					for( const wchar_t* character = location; *character; ++character )
+						redirected.push_back( static_cast< char >( *character ) );
+					current = redirected;
+					continue;
+				}
+
+				if( status_code == 200 ) {
+					char  buffer[ 1 << 15 ];
+					DWORD bytes_read{ };
+					while( WinHttpReadData( request, buffer, sizeof( buffer ), &bytes_read ) && bytes_read ) {
+						body.append( buffer, bytes_read );
+						bytes_read = 0;
+					}
+					success = true;
+				} else if( status_code == 404 ) {
+					console_print( "[p2boost] the p2boost repository or its releases are not publicly reachable\n" );
+				} else {
+					console_print( "[p2boost] update request returned status %lu\n", status_code );
+				}
+
+				WinHttpCloseHandle( request );
 				WinHttpCloseHandle( connect );
-			} else {
-				console_print( "[p2boost] WinHttpConnect failed (%lu)\n", GetLastError( ) );
 			}
+
 			WinHttpCloseHandle( session );
 			return success;
 		}
 
-		// parse the "browser_download_url" value for one asset name from the
-		// GitHub release JSON. the API escapes strings with backslash quotes.
+		// parse the API asset url for one asset name from the GitHub release JSON.
+		// the api.github.com asset endpoint is used for downloads because the
+		// github.com releases/download URL returns 404 for private repositories
+		// even with a read token. the API escapes strings with backslash quotes.
 		bool asset_url( const std::string& json, const char* asset_name, std::string& url ) {
 			const std::string needle = std::string( "\"name\":\"" ) + asset_name + "\"";
 			const size_t      found  = json.find( needle );
 			if( found == std::string::npos )
 				return false;
 
-			const std::string url_marker = "\"browser_download_url\":\"";
-			const size_t      url_start  = json.find( url_marker, found + needle.size( ) );
+			const std::string url_marker = "\"url\":\"";
+			const size_t      url_start  = json.rfind( url_marker, found );
 			if( url_start == std::string::npos )
 				return false;
 
@@ -191,7 +236,7 @@ namespace p2boost {
 					unescaped.push_back( value[ index ] );
 			}
 			url = unescaped;
-			return !url.empty( );
+			return url.find( "api.github.com" ) != std::string::npos;
 		}
 
 		// the releases list endpoint returns a JSON array. split the first release
@@ -269,7 +314,7 @@ namespace p2boost {
 		console_print( "[p2boost] checking for updates...\n" );
 
 		std::string release_json;
-		if( !http_get( repo_releases, release_json ) ) {
+		if( !http_get( repo_releases, release_json, false ) ) {
 			console_print( "[p2boost] failed to reach the GitHub releases API\n" );
 			updater->m_busy.store( false, std::memory_order_relaxed );
 			return;
@@ -342,14 +387,14 @@ namespace p2boost {
 
 		console_print( "[p2boost] downloading %s...\n", dll_url.c_str( ) );
 		std::string dll_data;
-		if( !http_get( dll_url.c_str( ), dll_data ) || dll_data.empty( ) ) {
+		if( !http_get( dll_url.c_str( ), dll_data, true ) || dll_data.empty( ) ) {
 			console_print( "[p2boost] failed to download the new p2boost.dll\n" );
 			updater->m_busy.store( false, std::memory_order_relaxed );
 			return;
 		}
 
 		std::string expected_sha;
-		if( !http_get( sha_url.c_str( ), expected_sha ) ) {
+		if( !http_get( sha_url.c_str( ), expected_sha, true ) ) {
 			console_print( "[p2boost] failed to download the release checksum\n" );
 			updater->m_busy.store( false, std::memory_order_relaxed );
 			return;

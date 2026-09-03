@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(p2boost VERSION 1.2.3 LANGUAGES CXX)
+project(p2boost VERSION 1.2.4 LANGUAGES CXX)
 
 option(P2BOOST_BUILD_RESEARCH_TOOLS "Build offline profiling tools from research/" OFF)
 
