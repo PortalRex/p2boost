@@ -23,8 +23,10 @@
 
 namespace p2boost {
 	namespace {
-		// GitHub repository the nightly and tagged releases are published to.
-		constexpr const char* repo_releases = "https://api.github.com/repos/aIIison/p2boost/releases/latest";
+		// GitHub repository the nightly and tagged releases are published to. the
+		// list endpoint returns prereleases too, unlike /releases/latest which
+		// 404s when the newest build is the rolling nightly.
+		constexpr const char* repo_releases = "https://api.github.com/repos/aIIison/p2boost/releases?per_page=10";
 
 		// asset names published beside the drop-in zip by the release workflow.
 		constexpr const char* dll_asset_name = "p2boost.dll";
@@ -192,6 +194,47 @@ namespace p2boost {
 			return !url.empty( );
 		}
 
+		// the releases list endpoint returns a JSON array. split the first release
+		// object (newest first) from the array so asset search never crosses into
+		// an older release.
+		std::string first_release_object( const std::string& json ) {
+			const size_t array_start = json.find( '[' );
+			if( array_start == std::string::npos )
+				return json;
+
+			const size_t object_start = json.find( '{', array_start );
+			if( object_start == std::string::npos )
+				return { };
+
+			int         depth     = 0;
+			bool        in_string = false;
+			const char* data      = json.data( );
+			for( size_t index = object_start; index < json.size( ); ++index ) {
+				const char character = data[ index ];
+				if( character == '"' && ( index == 0 || data[ index - 1 ] != '\\' ) )
+					in_string = !in_string;
+				else if( !in_string ) {
+					if( character == '{' )
+						++depth;
+					else if( character == '}' && --depth == 0 )
+						return json.substr( object_start, index - object_start + 1 );
+				}
+			}
+			return json.substr( object_start );
+		}
+
+		// the nightly tag carries no version number; it is always the freshest
+		// build and supersedes any tagged release. dotted tags compare normally.
+		bool release_newer( const std::string& tag, const std::string& current_version ) {
+			if( tag == "nightly" )
+				return true;
+
+			std::string candidate = tag;
+			if( !candidate.empty( ) && candidate[ 0 ] == 'v' )
+				candidate.erase( 0, 1 );
+			return version_newer( candidate, current_version );
+		}
+
 		// find the installed p2boost.dll next to the game executable. the game
 		// root is derived from engine.dll the same way runtime verification does.
 		std::wstring installed_dll_path( ) {
@@ -232,36 +275,53 @@ namespace p2boost {
 			return;
 		}
 
+		// pick the newest release that carries both raw assets. older releases
+		// published before the workflow attached them are skipped.
 		std::string latest_tag;
 		std::string dll_url;
 		std::string sha_url;
 		{
-			const std::string tag_marker = "\"tag_name\":\"";
-			const size_t      tag_start  = release_json.find( tag_marker );
-			if( tag_start != std::string::npos ) {
-				const size_t tag_content = tag_start + tag_marker.size( );
-				const size_t tag_end     = release_json.find( '"', tag_content );
+			std::string remaining = release_json;
+			while( !remaining.empty( ) ) {
+				const std::string release = first_release_object( remaining );
+				if( release.empty( ) )
+					break;
+
+				const std::string tag_marker  = "\"tag_name\":\"";
+				const size_t      tag_start   = release.find( tag_marker );
+				const size_t      tag_content = tag_start == std::string::npos ? std::string::npos : tag_start + tag_marker.size( );
+				const size_t      tag_end     = tag_content == std::string::npos ? std::string::npos : release.find( '"', tag_content );
+
+				std::string tag;
+				std::string candidate_dll;
+				std::string candidate_sha;
 				if( tag_end != std::string::npos )
-					latest_tag = release_json.substr( tag_content, tag_end - tag_content );
+					tag = release.substr( tag_content, tag_end - tag_content );
+				asset_url( release, dll_asset_name, candidate_dll );
+				asset_url( release, sha_asset_name, candidate_sha );
+
+				if( !tag.empty( ) && !candidate_dll.empty( ) && !candidate_sha.empty( ) ) {
+					latest_tag = tag;
+					dll_url    = candidate_dll;
+					sha_url    = candidate_sha;
+					break;
+				}
+
+				// advance past this object to the next one in the array.
+				const size_t next = remaining.find( release ) + release.size( );
+				remaining         = next <= remaining.size( ) ? remaining.substr( next ) : std::string{ };
 			}
-			asset_url( release_json, dll_asset_name, dll_url );
-			asset_url( release_json, sha_asset_name, sha_url );
 		}
 
 		if( latest_tag.empty( ) || dll_url.empty( ) || sha_url.empty( ) ) {
-			console_print( "[p2boost] the latest release does not expose the raw p2boost.dll asset\n" );
+			console_print( "[p2boost] no release exposes the raw p2boost.dll asset\n" );
 			updater->m_busy.store( false, std::memory_order_relaxed );
 			return;
 		}
 
-		// release tags are "v1.2.0"; compare only the numeric part.
-		std::string latest_version = latest_tag;
-		if( !latest_version.empty( ) && latest_version[ 0 ] == 'v' )
-			latest_version.erase( 0, 1 );
-
 		console_print( "[p2boost] latest version is %s (running %s)\n", latest_tag.c_str( ), P2BOOST_VERSION );
 
-		if( !force && !version_newer( latest_version, P2BOOST_VERSION ) ) {
+		if( !force && !release_newer( latest_tag, P2BOOST_VERSION ) ) {
 			console_print( "[p2boost] already up to date\n" );
 			updater->m_busy.store( false, std::memory_order_relaxed );
 			return;
