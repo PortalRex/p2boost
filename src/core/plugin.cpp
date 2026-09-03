@@ -161,18 +161,26 @@ namespace p2boost {
 		// threaded rendering) on modern CPUs, serialising the whole render
 		// path on the main thread. forcing 2 moves draw submission onto the
 		// render worker. the engine re-evaluates the mode at map load and
-		// device reset, so this runs at every LevelInit and Reset.
+		// device reset, so this runs at every LevelInit and Reset. the
+		// command is executed through the engine's own client-command path so
+		// the change callback always runs without depending on a recovered
+		// ConVar vtable slot.
 		void enforce_render_threading( ) const noexcept {
-			if( m_force_multicore ) {
-				const con_var_t* queue_mode = m_commands.find_variable( "mat_queue_mode" );
-				if( queue_mode && queue_mode->value_integer( ) < 2 ) {
-					const int before = queue_mode->value_integer( );
-					m_commands.set_integer( "mat_queue_mode", 2 );
-					if( queue_mode->value_integer( ) != 2 )
-						console_print( "[p2boost] mat_queue_mode set failed (vtable slot mismatch?)\n" );
-					else if( before != 2 )
-						console_print( "[p2boost] mat_queue_mode 0 -> 2 (multicore rendering enabled)\n" );
-				}
+			if( !m_force_multicore )
+				return;
+
+			const con_var_t* queue_mode = m_commands.find_variable( "mat_queue_mode" );
+			if( !queue_mode || queue_mode->value_integer( ) >= 2 )
+				return;
+
+			if( sdk::IVEngineClient* engine_client = m_interfaces.engine_client( ) ) {
+				const int before = queue_mode->value_integer( );
+				engine_client->ExecuteClientCmd( "mat_queue_mode 2" );
+				const int after = m_commands.find_variable( "mat_queue_mode" )->value_integer( );
+				if( after != 2 )
+					console_print( "[p2boost] mat_queue_mode %d -> 2 failed\n", before );
+				else if( before != 2 )
+					console_print( "[p2boost] mat_queue_mode %d -> 2 (multicore rendering enabled)\n", before );
 			}
 		}
 

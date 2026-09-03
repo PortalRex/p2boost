@@ -56,19 +56,6 @@ namespace p2boost {
 		int value_integer( ) const noexcept {
 			return m_parent ? m_parent->m_integer : m_integer;
 		}
-
-		// invoke the ConVar vtable's InternalSetIntValue so the engine runs its
-		// change callback (e.g. render-thread reconfiguration) instead of
-		// patching the value fields directly. Portal 2's vtable order is
-		// InternalSetValue(12), InternalSetFloatValue(13), InternalSetIntValue(14).
-		// the slot is only trusted when it points into vstdlib's code so a
-		// changed build can never dispatch to an arbitrary function.
-		void set_integer( int value ) const noexcept {
-			using function_t = void( __thiscall* )( const void*, int );
-			const auto set   = m_variable_vmt ? ( *reinterpret_cast< function_t* const* >( m_variable_vmt ) )[ 14 ] : nullptr;
-			if( set && Module::containing( reinterpret_cast< const void* >( set ) ) )
-				set( this, value );
-		}
 	};
 
 	static_assert( sizeof( con_command_base_t ) == 24, "Portal 2 ConCommandBase ABI changed" );
@@ -86,12 +73,6 @@ namespace p2boost {
 		bool       remove_flags( const char* name, int flags );
 		con_var_t* find_variable( const char* name ) const {
 			return m_cvar && name ? static_cast< con_var_t* >( m_cvar->FindCommand( name ) ) : nullptr;
-		}
-
-		// set one engine ConVar through its vtable so change callbacks run.
-		void set_integer( const char* name, int value ) const {
-			if( con_var_t* variable = find_variable( name ) )
-				variable->set_integer( value );
 		}
 		void disconnect( );
 		~ConsoleCommandRegistry( ) {
