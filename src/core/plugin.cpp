@@ -78,7 +78,7 @@ namespace p2boost {
 				m_verification.m_errors.emplace_back( "projected-shadow signature mismatch" );
 			if( m_verification.m_supported && !m_flat_textures.install( m_modules, m_interfaces, m_device ) )
 				m_verification.m_errors.emplace_back( "optional flat-texture hooks unavailable" );
-			if( m_verification.m_supported && !m_display_adjustments.install( m_commands, m_device ) )
+			if( m_verification.m_supported && !m_display_adjustments.install( m_commands, m_device, &m_metrics ) )
 				m_verification.m_errors.emplace_back( "display-adjustment hooks unavailable" );
 			if( m_verification.m_supported && !m_display_adjustments.install_viewport_commit_patch( m_modules ) )
 				m_verification.m_errors.emplace_back( "viewport-commit signature mismatch" );
