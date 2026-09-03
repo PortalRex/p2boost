@@ -19,6 +19,7 @@ namespace p2boost {
 		double                               m_p99_ms{ };
 		double                               m_max_ms{ };
 		double                               m_shadow_ms{ };
+		double                               m_present_ms{ };
 		unsigned int                         m_hitch_count{ };
 		unsigned int                         m_shadow_updates{ };
 		unsigned int                         m_shadow_hits{ };
@@ -62,6 +63,7 @@ namespace p2boost {
 
 		void record_frame( ) noexcept;
 		void record_shadow_update( double milliseconds, bool cache_hit ) noexcept;
+		void record_present( double milliseconds ) noexcept;
 
 		overlay_metrics_t overlay_metrics( ) const noexcept;
 		bool              dump( const std::string& path ) const;
@@ -72,6 +74,7 @@ namespace p2boost {
 			Qpc::tick_t  m_qpc{ };
 			double       m_frame_ms{ };
 			double       m_shadow_ms{ };
+			double       m_present_ms{ };
 			unsigned int m_shadow_updates{ };
 			unsigned int m_shadow_hits{ };
 			bool         m_simulating{ };
@@ -89,6 +92,7 @@ namespace p2boost {
 		double             m_pending_shadow_ms{ };
 		unsigned int       m_pending_shadow_updates{ };
 		unsigned int       m_pending_shadow_hits{ };
+		double             m_pending_present_ms{ };
 
 		std::atomic_bool m_tracing{ };
 		std::atomic_bool m_overlay_collection{ };

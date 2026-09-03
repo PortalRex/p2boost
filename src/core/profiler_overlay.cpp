@@ -249,12 +249,12 @@ namespace p2boost {
 
 		std::snprintf( line,
 		               sizeof( line ),
-		               "%5.0f FPS  |  FRAME %5.2f ms  |  P95 %5.2f  P99 %5.2f  MAX %5.2f",
+		               "%5.0f FPS  |  FRAME %5.2f ms  |  PRESENT %5.2f  P95 %5.2f  P99 %5.2f",
 		               fps,
 		               sample.m_frame_ms,
+		               sample.m_present_ms,
 		               sample.m_p95_ms,
-		               sample.m_p99_ms,
-		               sample.m_max_ms );
+		               sample.m_p99_ms );
 		const auto& timing_color = sample.m_hitch_count > 0 ? bad : sample.m_p99_ms >= 4.0 ? warning
 		                                                                                   : good;
 		draw_line( screen_width, m_panel_font, 1, timing_color, line );

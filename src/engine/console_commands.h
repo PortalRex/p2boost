@@ -1,6 +1,7 @@
 #pragma once
 
 #include "interfaces.h"
+#include "module.h"
 #include "sdk.h"
 
 #include <cstdint>

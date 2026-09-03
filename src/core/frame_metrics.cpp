@@ -53,9 +53,11 @@ namespace p2boost {
 			sample.m_shadow_ms       = m_pending_shadow_ms;
 			sample.m_shadow_updates  = m_pending_shadow_updates;
 			sample.m_shadow_hits     = m_pending_shadow_hits;
+			sample.m_present_ms      = m_pending_present_ms;
 			m_pending_shadow_ms      = 0.0;
 			m_pending_shadow_updates = 0;
 			m_pending_shadow_hits    = 0;
+			m_pending_present_ms     = 0.0;
 		}
 
 		// append in constant time and overwrite only the oldest full-buffer sample.
@@ -74,6 +76,14 @@ namespace p2boost {
 		++m_pending_shadow_updates;
 		if( cache_hit )
 			++m_pending_shadow_hits;
+	}
+
+	void FrameMetrics::record_present( double milliseconds ) noexcept {
+		if( !collecting( ) || milliseconds < 0.0 )
+			return;
+
+		std::lock_guard< std::mutex > lock( m_pending_mutex );
+		m_pending_present_ms += milliseconds;
 	}
 
 	overlay_metrics_t FrameMetrics::overlay_metrics( ) const noexcept {
@@ -108,6 +118,7 @@ namespace p2boost {
 		for( const sample_t& sample : samples ) {
 			frame_times.push_back( sample.m_frame_ms );
 			result.m_shadow_ms += sample.m_shadow_ms;
+			result.m_present_ms += sample.m_present_ms;
 			result.m_shadow_updates += sample.m_shadow_updates;
 			result.m_shadow_hits += sample.m_shadow_hits;
 			if( sample.m_frame_ms >= 8.3 )
@@ -145,12 +156,12 @@ namespace p2boost {
 		if( !output )
 			return false;
 
-		output << "qpc,frame_ms,shadow_ms,shadow_updates,shadow_cache_hits,simulating,focused,coop\n"
+		output << "qpc,frame_ms,shadow_ms,present_ms,shadow_updates,shadow_cache_hits,simulating,focused,coop\n"
 		       << std::fixed << std::setprecision( 6 );
 		for( const sample_t& sample : samples ) {
-			output << sample.m_qpc << ',' << sample.m_frame_ms << ',' << sample.m_shadow_ms << ',' << sample.m_shadow_updates << ','
-			       << sample.m_shadow_hits << ',' << ( sample.m_simulating ? 1 : 0 ) << ',' << ( sample.m_focused ? 1 : 0 ) << ','
-			       << ( sample.m_coop ? 1 : 0 ) << '\n';
+			output << sample.m_qpc << ',' << sample.m_frame_ms << ',' << sample.m_shadow_ms << ',' << sample.m_present_ms << ','
+			       << sample.m_shadow_updates << ',' << sample.m_shadow_hits << ',' << ( sample.m_simulating ? 1 : 0 ) << ','
+			       << ( sample.m_focused ? 1 : 0 ) << ',' << ( sample.m_coop ? 1 : 0 ) << '\n';
 		}
 		return output.good( );
 	}

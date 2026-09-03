@@ -4,6 +4,7 @@
 #include "d3d9_slots.h"
 #include "monitor_gamma_shader.h"
 #include "portal2_context.h"
+#include "qpc.h"
 #include "vmt.h"
 
 #include <Windows.h>
@@ -85,10 +86,11 @@ namespace p2boost {
 		remove( );
 	}
 
-	bool DisplayAdjustments::install( const ConsoleCommandRegistry& commands, IDirect3DDevice9* device ) {
+	bool DisplayAdjustments::install( const ConsoleCommandRegistry& commands, IDirect3DDevice9* device, FrameMetrics* metrics ) {
 		if( m_instance )
 			return false;
 
+		m_metrics          = metrics;
 		m_monitor_gamma    = commands.find_variable( "mat_monitorgamma" );
 		m_viewport_scale   = commands.find_variable( "mat_viewportscale" );
 		m_viewport_upscale = commands.find_variable( "mat_viewportupscale" );
@@ -477,7 +479,13 @@ namespace p2boost {
 		if( gamma_drawn )
 			instance->m_gamma_passes.fetch_add( 1, std::memory_order_relaxed );
 
-		const HRESULT result = next ? next( device, source, destination, window, dirty_region ) : D3DERR_INVALIDCALL;
+		// the wall time inside the real Present is the GPU/present cost of the
+		// finished frame. folding it into the frame sample separates a CPU-bound
+		// render path from one that waits on the display.
+		const Qpc::tick_t present_begin = Qpc::now( );
+		const HRESULT     result        = next ? next( device, source, destination, window, dirty_region ) : D3DERR_INVALIDCALL;
+		if( instance && instance->m_metrics )
+			instance->m_metrics->record_present( Qpc::milliseconds( Qpc::now( ) - present_begin ) );
 
 		// present only the corrected pixels. restoring the captured linear frame
 		// prevents retained loading frames from feeding the gamma pass repeatedly.

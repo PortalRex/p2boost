@@ -1,6 +1,7 @@
 #pragma once
 
 #include "console_commands.h"
+#include "frame_metrics.h"
 #include "hook.h"
 #include "interfaces.h"
 #include "portal2_context.h"
@@ -47,7 +48,7 @@ namespace p2boost {
 		DisplayAdjustments( const DisplayAdjustments& )            = delete;
 		DisplayAdjustments& operator=( const DisplayAdjustments& ) = delete;
 
-		bool install( const ConsoleCommandRegistry& commands, IDirect3DDevice9* device );
+		bool install( const ConsoleCommandRegistry& commands, IDirect3DDevice9* device, FrameMetrics* metrics );
 		void remove( );
 
 		// the shader API's CommitSetViewports skips zero-size viewports, which
@@ -106,6 +107,7 @@ namespace p2boost {
 		static HRESULT __stdcall SetViewport( IDirect3DDevice9* device, const D3DVIEWPORT9* viewport );
 
 		static DisplayAdjustments* m_instance;
+		FrameMetrics*              m_metrics{ };
 		con_var_t*                 m_monitor_gamma{ };
 		con_var_t*                 m_viewport_scale{ };
 		con_var_t*                 m_viewport_upscale{ };
