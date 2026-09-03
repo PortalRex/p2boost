@@ -56,6 +56,10 @@ namespace p2boost {
 				return false;
 			}
 
+			// Portal 2 resolves mat_queue_mode to 0 on modern CPUs; force the
+			// multicore render path now and again at every level load.
+			enforce_render_threading( );
+
 			// Portal 2 shipped these public SDK rendering controls with FCVAR_CHEAT.
 			// removing only that flag makes the original engine path usable while
 			// preserving archive, client, bounds, and replication behavior.
@@ -153,9 +157,29 @@ namespace p2boost {
 			return "p2boost DXVK/Vulkan performance patch v" P2BOOST_VERSION;
 		}
 
+		// Portal 2's mat_queue_mode auto-detection resolves to 0 (single
+		// threaded rendering) on modern CPUs, serialising the whole render
+		// path on the main thread. forcing 2 moves draw submission onto the
+		// render worker. the engine re-evaluates the mode at map load and
+		// device reset, so this runs at every LevelInit and Reset.
+		void enforce_render_threading( ) const noexcept {
+			if( m_force_multicore ) {
+				const con_var_t* queue_mode = m_commands.find_variable( "mat_queue_mode" );
+				if( queue_mode && queue_mode->value_integer( ) < 2 ) {
+					const int before = queue_mode->value_integer( );
+					m_commands.set_integer( "mat_queue_mode", 2 );
+					if( queue_mode->value_integer( ) != 2 )
+						console_print( "[p2boost] mat_queue_mode set failed (vtable slot mismatch?)\n" );
+					else if( before != 2 )
+						console_print( "[p2boost] mat_queue_mode 0 -> 2 (multicore rendering enabled)\n" );
+				}
+			}
+		}
+
 		void LevelInit( const char* ) override {
 			m_demo_provenance.reset( );
 			m_shadow_cache.invalidate( );
+			enforce_render_threading( );
 		}
 
 		void ServerActivate( sdk::edict_t*, int, int client_max ) override {
@@ -173,8 +197,10 @@ namespace p2boost {
 			m_metrics.set_focused( focused );
 			if( focused != m_last_focused ) {
 				// DXVK can recreate swapchain-backed resources after a display
-				// transition. never carry a shadow cache across that boundary.
+				// transition. never carry a shadow cache across that boundary,
+				// and re-assert the render thread mode the engine may reset.
 				m_shadow_cache.invalidate( );
+				enforce_render_threading( );
 				m_last_focused = focused;
 			}
 		}
@@ -235,6 +261,8 @@ namespace p2boost {
 				return dump_metrics_command( );
 			if( _stricmp( command, "p2boost_update" ) == 0 )
 				return update_command( args );
+			if( _stricmp( command, "p2boost_multicore" ) == 0 )
+				return multicore_command( args );
 			if( _stricmp( command, "r_intensity" ) == 0 )
 				return intensity_command( args );
 
@@ -273,6 +301,7 @@ namespace p2boost {
 			    { "p2boost_overlay", "Select the full or FPS-only frame profiler." },
 			    { "p2boost_dump_metrics", "Write frame metrics to CSV." },
 			    { "p2boost_update", "Update p2boost to the latest release. Optional 'force' reinstalls." },
+			    { "p2boost_multicore", "Force mat_queue_mode 2 (multicore rendering). Re-enforced on every level load." },
 			    { "r_intensity", "Scale final-frame RGB brightness (0.0 to 2.0, 1.0 neutral)." },
 			};
 
@@ -329,7 +358,7 @@ namespace p2boost {
 			               "limiter=%d shadow_cache=%d shadow_hits=%u shadow_culled=%u tracing=%d overlay=%d overlay_available=%d "
 			               "display_available=%d viewport_commit=%d gamma_passes=%llu viewport_passes=%llu intensity=%g demo_marker=%d "
 			               "flat_available=%d flat=%d flat_textures=%zu flat_ready=%zu flat_normal=%d flat_binds=%llu "
-			               "flat_uploads=%llu/%llu/%llu sar=%d samples=%zu mat_queue_mode=%d root=%s\n",
+			               "flat_uploads=%llu/%llu/%llu sar=%d samples=%zu mat_queue_mode=%d multicore=%d root=%s\n",
 			               m_verification.m_supported,
 			               m_verification.m_dxvk_vulkan,
 			               m_verification.m_dxvk_shipped,
@@ -363,6 +392,7 @@ namespace p2boost {
 			               static_cast< bool >( Module{ L"sar.dll" } ),
 			               m_metrics.count( ),
 			               queue,
+			               m_force_multicore ? 1 : 0,
 			               m_verification.m_game_root.c_str( ) );
 
 			const std::string game_label = m_verification.m_game.empty( ) ? std::string{ } : std::string{ " (" } + m_verification.m_game + ")";
@@ -376,6 +406,9 @@ namespace p2boost {
 			               m_verification.m_dxvk_shipped    ? "shipped"
 			               : m_verification.m_dxvk_approved ? "approved replacement"
 			                                                : "unrecognized" );
+			console_print( "[p2boost]   render thread %s (mat_queue_mode=%d)\n",
+			               queue >= 2 ? "multicore" : ( m_force_multicore ? "forcing" : "single" ),
+			               queue );
 			console_print_color( m_enabled ? console_color::green : console_color::yellow,
 			                     "[p2boost]   fixes         %s\n", m_enabled ? "enabled" : "disabled" );
 			console_print( "[p2boost]   frame limiter %s\n",
@@ -520,6 +553,21 @@ namespace p2boost {
 			return sdk::Stop;
 		}
 
+		// force multicore rendering (mat_queue_mode 2) on and off.
+		sdk::PluginResult multicore_command( const sdk::CCommand& args ) {
+			bool enabled{ };
+			if( !parse_toggle( args, enabled ) ) {
+				console_print( "usage: p2boost_multicore 0|1\n" );
+				return sdk::Stop;
+			}
+
+			m_force_multicore = enabled;
+			if( enabled )
+				enforce_render_threading( );
+			console_print( "[p2boost] multicore rendering %s\n", enabled ? "enabled" : "disabled" );
+			return sdk::Stop;
+		}
+
 		bool can_enable( ) const noexcept {
 			// partial activation would make A/B results impossible to interpret.
 			return m_verification.m_supported && m_verification.m_dxvk_vulkan && m_frame_limiter.installed( ) &&
@@ -557,6 +605,7 @@ namespace p2boost {
 		IDirect3DDevice9*       m_device{ };
 		bool                    m_enabled{ };
 		bool                    m_last_focused{ };
+		bool                    m_force_multicore{ true };
 	};
 
 	Plugin* Plugin::m_instance{ };
