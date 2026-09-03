@@ -61,7 +61,9 @@ add_library(p2boost_core STATIC
   src/core/profiler_overlay.cpp
   src/core/runtime_verification.cpp
   src/core/auto_update.cpp
+  src/engine/game_profile.cpp
   src/engine/portal2_context.cpp
+  src/engine/portal_stories_mel.cpp
   src/memory/hook.cpp
   src/platform/game_window.cpp
   src/util/projected_frustum.cpp

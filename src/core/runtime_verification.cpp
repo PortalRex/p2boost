@@ -1,6 +1,7 @@
-#include "runtime_verification.h"
+﻿#include "runtime_verification.h"
 
-#include "build_23973718.h"
+#include "game_profile.h"
+#include "game_profile.h"
 
 #include <Windows.h>
 #include <bcrypt.h>
@@ -162,29 +163,34 @@ namespace p2boost {
 		if( !is_loaded_from( modules.m_vgui, vgui ) )
 			result.m_errors.emplace_back( "vgui2.dll was not loaded from the game installation" );
 
-		// the mod client ships from portal_stories\bin while the base game uses
-		// portal2\bin; the loaded copy must come from one of them.
-		const std::wstring client_vanilla = root + L"\\portal2\\bin\\client.dll";
-		const std::wstring client_mod     = root + L"\\portal_stories\\bin\\client.dll";
-		if( !is_loaded_from( modules.m_client, client_vanilla ) && !is_loaded_from( modules.m_client, client_mod ) )
+		// detection selects the running game and installs its signature strings
+		// into portal2::signature; every check below reads the same names
+		// regardless of which game is loaded.
+		const game::profile_t* profile = game::detect( modules );
+		if( !profile ) {
+			result.m_errors.emplace_back( "client.dll was not loaded from a supported game installation" );
+			return result;
+		}
+		result.m_game                  = profile->name;
+		const std::wstring client_path = root + L"\\" + widen_ascii( profile->client_path );
+		if( !is_loaded_from( modules.m_client, client_path ) )
 			result.m_errors.emplace_back( "client.dll was not loaded from the game installation" );
 
 		// the loaded bytes are the build fingerprint. every production hook site
 		// must resolve to one unique signature, so a changed build disables only
 		// the exact feature whose offsets moved instead of the whole plugin.
-		if( !modules.m_engine.find( portal2::signature::frame_complete ) )
+		if( !modules.m_engine.find( game::active( )->frame_complete ) )
 			result.m_errors.emplace_back( "frame limiter signature not found in engine.dll" );
-		if( !modules.m_shader_api.find( portal2::signature::flat_texture_device ) )
+		if( !modules.m_shader_api.find( game::active( )->flat_texture_device ) )
 			result.m_errors.emplace_back( "DXVK device signature not found in shaderapivk.dll" );
-		if( !modules.m_shader_api.find( portal2::signature::viewport_commit_skip ) )
+		if( !modules.m_shader_api.find( game::active( )->viewport_commit_skip ) )
 			result.m_errors.emplace_back( "viewport-commit signature not found in shaderapivk.dll" );
-		if( !modules.m_client.find( portal2::signature::shadow_manager ) ||
-		    !modules.m_client.find( portal2::signature::flashlight_models ) ||
-		    !modules.m_client.find( portal2::signature::active_shadow_depth_call ) ||
-		    !modules.m_client.find( portal2::signature::active_shadow_manager ) )
+		if( !modules.m_client.find( game::active( )->shadow_manager ) ||
+		    !modules.m_client.find( game::active( )->flashlight_models ) ||
+		    !modules.m_client.find( game::active( )->active_shadow_depth_call ) ||
+		    !modules.m_client.find( game::active( )->active_shadow_manager ) )
 			result.m_errors.emplace_back( "projected-shadow signature not found in client.dll" );
-		if( !modules.m_client.find( portal2::signature::active_shadow_depth_list ) &&
-		    !modules.m_client.find( portal2::signature::active_shadow_depth_list_psm ) )
+		if( !modules.m_client.find( game::active( )->active_shadow_depth_list ) )
 			result.m_errors.emplace_back( "active-shadow list signature not found in client.dll" );
 
 		// the dxvk hash only labels which binary the metrics describe. any dxvk

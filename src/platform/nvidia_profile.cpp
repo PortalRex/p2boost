@@ -113,7 +113,7 @@ namespace p2boost {
 
 		// derive the game's executable from p2boost.dll sitting in the game root.
 		std::wstring installed_application_path( ) {
-			std::wstring path = current_module_path( );
+			std::wstring path      = current_module_path( );
 			const size_t separator = path.find_last_of( L"\\/" );
 			if( separator == std::wstring::npos )
 				return { };

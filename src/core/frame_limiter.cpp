@@ -1,7 +1,7 @@
-#include "frame_limiter.h"
+﻿#include "frame_limiter.h"
 
 #include "address.h"
-#include "build_23973718.h"
+#include "game_profile.h"
 #include "frame_metrics.h"
 #include "stack.h"
 
@@ -26,8 +26,8 @@ namespace p2boost {
 
 		// this is the unique CEngine::Frame tail that clears the limiter's
 		// accumulated interval in build 23973718.
-		const Address frame_tail     = modules.m_engine.find( portal2::signature::frame_complete );
-		const Address frame_complete = frame_tail.add( portal2::xref::frame_complete );
+		const Address frame_tail     = modules.m_engine.find( game::active( )->frame_complete );
+		const Address frame_complete = frame_tail.add( game::active( )->xref_frame_complete );
 		if( !frame_complete )
 			return false;
 
@@ -70,8 +70,8 @@ namespace p2boost {
 		const Address host{ host_state };
 		const Stack   caller{ caller_frame };
 
-		float*      accumulated = host.add( portal2::frame::accumulator ).as< float* >( );
-		const float target      = caller.local( portal2::frame::target_local ).to< float >( );
+		float*      accumulated = host.add( game::active( )->frame_accumulator ).as< float* >( );
+		const float target      = caller.local( game::active( )->frame_target_local ).to< float >( );
 		*accumulated            = carry_frame_overshoot( *accumulated, target, limiter && limiter->enabled( ) );
 
 		// GameFrame follows the 60 Hz simulation tick. this engine tail runs once

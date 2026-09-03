@@ -1,6 +1,6 @@
 ﻿#include "display_adjustments.h"
 
-#include "build_23973718.h"
+#include "game_profile.h"
 #include "d3d9_slots.h"
 #include "monitor_gamma_shader.h"
 #include "portal2_context.h"
@@ -130,7 +130,7 @@ namespace p2boost {
 		// and keeps the fullscreen boundary viewport active. neutralising both
 		// branches (NOP) falls through to the device dispatch so the degenerate
 		// rect reaches the device, where SetViewport clamps it to one pixel.
-		const Address commit = modules.m_shader_api.find( portal2::signature::viewport_commit_skip );
+		const Address commit = modules.m_shader_api.find( game::active( )->viewport_commit_skip );
 		if( !commit )
 			return false;
 

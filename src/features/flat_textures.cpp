@@ -1,7 +1,7 @@
-#include "flat_textures.h"
+﻿#include "flat_textures.h"
 
 #include "address.h"
-#include "build_23973718.h"
+#include "game_profile.h"
 #include "d3d9_slots.h"
 #include "vmt.h"
 
@@ -34,7 +34,7 @@ namespace p2boost {
 			return false;
 
 		const Address paint        = engine_vgui->PaintAddress( );
-		const bool    engine_paint = modules.m_engine.matches( paint, portal2::signature::overlay_engine_vgui_paint );
+		const bool    engine_paint = modules.m_engine.matches( paint, game::active( )->overlay_engine_vgui_paint );
 		const bool    plugin_paint = modules.m_plugin.contains( paint );
 		if( !engine_paint && !plugin_paint )
 			return false;

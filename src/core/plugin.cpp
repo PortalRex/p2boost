@@ -89,7 +89,8 @@ namespace p2boost {
 			m_last_focused = game_is_foreground( );
 			m_metrics.set_focused( m_last_focused );
 
-			console_print_color( console_color::green, "[p2boost] p2boost v%s loaded\n", P2BOOST_VERSION );
+			const std::string load_label = m_verification.m_game.empty( ) ? std::string{ } : std::string{ " (" } + m_verification.m_game + ")";
+			console_print_color( console_color::green, "[p2boost] p2boost v%s loaded%s\n", P2BOOST_VERSION, load_label.c_str( ) );
 			if( !m_verification.m_supported ) {
 				console_print_color( console_color::red, "[p2boost] ERROR: the running game build is not supported. no hooks were installed.\n" );
 				for( const auto& error : m_verification.m_errors )
@@ -361,9 +362,11 @@ namespace p2boost {
 			               m_metrics.count( ),
 			               m_verification.m_game_root.c_str( ) );
 
+			const std::string game_label = m_verification.m_game.empty( ) ? std::string{ } : std::string{ " (" } + m_verification.m_game + ")";
 			console_print_color( m_verification.m_supported ? console_color::green : console_color::red,
-			                     "[p2boost] status: %s\n",
-			                     m_verification.m_supported ? "supported build" : "UNSUPPORTED BUILD" );
+			                     "[p2boost] status: %s%s\n",
+			                     m_verification.m_supported ? "supported build" : "UNSUPPORTED BUILD",
+			                     game_label.c_str( ) );
 			console_print( "[p2boost]   version       %s\n", P2BOOST_VERSION );
 			console_print( "[p2boost]   backend       %s (dxvk %s)\n",
 			               m_verification.m_dxvk_vulkan ? "DXVK/Vulkan" : "NOT ACTIVE",

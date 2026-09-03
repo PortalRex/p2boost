@@ -1,6 +1,6 @@
-#pragma once
+﻿#pragma once
 
-#include "build_23973718.h"
+#include "game_profile.h"
 #include "math_types.h"
 #include "vmt.h"
 
@@ -27,11 +27,11 @@ namespace p2boost {
 		}
 
 		matrix4x4_t world_to_shadow( ) const noexcept {
-			return read< matrix4x4_t >( portal2::shadow::world_to_shadow );
+			return read< matrix4x4_t >( game::active( )->shadow_world_to_shadow );
 		}
 
 		std::uint16_t engine_handle( ) const noexcept {
-			return read< std::uint16_t >( portal2::shadow::engine_handle );
+			return read< std::uint16_t >( game::active( )->shadow_engine_handle );
 		}
 
 	private:
@@ -58,18 +58,18 @@ namespace p2boost {
 		}
 
 		void** update_projected_slot( ) const noexcept {
-			return vmt_slot( m_manager, portal2::vmt::update_projected );
+			return vmt_slot( m_manager, game::active( )->vmt_update_projected );
 		}
 
 		client_shadow_entry_view_t entry( std::uint16_t handle ) const noexcept {
 			std::uint8_t* entries{ };
 			if( m_manager )
-				std::memcpy( &entries, static_cast< const std::uint8_t* >( m_manager ) + portal2::shadow::entries, sizeof( entries ) );
+				std::memcpy( &entries, static_cast< const std::uint8_t* >( m_manager ) + game::active( )->shadow_entries, sizeof( entries ) );
 			if( !entries )
 				return { };
 
 			return client_shadow_entry_view_t{
-			    entries + static_cast< std::size_t >( handle ) * portal2::shadow::entry_size };
+			    entries + static_cast< std::size_t >( handle ) * game::shadow_entry_size };
 		}
 
 	private:
@@ -84,7 +84,7 @@ namespace p2boost {
 
 		int         value{ };
 		const auto* bytes = reinterpret_cast< const std::uint8_t* >( owner );
-		std::memcpy( &value, bytes + portal2::shadow::flashlight_models, sizeof( value ) );
+		std::memcpy( &value, bytes + game::active( )->shadow_flashlight_models, sizeof( value ) );
 		return value;
 	}
 

@@ -1,4 +1,4 @@
-#include "address.h"
+﻿#include "address.h"
 #include "client_view.h"
 #include "display_adjustments.h"
 #include "flat_textures.h"
@@ -7,9 +7,10 @@
 #include "hook.h"
 #include "nvidia_profile.h"
 #include "pattern.h"
-#include "build_23973718.h"
+#include "game_profile.h"
 #include "projected_frustum.h"
 #include "runtime_verification.h"
+#include "game_profile.h"
 #include "stack.h"
 #include "x86.h"
 
@@ -23,7 +24,6 @@
 #include <memory>
 #include <string>
 #include <vector>
-
 namespace {
 	volatile int                hook_marker = 0;
 	__declspec( noinline ) void original( ) {
@@ -148,11 +148,13 @@ namespace {
 		static_assert( p2boost::sdk::ISurface::get_kerned_char_width_slot == 147 );
 		static_assert( p2boost::sdk::ISurface::draw_colored_text_slot == 160 );
 
-		// every production hook signature must remain defined, including the
-		// Portal Stories Mel variant of the active-shadow list.
-		return p2boost::portal2::signature::frame_complete &&
-		       p2boost::portal2::signature::frame_complete[ 0 ] && p2boost::portal2::signature::active_shadow_depth_list_psm &&
-		       p2boost::portal2::signature::active_shadow_depth_list_psm[ 0 ];
+		// every production hook signature must remain defined, and the
+		// Portal Stories Mel profile must select its own active-shadow list
+		// variant instead of the base game's.
+		const auto& portal2 = p2boost::game::portal2( );
+		const auto& psm     = p2boost::game::portal_stories_mel( );
+		return portal2.frame_complete && portal2.frame_complete[ 0 ] && psm.active_shadow_depth_list &&
+		       psm.active_shadow_depth_list[ 0 ] && std::strcmp( psm.active_shadow_depth_list, portal2.active_shadow_depth_list ) != 0;
 	}
 
 	bool test_metrics( ) {
@@ -374,7 +376,7 @@ namespace {
 		    0x83, 0x7e, 0x08, 0x00, 0x74, 0x33, 0x83, 0x7e, 0x0c, 0x00, 0x74, 0x2d, 0xa1, 0xd8, 0xa5, 0x0d,
 		    0x10, 0x8b, 0x08, 0x8b, 0x91, 0xbc, 0x00, 0x00, 0x00 };
 
-		const auto signature = p2boost::pattern::parse( p2boost::portal2::signature::viewport_commit_skip );
+		const auto signature = p2boost::pattern::parse( p2boost::game::portal2( ).viewport_commit_skip );
 		if( signature.empty( ) )
 			return false;
 
@@ -451,14 +453,14 @@ namespace {
 		const float           far_z  = 10.0f;
 		const float           fov    = 90.0f;
 		const float           aspect = 1.0f;
-		write( p2boost::portal2::view::origin, origin );
-		write( p2boost::portal2::view::angles, angles );
-		write( p2boost::portal2::view::near_z, near_z );
-		write( p2boost::portal2::view::far_z, far_z );
-		write( p2boost::portal2::view::fov, fov );
-		write( p2boost::portal2::view::aspect_ratio, aspect );
+		write( p2boost::game::portal2( ).view_origin, origin );
+		write( p2boost::game::portal2( ).view_angles, angles );
+		write( p2boost::game::portal2( ).view_near_z, near_z );
+		write( p2boost::game::portal2( ).view_far_z, far_z );
+		write( p2boost::game::portal2( ).view_fov, fov );
+		write( p2boost::game::portal2( ).view_aspect_ratio, aspect );
 
-		const p2boost::client_view_t          client_view{ bytes.data( ) };
+		const p2boost::client_view_t          client_view{ bytes.data( ), &p2boost::game::portal2( ) };
 		const p2boost::frustum::camera_view_t camera_view{
 		    client_view.origin( ), client_view.angles( ), client_view.near_z( ), client_view.far_z( ), client_view.fov( ), client_view.aspect_ratio( ) };
 		p2boost::frustum::frustum_t camera{ };
@@ -475,13 +477,14 @@ namespace {
 }
 
 int main( ) {
-	const bool address          = test_address_and_stack_frame( );
-	const bool relative_call    = test_relative_call_encoding( );
-	const bool pattern          = test_pattern_scanner( );
-	const bool hook             = test_hook_chain( );
-	const bool callsite         = test_call_site_patch( );
-	const bool callsite_chain   = test_call_site_chain( );
-	const bool hash             = test_known_hash( );
+	const bool address        = test_address_and_stack_frame( );
+	const bool relative_call  = test_relative_call_encoding( );
+	const bool pattern        = test_pattern_scanner( );
+	const bool hook           = test_hook_chain( );
+	const bool callsite       = test_call_site_patch( );
+	const bool callsite_chain = test_call_site_chain( );
+	const bool hash           = test_known_hash( );
+
 	const bool overlay_abi      = test_overlay_abi_contract( );
 	const bool metrics          = test_metrics( );
 	const bool overlay          = test_overlay_metrics( );

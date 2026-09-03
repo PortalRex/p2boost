@@ -15,6 +15,7 @@ namespace p2boost {
 		bool                       m_dxvk_approved{ };
 		std::string                m_dxvk_sha256;
 		std::string                m_game_root;
+		std::string                m_game;
 		std::vector< std::string > m_errors;
 	};
 
