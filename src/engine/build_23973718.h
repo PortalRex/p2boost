@@ -44,6 +44,10 @@ namespace p2boost::portal2 {
 		// private helper from ever being accepted as the selection function.
 		constexpr auto active_shadow_depth_list = "53 8B DC 83 EC 08 83 E4 F0 83 C4 04 55 8B 6B 04 89 6C 24 04 8B EC B8 88 11 00 00";
 
+		// Portal Stories Mel rebuilds the same function with a 0x1198-byte sort
+		// workspace instead of 0x1188; every other prologue byte is identical.
+		constexpr auto active_shadow_depth_list_psm = "53 8B DC 83 EC 08 83 E4 F0 83 C4 04 55 8B 6B 04 89 6C 24 04 8B EC B8 98 11 00 00";
+
 		// the selected-list loop resolves IShadowMgr before reading the retained
 		// FlashlightState_t. This xref gives the optimizer the public manager ABI
 		// without embedding the address of Portal 2's private global.

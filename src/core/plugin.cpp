@@ -89,14 +89,30 @@ namespace p2boost {
 			m_last_focused = game_is_foreground( );
 			m_metrics.set_focused( m_last_focused );
 
-			console_print( "[p2boost] loaded v%s; backend=%s fixes=%s\n",
-			               P2BOOST_VERSION,
+			console_print_color( console_color::green, "[p2boost] p2boost v%s loaded\n", P2BOOST_VERSION );
+			if( !m_verification.m_supported ) {
+				console_print_color( console_color::red, "[p2boost] ERROR: the running game build is not supported. no hooks were installed.\n" );
+				for( const auto& error : m_verification.m_errors )
+					console_print( "[p2boost]   - %s\n", error.c_str( ) );
+			} else if( !m_verification.m_errors.empty( ) ) {
+				console_print_color( console_color::yellow, "[p2boost] loaded with partial features:\n" );
+				for( const auto& error : m_verification.m_errors )
+					console_print( "[p2boost]   - %s\n", error.c_str( ) );
+			}
+
+			console_print( "[p2boost] features: frame_limiter=%s shadow_cache=%s flat_textures=%s display=%s viewport_patch=%s overlay=%s\n",
+			               m_frame_limiter.installed( ) ? "OK" : "OFF",
+			               m_shadow_cache.installed( ) ? "OK" : "OFF",
+			               m_flat_textures.available( ) ? "OK" : "OFF",
+			               m_display_adjustments.available( ) ? "OK" : "OFF",
+			               m_display_adjustments.viewport_commit_patched( ) ? "OK" : "OFF",
+			               m_overlay.available( ) ? "OK" : "OFF" );
+			console_print( "[p2boost] backend=%s fixes=%s\n",
 			               m_verification.m_dxvk_vulkan ? "DXVK/Vulkan" : "unsupported",
 			               m_enabled ? "enabled" : "disabled" );
-			for( const auto& error : m_verification.m_errors )
-				console_print( "[p2boost] %s\n", error.c_str( ) );
 			if( m_verification.m_dxvk_vulkan && !m_verification.m_dxvk_shipped )
-				console_print( "[p2boost] dxvk_d3d9.dll is an approved replacement build (%s); performance measurements use this exact binary\n",
+				console_print( "[p2boost] dxvk_d3d9.dll is %s (%s); performance measurements use this exact binary\n",
+				               m_verification.m_dxvk_approved ? "an approved replacement build" : "an unrecognized build",
 				               m_verification.m_dxvk_sha256.c_str( ) );
 			if( m_nvidia_profile.m_state == nvidia_profile_state_t::unavailable || m_nvidia_profile.m_state == nvidia_profile_state_t::failed )
 				console_print( "[p2boost] NVIDIA profile setup %s at %s (%d); no driver settings were changed\n",
@@ -306,7 +322,7 @@ namespace p2boost {
 
 		// print one machine-readable snapshot for support and automated tests.
 		sdk::PluginResult status_command( ) const {
-			console_print( "[p2boost] build=23973718 supported=%d dxvk_vulkan=%d dxvk_shipped=%d dxvk_hash=%s nvidia_profile=%s nvidia_detail=%s:%d enabled=%d "
+			console_print( "[p2boost] supported=%d dxvk_vulkan=%d dxvk_shipped=%d dxvk_hash=%s nvidia_profile=%s nvidia_detail=%s:%d enabled=%d "
 			               "limiter=%d shadow_cache=%d shadow_hits=%u shadow_culled=%u tracing=%d overlay=%d overlay_available=%d "
 			               "display_available=%d viewport_commit=%d gamma_passes=%llu viewport_passes=%llu intensity=%g demo_marker=%d "
 			               "flat_available=%d flat=%d flat_textures=%zu flat_ready=%zu flat_normal=%d flat_binds=%llu "
@@ -344,6 +360,42 @@ namespace p2boost {
 			               static_cast< bool >( Module{ L"sar.dll" } ),
 			               m_metrics.count( ),
 			               m_verification.m_game_root.c_str( ) );
+
+			console_print_color( m_verification.m_supported ? console_color::green : console_color::red,
+			                     "[p2boost] status: %s\n",
+			                     m_verification.m_supported ? "supported build" : "UNSUPPORTED BUILD" );
+			console_print( "[p2boost]   version       %s\n", P2BOOST_VERSION );
+			console_print( "[p2boost]   backend       %s (dxvk %s)\n",
+			               m_verification.m_dxvk_vulkan ? "DXVK/Vulkan" : "NOT ACTIVE",
+			               m_verification.m_dxvk_shipped    ? "shipped"
+			               : m_verification.m_dxvk_approved ? "approved replacement"
+			                                                : "unrecognized" );
+			console_print_color( m_enabled ? console_color::green : console_color::yellow,
+			                     "[p2boost]   fixes         %s\n", m_enabled ? "enabled" : "disabled" );
+			console_print( "[p2boost]   frame limiter %s\n",
+			               m_frame_limiter.installed( ) ? "OK" : "OFF" );
+			console_print( "[p2boost]   shadow cache  %s (%u hits, %u culled)\n",
+			               m_shadow_cache.installed( ) ? "OK" : "OFF",
+			               m_shadow_cache.hit_count( ),
+			               m_shadow_cache.culled_count( ) );
+			console_print( "[p2boost]   flat textures %s (%zu of %zu ready%s)\n",
+			               m_flat_textures.available( ) ? ( m_flat_textures.enabled( ) ? "on" : "off" ) : "OFF",
+			               m_flat_textures.ready_texture_count( ),
+			               m_flat_textures.texture_count( ),
+			               m_flat_textures.normal_ready( ) ? ", normal ready" : "" );
+			console_print( "[p2boost]   display       %s (gamma=%llu viewport=%llu intensity=%g)\n",
+			               m_display_adjustments.available( ) ? "OK" : "OFF",
+			               static_cast< unsigned long long >( m_display_adjustments.gamma_passes( ) ),
+			               static_cast< unsigned long long >( m_display_adjustments.viewport_passes( ) ),
+			               m_display_adjustments.intensity( ) );
+			console_print( "[p2boost]   viewport patch %s\n",
+			               m_display_adjustments.viewport_commit_patched( ) ? "OK" : "OFF" );
+			console_print( "[p2boost]   profiler      %s\n", m_overlay.available( ) ? "OK" : "OFF" );
+			if( !m_verification.m_errors.empty( ) ) {
+				console_print( "[p2boost]   issues:\n" );
+				for( const auto& error : m_verification.m_errors )
+					console_print( "[p2boost]     - %s\n", error.c_str( ) );
+			}
 
 			return sdk::Stop;
 		}

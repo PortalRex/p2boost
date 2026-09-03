@@ -72,7 +72,9 @@ namespace p2boost {
 		const Address active_call_xref = modules.m_client.find( portal2::signature::active_shadow_depth_call );
 		const Address active_call      = active_call_xref.add( portal2::xref::active_shadow_depth_call );
 		const Address active_target    = active_call.rel32( 1 );
-		const Address expected_target  = modules.m_client.find( portal2::signature::active_shadow_depth_list );
+		Address       expected_target  = modules.m_client.find( portal2::signature::active_shadow_depth_list );
+		if( !expected_target )
+			expected_target = modules.m_client.find( portal2::signature::active_shadow_depth_list_psm );
 		if( active_call.at< std::uint8_t >( ) != 0xe8 || active_target != expected_target )
 			return false;
 

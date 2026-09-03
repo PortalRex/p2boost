@@ -148,20 +148,11 @@ namespace {
 		static_assert( p2boost::sdk::ISurface::get_kerned_char_width_slot == 147 );
 		static_assert( p2boost::sdk::ISurface::draw_colored_text_slot == 160 );
 
-		bool surface_fingerprinted{ };
-		bool scheme_fingerprinted{ };
-		bool material_system_fingerprinted{ };
-		for( const auto& module : p2boost::supported_build_23973718( ) ) {
-			if( std::strcmp( module.m_name, "materialsystem.dll" ) == 0 )
-				material_system_fingerprinted = true;
-			if( std::strcmp( module.m_name, "vguimatsurface.dll" ) == 0 )
-				surface_fingerprinted = true;
-			if( std::strcmp( module.m_name, "vgui2.dll" ) == 0 )
-				scheme_fingerprinted = true;
-		}
-
-		return p2boost::supported_build_23973718( ).size( ) == 7 && material_system_fingerprinted && surface_fingerprinted &&
-		       scheme_fingerprinted;
+		// every production hook signature must remain defined, including the
+		// Portal Stories Mel variant of the active-shadow list.
+		return p2boost::portal2::signature::frame_complete &&
+		       p2boost::portal2::signature::frame_complete[ 0 ] && p2boost::portal2::signature::active_shadow_depth_list_psm &&
+		       p2boost::portal2::signature::active_shadow_depth_list_psm[ 0 ];
 	}
 
 	bool test_metrics( ) {
@@ -418,20 +409,17 @@ namespace {
 
 	bool test_dxvk_fingerprints( ) {
 		// the shipped build must stay fingerprinted with its exact hash.
-		bool shipped_dxvk{ };
-		for( const auto& module : p2boost::supported_build_23973718( ) ) {
-			if( std::strcmp( module.m_name, "dxvk_d3d9.dll" ) == 0 ) {
-				shipped_dxvk = true;
-				if( std::strlen( module.m_sha256 ) != 64 )
-					return false;
-			}
-		}
-		if( !shipped_dxvk )
+		const auto& shipped = p2boost::shipped_dxvk_sha256( );
+		if( shipped.empty( ) )
 			return false;
+		for( const char* hash : shipped ) {
+			if( !hash || std::strlen( hash ) != 64 )
+				return false;
+		}
 
 		// every approved replacement must be an exact 64-hex hash that differs
 		// from the shipped binary, so verification can never approximate.
-		const auto& replacements = p2boost::supported_dxvk_replacements_23973718( );
+		const auto& replacements = p2boost::supported_dxvk_replacements( );
 		if( replacements.empty( ) )
 			return false;
 		for( const char* replacement : replacements ) {
@@ -441,8 +429,8 @@ namespace {
 				if( !std::isxdigit( static_cast< unsigned char >( replacement[ index ] ) ) )
 					return false;
 			}
-			for( const auto& module : p2boost::supported_build_23973718( ) ) {
-				if( std::strcmp( module.m_name, "dxvk_d3d9.dll" ) == 0 && std::strcmp( replacement, module.m_sha256 ) == 0 )
+			for( const char* hash : shipped ) {
+				if( std::strcmp( replacement, hash ) == 0 )
 					return false;
 			}
 		}

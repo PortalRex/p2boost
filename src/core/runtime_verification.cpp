@@ -1,5 +1,7 @@
 #include "runtime_verification.h"
 
+#include "build_23973718.h"
+
 #include <Windows.h>
 #include <bcrypt.h>
 
@@ -47,22 +49,14 @@ namespace p2boost {
 
 	}
 
-	const std::array< module_fingerprint_t, 7 >& supported_build_23973718( ) {
-		// only modules that define hooked code, private overlay ABIs, or the
-		// required backend belong in the production fingerprint.
-		static const std::array< module_fingerprint_t, 7 > modules{ {
-		    { "engine.dll", "bin\\engine.dll", "5196eace78d5f2f47f8ce39a49b0efd15374a2b996b272642f0493ace42c24dc" },
-		    { "client.dll", "portal2\\bin\\client.dll", "2ff27c2878c258b2c16a0982e30b0d2f1bad9d213e42cc778dc2a2925c625137" },
-		    { "materialsystem.dll", "bin\\materialsystem.dll", "8b8bbdb77e72a23bef8e67f0b9800327338e125ba0fbfae68feb2dc864af4fbf" },
-		    { "vguimatsurface.dll", "bin\\vguimatsurface.dll", "2f1865aefc0eebe2e28289d827cbd737f6744e2ca2a28a830c78f4ab96d5eeb6" },
-		    { "vgui2.dll", "bin\\vgui2.dll", "d79a9a5dab2be278f7df93afcf864c509f0117b9c52b65bca984013d9614571e" },
-		    { "shaderapivk.dll", "bin\\shaderapivk.dll", "aaefa05d9c02049a0cca67a9181f71f5a7710fcc21474bd55c0e1deabba76e84" },
-		    { "dxvk_d3d9.dll", "bin\\dxvk_d3d9.dll", "7bf7c95d81ff33b951ff985037401ff5a792474f1e3b9c5d2f521affb92b9073" },
+	const std::array< const char*, 1 >& shipped_dxvk_sha256( ) {
+		static const std::array< const char*, 1 > hashes{ {
+		    "7bf7c95d81ff33b951ff985037401ff5a792474f1e3b9c5d2f521affb92b9073",
 		} };
-		return modules;
+		return hashes;
 	}
 
-	const std::array< const char*, 1 >& supported_dxvk_replacements_23973718( ) {
+	const std::array< const char*, 1 >& supported_dxvk_replacements( ) {
 		// DXVK 3.0.2 x86 build. its parallel command stream and lower per-draw
 		// translation cost directly reduce Portal 2's CPU-bound render path.
 		static const std::array< const char*, 1 > replacements{ {
@@ -150,51 +144,62 @@ namespace p2boost {
 		const std::wstring engine_path = modules.m_engine.path( );
 		const std::wstring suffix      = L"\\bin\\engine.dll";
 		if( engine_path.size( ) <= suffix.size( ) || lower( engine_path.substr( engine_path.size( ) - suffix.size( ) ) ) != suffix ) {
-			result.m_errors.emplace_back( "cannot derive the Portal 2 root from engine.dll" );
+			result.m_errors.emplace_back( "cannot derive the game root from engine.dll" );
 			return result;
 		}
 
 		const std::wstring root = engine_path.substr( 0, engine_path.size( ) - suffix.size( ) );
 		result.m_game_root      = narrow( root );
 
-		// reject any changed production dependency before hooks can be installed.
-		// bin\dxvk_d3d9.dll additionally accepts the approved replacement hashes.
-		for( const auto& module : supported_build_23973718( ) ) {
-			const std::wstring path = root + L"\\" + widen_ascii( module.m_relative_path );
-			try {
-				const std::string actual  = sha256_file( path );
-				const bool        is_dxvk = std::strcmp( module.m_name, "dxvk_d3d9.dll" ) == 0;
-
-				bool accepted = actual == module.m_sha256;
-				if( is_dxvk ) {
-					result.m_dxvk_sha256  = actual;
-					result.m_dxvk_shipped = accepted;
-					for( const char* replacement : supported_dxvk_replacements_23973718( ) ) {
-						if( actual == replacement ) {
-							accepted = true;
-							break;
-						}
-					}
-				}
-
-				if( !accepted )
-					result.m_errors.emplace_back( std::string( module.m_name ) + " SHA-256 mismatch: " + actual );
-			} catch( const std::exception& error ) {
-				result.m_errors.emplace_back( std::string( module.m_name ) + " verification failed: " + error.what( ) );
-			}
-		}
-
-		// private VMT hooks resolve methods from these mapped modules. hashing the
-		// on-disk files is insufficient if a different copy was loaded first.
+		// the game must map the shared engine modules from its own bin directory.
 		const std::wstring material_system = root + L"\\bin\\materialsystem.dll";
 		const std::wstring surface         = root + L"\\bin\\vguimatsurface.dll";
 		const std::wstring vgui            = root + L"\\bin\\vgui2.dll";
 		if( !is_loaded_from( modules.m_material_system, material_system ) )
-			result.m_errors.emplace_back( "materialsystem.dll was not loaded from the verified Portal 2 installation" );
+			result.m_errors.emplace_back( "materialsystem.dll was not loaded from the game installation" );
 		if( !is_loaded_from( modules.m_surface, surface ) )
-			result.m_errors.emplace_back( "vguimatsurface.dll was not loaded from the verified Portal 2 installation" );
+			result.m_errors.emplace_back( "vguimatsurface.dll was not loaded from the game installation" );
 		if( !is_loaded_from( modules.m_vgui, vgui ) )
-			result.m_errors.emplace_back( "vgui2.dll was not loaded from the verified Portal 2 installation" );
+			result.m_errors.emplace_back( "vgui2.dll was not loaded from the game installation" );
+
+		// the mod client ships from portal_stories\bin while the base game uses
+		// portal2\bin; the loaded copy must come from one of them.
+		const std::wstring client_vanilla = root + L"\\portal2\\bin\\client.dll";
+		const std::wstring client_mod     = root + L"\\portal_stories\\bin\\client.dll";
+		if( !is_loaded_from( modules.m_client, client_vanilla ) && !is_loaded_from( modules.m_client, client_mod ) )
+			result.m_errors.emplace_back( "client.dll was not loaded from the game installation" );
+
+		// the loaded bytes are the build fingerprint. every production hook site
+		// must resolve to one unique signature, so a changed build disables only
+		// the exact feature whose offsets moved instead of the whole plugin.
+		if( !modules.m_engine.find( portal2::signature::frame_complete ) )
+			result.m_errors.emplace_back( "frame limiter signature not found in engine.dll" );
+		if( !modules.m_shader_api.find( portal2::signature::flat_texture_device ) )
+			result.m_errors.emplace_back( "DXVK device signature not found in shaderapivk.dll" );
+		if( !modules.m_shader_api.find( portal2::signature::viewport_commit_skip ) )
+			result.m_errors.emplace_back( "viewport-commit signature not found in shaderapivk.dll" );
+		if( !modules.m_client.find( portal2::signature::shadow_manager ) ||
+		    !modules.m_client.find( portal2::signature::flashlight_models ) ||
+		    !modules.m_client.find( portal2::signature::active_shadow_depth_call ) ||
+		    !modules.m_client.find( portal2::signature::active_shadow_manager ) )
+			result.m_errors.emplace_back( "projected-shadow signature not found in client.dll" );
+		if( !modules.m_client.find( portal2::signature::active_shadow_depth_list ) &&
+		    !modules.m_client.find( portal2::signature::active_shadow_depth_list_psm ) )
+			result.m_errors.emplace_back( "active-shadow list signature not found in client.dll" );
+
+		// the dxvk hash only labels which binary the metrics describe. any dxvk
+		// that satisfies the shipped shaderapivk interface keeps working, so a
+		// Steam update to dxvk_d3d9.dll never invalidates the plugin.
+		try {
+			result.m_dxvk_sha256 = sha256_file( root + L"\\bin\\dxvk_d3d9.dll" );
+			for( const char* shipped : shipped_dxvk_sha256( ) )
+				result.m_dxvk_shipped = result.m_dxvk_shipped || result.m_dxvk_sha256 == shipped;
+			for( const char* replacement : supported_dxvk_replacements( ) )
+				result.m_dxvk_approved = result.m_dxvk_approved || result.m_dxvk_sha256 == replacement;
+			result.m_dxvk_approved = result.m_dxvk_approved || result.m_dxvk_shipped;
+		} catch( ... ) {
+			// the backend identity check below reports the real problem.
+		}
 
 		// filenames alone are insufficient; verify the loaded backend paths too.
 		const std::wstring shader_api = root + L"\\bin\\shaderapivk.dll";
@@ -202,7 +207,7 @@ namespace p2boost {
 		result.m_dxvk_vulkan          = is_loaded_from( modules.m_shader_api, shader_api ) &&
 		                       is_loaded_from( modules.m_dxvk_d3d9, dxvk ) && modules.m_vulkan;
 		if( !result.m_dxvk_vulkan )
-			result.m_errors.emplace_back( "Portal 2's shipped DXVK/Vulkan backend is not active; launch with -vulkan" );
+			result.m_errors.emplace_back( "the game's DXVK/Vulkan backend is not active; launch with -vulkan" );
 
 		result.m_supported = result.m_errors.empty( );
 		return result;

@@ -111,15 +111,13 @@ namespace p2boost {
 			return Module::containing( reinterpret_cast< const void* >( &current_module_path ) ).path( );
 		}
 
-		// derive Portal 2's executable from portal2/p2boost.dll in the install.
+		// derive the game's executable from p2boost.dll sitting in the game root.
 		std::wstring installed_application_path( ) {
 			std::wstring path = current_module_path( );
-			for( int index = 0; index < 2; ++index ) {
-				const size_t separator = path.find_last_of( L"\\/" );
-				if( separator == std::wstring::npos )
-					return { };
-				path.resize( separator );
-			}
+			const size_t separator = path.find_last_of( L"\\/" );
+			if( separator == std::wstring::npos )
+				return { };
+			path.resize( separator );
 
 			return path + L"\\portal2.exe";
 		}
