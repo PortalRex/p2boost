@@ -138,10 +138,10 @@ namespace p2boost {
 			m_frame_limiter.remove( );
 			m_commands.disconnect( );
 			m_interfaces.disconnect( );
-			m_device   = nullptr;
-			m_instance = nullptr;
-			m_queue_mode       = nullptr;
-			m_last_queue_mode  = -1;
+			m_device          = nullptr;
+			m_instance        = nullptr;
+			m_queue_mode      = nullptr;
+			m_last_queue_mode = -1;
 			console_print( "[p2boost] unloaded\n" );
 		}
 
