@@ -3,6 +3,7 @@
 #include "auto_update.h"
 #include "demo_provenance.h"
 #include "display_adjustments.h"
+#include "remote_view.h"
 #include "flat_textures.h"
 #include "frame_limiter.h"
 #include "frame_metrics.h"
@@ -86,6 +87,10 @@ namespace p2boost {
 				m_verification.m_errors.emplace_back( "display-adjustment hooks unavailable" );
 			if( m_verification.m_supported && !m_display_adjustments.install_viewport_commit_patch( m_modules ) )
 				m_verification.m_errors.emplace_back( "viewport-commit signature mismatch" );
+			if( m_verification.m_supported &&
+			    !m_remote_view.install( m_modules, m_interfaces, m_commands, m_device,
+			                            m_display_adjustments.available( ) ? &m_display_adjustments : nullptr ) )
+				m_verification.m_errors.emplace_back( "optional remote-view hooks unavailable" );
 
 			// enable performance fixes only when the complete supported set is ready.
 			m_enabled = can_enable( );
@@ -129,6 +134,8 @@ namespace p2boost {
 
 		void Unload( ) override {
 			// remove feature callbacks before releasing their shared engine bindings.
+			// remote view registers a reset listener on the display hooks.
+			m_remote_view.remove( );
 			m_display_adjustments.remove( );
 			m_flat_textures.remove( );
 			m_overlay.set_mode( profiler_mode_t::off, m_metrics );
@@ -190,6 +197,7 @@ namespace p2boost {
 		void LevelInit( const char* ) override {
 			m_demo_provenance.reset( );
 			m_shadow_cache.invalidate_all( );
+			m_remote_view.invalidate( );
 			enforce_render_threading( );
 		}
 
@@ -280,6 +288,10 @@ namespace p2boost {
 				return multicore_command( args );
 			if( _stricmp( command, "p2boost_shadow_cull" ) == 0 )
 				return shadow_cull_command( args );
+			if( _stricmp( command, "p2boost_remote_view_fps" ) == 0 )
+				return remote_view_fps_command( args );
+			if( _stricmp( command, "p2boost_remote_view_lowdetail" ) == 0 )
+				return remote_view_lowdetail_command( args );
 			if( _stricmp( command, "r_intensity" ) == 0 )
 				return intensity_command( args );
 
@@ -320,6 +332,8 @@ namespace p2boost {
 			    { "p2boost_update", "Update p2boost to the latest release. Optional 'force' reinstalls." },
 			    { "p2boost_multicore", "Force mat_queue_mode 2 (multicore rendering). Re-enforced on every level load." },
 			    { "p2boost_shadow_cull", "Exact main-view projected-shadow depth culling (0 default, 1 experimental)." },
+			    { "p2boost_remote_view_fps", "Render the +remote_view partner picture at most N times per second (0 = every frame)." },
+			    { "p2boost_remote_view_lowdetail", "Lower +remote_view partner-picture detail (0 off, 1 portals/sky/water, 2 also particles/LOD)." },
 			    { "r_intensity", "Scale final-frame RGB brightness (0.0 to 2.0, 1.0 neutral)." },
 			};
 
@@ -448,6 +462,13 @@ namespace p2boost {
 			               m_display_adjustments.intensity( ) );
 			console_print( "[p2boost]   viewport patch %s\n",
 			               m_display_adjustments.viewport_commit_patched( ) ? "OK" : "OFF" );
+			console_print( "[p2boost]   remote view   %s (fps cap %d%s, lowdetail %d, rendered %llu, reused %llu)\n",
+			               m_remote_view.available( ) ? "OK" : "OFF",
+			               m_remote_view.max_fps( ),
+			               m_remote_view.reuse_available( ) ? "" : " unavailable",
+			               m_remote_view.low_detail( ),
+			               static_cast< unsigned long long >( m_remote_view.rendered_count( ) ),
+			               static_cast< unsigned long long >( m_remote_view.reused_count( ) ) );
 			console_print( "[p2boost]   profiler      %s\n", m_overlay.available( ) ? "OK" : "OFF" );
 			if( !m_verification.m_errors.empty( ) ) {
 				console_print( "[p2boost]   issues:\n" );
@@ -607,6 +628,65 @@ namespace p2boost {
 			return sdk::Stop;
 		}
 
+		// parse one bounded integer argument, or report the current value.
+		static bool parse_bounded( const sdk::CCommand& args, int minimum, int maximum, int& value ) noexcept {
+			if( args.ArgC( ) != 2 )
+				return false;
+
+			char*      end{ };
+			const long parsed = std::strtol( args.Arg( 1 ), &end, 10 );
+			if( end == args.Arg( 1 ) || *end != '\0' || parsed < minimum || parsed > maximum )
+				return false;
+
+			value = static_cast< int >( parsed );
+			return true;
+		}
+
+		sdk::PluginResult remote_view_fps_command( const sdk::CCommand& args ) {
+			if( args.ArgC( ) == 1 ) {
+				console_print( "[p2boost] p2boost_remote_view_fps = %d\n", m_remote_view.max_fps( ) );
+				return sdk::Stop;
+			}
+
+			int fps{ };
+			if( !parse_bounded( args, 0, 1000, fps ) ) {
+				console_print( "usage: p2boost_remote_view_fps <0..1000> (0 = render every frame)\n" );
+				return sdk::Stop;
+			}
+			if( fps > 0 && !m_remote_view.reuse_available( ) ) {
+				console_print( "[p2boost] remote-view picture reuse is unavailable on this renderer/build\n" );
+				return sdk::Stop;
+			}
+
+			m_remote_view.set_max_fps( fps );
+			if( fps > 0 )
+				console_print( "[p2boost] +remote_view partner picture limited to %d renders per second\n", fps );
+			else
+				console_print( "[p2boost] +remote_view partner picture renders every frame\n" );
+			return sdk::Stop;
+		}
+
+		sdk::PluginResult remote_view_lowdetail_command( const sdk::CCommand& args ) {
+			if( args.ArgC( ) == 1 ) {
+				console_print( "[p2boost] p2boost_remote_view_lowdetail = %d\n", m_remote_view.low_detail( ) );
+				return sdk::Stop;
+			}
+
+			int level{ };
+			if( !parse_bounded( args, 0, 2, level ) ) {
+				console_print( "usage: p2boost_remote_view_lowdetail 0|1|2\n" );
+				return sdk::Stop;
+			}
+			if( level > 0 && !m_remote_view.available( ) ) {
+				console_print( "[p2boost] remote-view hooks are unavailable on this build\n" );
+				return sdk::Stop;
+			}
+
+			m_remote_view.set_low_detail( level );
+			console_print( "[p2boost] +remote_view partner picture detail level %d\n", level );
+			return sdk::Stop;
+		}
+
 		bool can_enable( ) const noexcept {
 			// partial activation would make A/B results impossible to interpret.
 			return m_verification.m_supported && m_verification.m_dxvk_vulkan && m_frame_limiter.installed( ) &&
@@ -636,6 +716,7 @@ namespace p2boost {
 		FrameLimiter            m_frame_limiter;
 		ProjectedShadowCache    m_shadow_cache;
 		DisplayAdjustments      m_display_adjustments;
+		RemoteView              m_remote_view;
 		AutoUpdate              m_auto_update;
 		DemoProvenance          m_demo_provenance;
 		FlatTextures            m_flat_textures;

@@ -53,6 +53,7 @@ add_library(p2boost_core STATIC
   src/features/flat_texture_hooks.cpp
   src/features/flat_textures.cpp
   src/features/display_adjustments.cpp
+  src/features/remote_view.cpp
   src/features/demo_provenance.cpp
   "${P2BOOST_GAMMA_SHADER_HEADER}"
   src/core/frame_limiter.cpp

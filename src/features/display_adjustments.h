@@ -82,6 +82,14 @@ namespace p2boost {
 			m_intensity.store( std::clamp( intensity, min_intensity, max_intensity ), std::memory_order_relaxed );
 		}
 
+		// another feature's default-pool resources must also be released before
+		// IDirect3DDevice9::Reset; this one hook already owns that boundary.
+		using reset_listener_fn_t = void ( * )( void* context );
+		void set_reset_listener( reset_listener_fn_t listener, void* context ) noexcept {
+			m_reset_context = context;
+			m_reset_listener.store( listener, std::memory_order_release );
+		}
+
 	private:
 		using present_fn_t      = HRESULT( __stdcall* )( IDirect3DDevice9*, const RECT*, const RECT*, HWND, const RGNDATA* );
 		using reset_fn_t        = HRESULT( __stdcall* )( IDirect3DDevice9*, D3DPRESENT_PARAMETERS* );
@@ -131,6 +139,8 @@ namespace p2boost {
 		std::atomic< float >       m_intensity{ 1.0f };
 		std::atomic_uint64_t       m_gamma_passes{ };
 		std::atomic_uint64_t       m_viewport_passes{ };
+		std::atomic< reset_listener_fn_t > m_reset_listener{ };
+		void*                              m_reset_context{ };
 	};
 
 }

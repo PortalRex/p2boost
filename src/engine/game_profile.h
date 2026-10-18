@@ -36,6 +36,11 @@ namespace p2boost::game {
 		const char* active_shadow_depth_call{ "8D 4D EC 51 8D 95 88 F6 FF FF 52 68 00 04 00 00 50 8B CE C7 45 EC 00 00 00 00 E8 ? ? ? ? 8B 15" };
 		const char* active_shadow_depth_list{ "53 8B DC 83 EC 08 83 E4 F0 83 C4 04 55 8B 6B 04 89 6C 24 04 8B EC B8 88 11 00 00" };
 		const char* active_shadow_manager{ "0F B7 3A 8B 0D ? ? ? ? 69 FF 14 01 00 00 03 7E 2C" };
+		// CViewRender::Render; its address is vtable slot 5 and RenderView follows.
+		const char* view_render{ "55 8B EC 81 EC 70 01 00 00 53 56 57 8B F9 8B 0D ? ? ? ? 89 7D F4 FF 15 ? ? ? ? 33 F6 88 45 FB 84 C0 74 1A 8B 0D ? ? ? ? 6A 04 56 68 ? ? ? ? 56 68" };
+		// GetSplitScreenViewPlayer(slot): local-slot bitmask, else the remote
+		// (+remote_view) player assigned to that slot.
+		const char* split_view_player{ "55 8B EC 8B 45 08 8B C8 83 E1 1F BA 01 00 00 00 D3 E2 8B C8 C1 F9 05 85 14 8D ? ? ? ? 74 0B 50 E8 ? ? ? ? 83 C4 04 5D C3 8B 04 85 ? ? ? ? 5D C3" };
 
 		std::ptrdiff_t xref_frame_complete{ 17 };
 		std::ptrdiff_t xref_flat_texture_device_global{ 17 };
@@ -44,6 +49,8 @@ namespace p2boost::game {
 		std::ptrdiff_t xref_active_shadow_depth_call{ 26 };
 		std::ptrdiff_t xref_active_shadow_manager_global{ 5 };
 		std::ptrdiff_t xref_engine_client_cmd_cbuf_add_text_operand{ 46 };
+		std::ptrdiff_t xref_split_view_local_mask{ 26 };
+		std::ptrdiff_t xref_split_view_remote_players{ 46 };
 
 		std::ptrdiff_t frame_accumulator{ 0x18 };
 		std::ptrdiff_t frame_target_local{ 8 };
@@ -65,6 +72,17 @@ namespace p2boost::game {
 
 		std::ptrdiff_t vmt_destroy_shadow{ 17 };
 		std::ptrdiff_t vmt_update_projected{ 24 };
+		std::ptrdiff_t vmt_view_render{ 5 };
+		std::ptrdiff_t vmt_render_view{ 6 };
+
+		// CViewRender keeps one CViewSetup per split-screen slot at this+4 with a
+		// 0x104 stride; x, y, width, and height are its first four even ints.
+		std::ptrdiff_t view_render_slots{ 4 };
+		std::ptrdiff_t view_render_slot_stride{ 0x104 };
+		std::ptrdiff_t view_x{ 0x00 };
+		std::ptrdiff_t view_y{ 0x08 };
+		std::ptrdiff_t view_width{ 0x10 };
+		std::ptrdiff_t view_height{ 0x18 };
 
 		std::ptrdiff_t surface_start_drawing_operand{ 127 };
 		std::ptrdiff_t surface_finish_drawing_operand{ 603 };

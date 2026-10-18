@@ -21,15 +21,40 @@ namespace p2boost::sdk {
 		}
 	};
 
+	// ICallQueue runs a CFunctor in render-thread order. the queue AddRefs the
+	// functor (slot 0), Releases the caller's reference (slot 1) before
+	// returning, and later invokes it through functor slot 3.
+	class ICallQueue final : public Interface {
+	public:
+		static constexpr std::size_t queue_functor_slot{ 0 };
+
+		void QueueFunctor( void* functor ) {
+			using function_t = void( __thiscall* )( void*, void* );
+			invoke< queue_functor_slot, function_t >( functor );
+		}
+	};
+
 	// IMatRenderContext owns material binding and a temporary reference count.
 	class IMatRenderContext final : public Interface {
 	public:
 		static constexpr std::size_t release_slot{ 1 };
 		static constexpr std::size_t bind_slot{ 9 };
+		// CMatQueuedRenderContext returns &m_CallQueueExternal (lea eax,[ecx+X];
+		// ret); the immediate context returns null (xor eax,eax; ret).
+		static constexpr std::size_t get_call_queue_slot{ 142 };
 
 		int Release( ) {
 			using function_t = int( __thiscall* )( void* );
 			return invoke< release_slot, function_t >( );
+		}
+
+		ICallQueue* GetCallQueue( ) {
+			using function_t = ICallQueue*(__thiscall*)( void* );
+			return invoke< get_call_queue_slot, function_t >( );
+		}
+
+		Address GetCallQueueAddress( ) const noexcept {
+			return method( get_call_queue_slot );
 		}
 
 		Address BindAddress( ) const noexcept {
