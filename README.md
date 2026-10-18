@@ -56,8 +56,13 @@ to your autoexec when you build from source.
 - Automatic NVIDIA application-profile setup for the Vulkan alt-tab black
   screen. AMD, Intel, and other adapters are detected and skipped quietly.
 
-No cvars are forced. There is no mandatory graphics reduction, dummy prewarming,
-demo or simulation change, replacement game DLL, or D3D9 proxy.
+One cvar is forced by default: `mat_queue_mode 2` (multicore rendering), which
+Portal 2's auto-detection resolves to single-threaded on modern CPUs and some
+maps reset through `logic_auto`. p2boost re-asserts it every frame;
+`p2boost_multicore 0` stops that. On one CPU-bound test scene it measured 150
+FPS at `mat_queue_mode 0` versus 260 FPS forced to 2. There is no mandatory
+graphics reduction, dummy prewarming, demo or simulation change, replacement
+game DLL, or D3D9 proxy.
 
 ## Verified performance changes
 
@@ -255,6 +260,8 @@ To remove the plugin:
   64-frame graph, one-second hitch count, and shadow-cache activity.
 - `p2boost_trace 0|1` records bounded frame and shadow-cache metrics.
 - `p2boost_dump_metrics` writes `p2boost_metrics.csv` in the game root.
+- `p2boost_multicore 0|1` stops or resumes forcing `mat_queue_mode 2`
+  (default `1`). Turning it off leaves `mat_queue_mode` at its current value.
 - `p2boost_shadow_cull 0|1` toggles the experimental exact projected-shadow
   depth culling described above. It defaults to `0`; with no argument it
   prints the current value.
