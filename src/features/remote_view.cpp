@@ -134,8 +134,6 @@ namespace p2boost {
 		m_local_slot_mask = local_mask.as< const std::uint32_t* >( );
 		m_remote_players  = remote.as< const std::uint32_t* >( );
 		m_viewport_scale  = commands.find_variable( "mat_viewportscale" );
-		for( detail_override_t& entry : m_overrides )
-			entry.m_variable = commands.find_variable( entry.m_name );
 
 		// picture reuse records and redraws the remote rect on the device, in
 		// render-thread order, through the material system's call queue.
@@ -164,7 +162,6 @@ namespace p2boost {
 	void RemoteView::remove( ) {
 		m_render_view.remove( );
 		m_max_fps.store( 0, std::memory_order_relaxed );
-		m_low_detail.store( 0, std::memory_order_relaxed );
 
 		// queued calls execute on the render thread; let every pending one
 		// finish before its code and the device resources go away.
@@ -182,19 +179,12 @@ namespace p2boost {
 		m_viewport_scale   = nullptr;
 		m_reuse_supported  = false;
 		m_picture_rect_valid = false;
-		for( detail_override_t& entry : m_overrides )
-			entry.m_variable = nullptr;
 		if( m_instance == this )
 			m_instance = nullptr;
 	}
 
 	void RemoteView::set_max_fps( int fps ) noexcept {
 		m_max_fps.store( std::clamp( fps, 0, 1000 ), std::memory_order_relaxed );
-		invalidate( );
-	}
-
-	void RemoteView::set_low_detail( int level ) noexcept {
-		m_low_detail.store( std::clamp( level, 0, 2 ), std::memory_order_relaxed );
 		invalidate( );
 	}
 
@@ -214,35 +204,6 @@ namespace p2boost {
 		if( ( m_local_slot_mask[ 0 ] & ( 1u << slot ) ) != 0 || !m_remote_players[ slot ] )
 			return -1;
 		return slot;
-	}
-
-	void RemoteView::apply_low_detail( int level ) noexcept {
-		for( detail_override_t& entry : m_overrides ) {
-			if( level < entry.m_level || !entry.m_variable )
-				continue;
-
-			con_var_t* target     = entry.m_variable->m_parent ? entry.m_variable->m_parent : entry.m_variable;
-			entry.m_saved_integer = target->m_integer;
-			entry.m_saved_float   = target->m_float;
-
-			// r_lod raises the forced LOD; every other entry only ever lowers its
-			// cvar, so a user who already chose less detail keeps that choice.
-			const bool raise = std::strcmp( entry.m_name, "r_lod" ) == 0;
-			const int  value = raise ? std::max( target->m_integer, entry.m_value ) : std::min( target->m_integer, entry.m_value );
-			target->m_integer = value;
-			target->m_float   = static_cast< float >( value );
-		}
-	}
-
-	void RemoteView::restore_low_detail( int level ) noexcept {
-		for( detail_override_t& entry : m_overrides ) {
-			if( level < entry.m_level || !entry.m_variable )
-				continue;
-
-			con_var_t* target = entry.m_variable->m_parent ? entry.m_variable->m_parent : entry.m_variable;
-			target->m_integer = entry.m_saved_integer;
-			target->m_float   = entry.m_saved_float;
-		}
 	}
 
 	bool RemoteView::queue_device_call( bool save, const RECT& rect ) {
@@ -277,9 +238,8 @@ namespace p2boost {
 		if( !original )
 			return;
 
-		const int fps   = instance->m_max_fps.load( std::memory_order_relaxed );
-		const int level = instance->m_low_detail.load( std::memory_order_relaxed );
-		if( ( fps <= 0 && level <= 0 ) || instance->remote_slot( self, view ) < 0 ) {
+		const int fps = instance->m_max_fps.load( std::memory_order_relaxed );
+		if( fps <= 0 || instance->remote_slot( self, view ) < 0 ) {
 			original( self, view, hud_view, clear_flags, what_to_draw );
 			return;
 		}
@@ -291,7 +251,7 @@ namespace p2boost {
 
 		// picture reuse copies whole back-buffer pixels, so it stays off while
 		// mat_viewportscale renders the slot smaller than its final rect.
-		const bool reusable = fps > 0 && instance->reuse_available( ) && rect.right > rect.left && rect.bottom > rect.top &&
+		const bool reusable = instance->reuse_available( ) && rect.right > rect.left && rect.bottom > rect.top &&
 		                      std::fabs( instance->m_viewport_scale->value_float( ) - 1.0f ) < 0.0001f;
 
 		LARGE_INTEGER now{ };
@@ -306,11 +266,7 @@ namespace p2boost {
 			return;
 		}
 
-		if( level > 0 )
-			instance->apply_low_detail( level );
 		original( self, view, hud_view, clear_flags, what_to_draw );
-		if( level > 0 )
-			instance->restore_low_detail( level );
 		instance->m_rendered.fetch_add( 1, std::memory_order_relaxed );
 
 		if( reusable && instance->queue_device_call( true, rect ) ) {

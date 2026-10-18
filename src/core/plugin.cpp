@@ -290,8 +290,6 @@ namespace p2boost {
 				return shadow_cull_command( args );
 			if( _stricmp( command, "p2boost_remote_view_fps" ) == 0 )
 				return remote_view_fps_command( args );
-			if( _stricmp( command, "p2boost_remote_view_lowdetail" ) == 0 )
-				return remote_view_lowdetail_command( args );
 			if( _stricmp( command, "r_intensity" ) == 0 )
 				return intensity_command( args );
 
@@ -333,7 +331,6 @@ namespace p2boost {
 			    { "p2boost_multicore", "Force mat_queue_mode 2 (multicore rendering). Re-enforced on every level load." },
 			    { "p2boost_shadow_cull", "Exact main-view projected-shadow depth culling (0 default, 1 experimental)." },
 			    { "p2boost_remote_view_fps", "Render the +remote_view partner picture at most N times per second (0 = every frame)." },
-			    { "p2boost_remote_view_lowdetail", "Lower +remote_view partner-picture detail (0 off, 1 portals/sky/water, 2 also particles/LOD)." },
 			    { "r_intensity", "Scale final-frame RGB brightness (0.0 to 2.0, 1.0 neutral)." },
 			};
 
@@ -462,11 +459,10 @@ namespace p2boost {
 			               m_display_adjustments.intensity( ) );
 			console_print( "[p2boost]   viewport patch %s\n",
 			               m_display_adjustments.viewport_commit_patched( ) ? "OK" : "OFF" );
-			console_print( "[p2boost]   remote view   %s (fps cap %d%s, lowdetail %d, rendered %llu, reused %llu)\n",
+			console_print( "[p2boost]   remote view   %s (fps cap %d%s, rendered %llu, reused %llu)\n",
 			               m_remote_view.available( ) ? "OK" : "OFF",
 			               m_remote_view.max_fps( ),
 			               m_remote_view.reuse_available( ) ? "" : " unavailable",
-			               m_remote_view.low_detail( ),
 			               static_cast< unsigned long long >( m_remote_view.rendered_count( ) ),
 			               static_cast< unsigned long long >( m_remote_view.reused_count( ) ) );
 			console_print( "[p2boost]   profiler      %s\n", m_overlay.available( ) ? "OK" : "OFF" );
@@ -663,27 +659,6 @@ namespace p2boost {
 				console_print( "[p2boost] +remote_view partner picture limited to %d renders per second\n", fps );
 			else
 				console_print( "[p2boost] +remote_view partner picture renders every frame\n" );
-			return sdk::Stop;
-		}
-
-		sdk::PluginResult remote_view_lowdetail_command( const sdk::CCommand& args ) {
-			if( args.ArgC( ) == 1 ) {
-				console_print( "[p2boost] p2boost_remote_view_lowdetail = %d\n", m_remote_view.low_detail( ) );
-				return sdk::Stop;
-			}
-
-			int level{ };
-			if( !parse_bounded( args, 0, 2, level ) ) {
-				console_print( "usage: p2boost_remote_view_lowdetail 0|1|2\n" );
-				return sdk::Stop;
-			}
-			if( level > 0 && !m_remote_view.available( ) ) {
-				console_print( "[p2boost] remote-view hooks are unavailable on this build\n" );
-				return sdk::Stop;
-			}
-
-			m_remote_view.set_low_detail( level );
-			console_print( "[p2boost] +remote_view partner picture detail level %d\n", level );
 			return sdk::Stop;
 		}
 

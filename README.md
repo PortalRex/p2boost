@@ -262,6 +262,14 @@ To remove the plugin:
 - `p2boost_dump_metrics` writes `p2boost_metrics.csv` in the game root.
 - `p2boost_multicore 0|1` stops or resumes forcing `mat_queue_mode 2`
   (default `1`). Turning it off leaves `mat_queue_mode` at its current value.
+- `p2boost_remote_view_fps <0..1000>` caps how often the co-op `+remote_view`
+  partner picture renders (default `0`, every frame). Holding remote view
+  makes Portal 2 render a complete second scene for the partner every frame;
+  with a cap the picture renders at most N times per second and the last one
+  is redrawn in between, while your own view still updates every frame. It
+  never affects local split-screen players and stays inactive while
+  `mat_viewportscale` is below 1. Measured in online co-op: 270 FPS with
+  remote view held, 400 FPS at `p2boost_remote_view_fps 60`.
 - `p2boost_shadow_cull 0|1` toggles the experimental exact projected-shadow
   depth culling described above. It defaults to `0`; with no argument it
   prints the current value.

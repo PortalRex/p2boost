@@ -17,14 +17,10 @@ namespace p2boost {
 	// a held +remote_view assigns the co-op partner to split-screen slot 1, and
 	// CViewRender::Render then runs a complete second RenderView for that slot
 	// every frame: visibility, render lists, portal recursion, shadow depth,
-	// and water for a picture only ss_pipscale of the screen wide. two opt-in,
-	// independent reductions apply to that remote slot only:
-	//   p2boost_remote_view_fps N        render it at most N times per second and
-	//                                    redraw the last picture in between
-	//   p2boost_remote_view_lowdetail L  render it with fewer portal recursions,
-	//                                    no 3D skybox or water reflection (L>=1)
-	//                                    and no particles, coarser LOD (L>=2)
-	// local split-screen players are never affected.
+	// and water for a picture only ss_pipscale of the screen wide. the opt-in
+	// p2boost_remote_view_fps N renders that remote slot at most N times per
+	// second and redraws the last picture in between. local split-screen
+	// players are never affected.
 	class RemoteView {
 	public:
 		~RemoteView( );
@@ -54,11 +50,6 @@ namespace p2boost {
 			return m_max_fps.load( std::memory_order_relaxed );
 		}
 
-		void set_low_detail( int level ) noexcept;
-		int  low_detail( ) const noexcept {
-			return m_low_detail.load( std::memory_order_relaxed );
-		}
-
 		// forget the last picture so the next remote frame renders for real.
 		void invalidate( ) noexcept {
 			m_picture_rect_valid = false;
@@ -76,15 +67,6 @@ namespace p2boost {
 		void run_device_call( bool save, const RECT& rect );
 
 	private:
-		struct detail_override_t {
-			const char* m_name;
-			int         m_level;
-			int         m_value;
-			con_var_t*  m_variable;
-			int         m_saved_integer;
-			float       m_saved_float;
-		};
-
 		using render_view_fn_t = void( __thiscall* )( void*, const void*, const void*, int, int );
 
 		static void __fastcall RenderView( void* self, void*, const void* view, const void* hud_view, int clear_flags, int what_to_draw );
@@ -92,8 +74,6 @@ namespace p2boost {
 
 		int  remote_slot( const void* self, const void* view ) const noexcept;
 		bool queue_device_call( bool save, const RECT& rect );
-		void apply_low_detail( int level ) noexcept;
-		void restore_low_detail( int level ) noexcept;
 		bool ensure_picture( IDirect3DDevice9* device, UINT width, UINT height, D3DFORMAT format );
 		bool draw_picture( IDirect3DDevice9* device, const RECT& rect );
 		void release_device_resources( ) noexcept;
@@ -110,22 +90,12 @@ namespace p2boost {
 		bool                  m_reuse_supported{ };
 
 		std::atomic_int m_max_fps{ };
-		std::atomic_int m_low_detail{ };
 
 		// main-thread picture schedule.
 		LARGE_INTEGER m_frequency{ };
 		LONGLONG      m_last_render{ };
 		RECT          m_picture_rect{ };
 		bool          m_picture_rect_valid{ };
-
-		detail_override_t m_overrides[ 6 ]{
-		    { "r_portal_stencil_depth", 1, 1 },
-		    { "r_3dsky", 1, 0 },
-		    { "r_WaterDrawReflection", 1, 0 },
-		    { "r_WaterDrawRefraction", 1, 0 },
-		    { "r_drawparticles", 2, 0 },
-		    { "r_lod", 2, 2 },
-		};
 
 		// render-thread resources; released before device Reset.
 		IDirect3DTexture9*    m_picture{ };
