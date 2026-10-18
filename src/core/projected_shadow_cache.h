@@ -25,6 +25,17 @@ namespace p2boost {
 		void invalidate( ) noexcept;
 		void set_enabled( bool enabled ) noexcept;
 
+		// exact depth culling tests only the main camera, but stencil portal,
+		// monitor, and reflection views reuse the main view's depth maps without
+		// a selection of their own. it therefore stays opt-in.
+		void set_exact_cull( bool enabled ) noexcept {
+			m_exact_cull.store( enabled, std::memory_order_relaxed );
+		}
+
+		bool exact_cull( ) const noexcept {
+			return m_exact_cull.load( std::memory_order_relaxed );
+		}
+
 		bool installed( ) const noexcept {
 			return m_update_projected.installed( ) && m_build_active_depth.installed( ) && m_frame_stage.installed( ) &&
 			       m_change_instance.installed( );
@@ -75,6 +86,7 @@ namespace p2boost {
 		build_active_depth_fn_t       m_original_build_active_depth{ };
 		sdk::IShadowMgr**             m_shadow_manager_parent{ };
 		std::atomic_bool              m_enabled{ };
+		std::atomic_bool              m_exact_cull{ };
 		std::atomic_uint              m_hits{ };
 		std::atomic_uint              m_depth_culls{ };
 	};

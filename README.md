@@ -35,10 +35,10 @@ to your autoexec when you build from source.
 - More consistent `fps_max` frame delivery without changing simulation, input,
   VSync, fullscreen, or refresh-rate behavior.
 - A client-update-scoped projected-shadow cache that skips duplicate
-  high-refresh rebuilds, plus exact per-view frustum rejection for projected
-  shadow maps that cannot contribute to the main, portal, split-screen, or
-  remote view. Model-instance transfers invalidate p2boost's receiver cache
-  after the supported engine performs Valve's model-shadow cleanup.
+  high-refresh rebuilds, plus opt-in exact frustum rejection for projected
+  shadow maps outside the main camera (`p2boost_shadow_cull`). Model-instance
+  transfers invalidate p2boost's receiver cache after the supported engine
+  performs Valve's model-shadow cleanup.
 - Working `mat_monitorgamma` and `mat_viewportscale` output on DXVK, including
   independent local split-screen viewports and remote-view composition. The same
   final-frame pass accepts Quake-style `r_intensity` brightness scaling (neutral
@@ -85,9 +85,13 @@ changes and one conservative projected-shadow selection correction:
   shadow-depth scene render that cannot affect a pixel. p2boost retains all of
   Portal 2's existing visibility, priority, split-screen, and shadow-limit
   decisions, then applies a separating-axis test to the two finite frusta. It
-  keeps uncertain, singular, and near-touching cases. This implementation was
-  added from static analysis at the user's request and is intentionally not
-  presented as benchmark-verified until an in-game A/B capture is supplied.
+  keeps uncertain, singular, and near-touching cases, and clears a culled
+  light's depth texture exactly as the stock selector does. This test is
+  **off by default** (`p2boost_shadow_cull 1` enables it): only the main view
+  (and each split-screen player's main view) builds a depth list.
+  `ViewDrawScene_PortalStencil`, monitor, and reflection views reuse the main
+  view's depth maps, so a light visible only through a portal can lose its
+  shadow map when the test is on. It is not benchmark-verified.
 
 The DXVK compatibility layer also restores two shipped display controls. A
 final gamma pass makes `mat_monitorgamma` functional, while the missing viewport
@@ -247,6 +251,9 @@ To remove the plugin:
   64-frame graph, one-second hitch count, and shadow-cache activity.
 - `p2boost_trace 0|1` records bounded frame and shadow-cache metrics.
 - `p2boost_dump_metrics` writes `p2boost_metrics.csv` in the game root.
+- `p2boost_shadow_cull 0|1` toggles the experimental exact projected-shadow
+  depth culling described above. It defaults to `0`; with no argument it
+  prints the current value.
 - `p2boost_update [force]` downloads the latest GitHub release in the
   background, verifies its SHA-256 against the published checksum, and swaps
   the installed `p2boost.dll` next to the game executable (the previous copy is

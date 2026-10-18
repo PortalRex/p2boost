@@ -181,7 +181,8 @@ namespace p2boost {
 		// preserve Portal 2's complete stock selection before removing only
 		// projected volumes proven disjoint from this exact rendered view.
 		const int selected = cache->m_original_build_active_depth( self, view, maximum, output, high_priority_count );
-		if( !cache->m_enabled.load( std::memory_order_relaxed ) || selected <= 0 || !output || !high_priority_count )
+		if( !cache->m_enabled.load( std::memory_order_relaxed ) || !cache->m_exact_cull.load( std::memory_order_relaxed ) ||
+		    selected <= 0 || !output || !high_priority_count )
 			return selected;
 
 		const client_view_t client_view{ view };
@@ -204,11 +205,11 @@ namespace p2boost {
 		for( int index = 0; index < selected; ++index ) {
 			const std::uint16_t              handle = output[ index ];
 			const client_shadow_entry_view_t entry  = manager.entry( handle );
-			if( !entry )
-				return selected;
 
+			// the list may already be partly compacted, so an unreadable entry is
+			// retained in place rather than abandoning the pass.
 			frustum::frustum_t projected{ };
-			if( frustum::projected_frustum( entry.world_to_shadow( ), projected ) &&
+			if( entry && frustum::projected_frustum( entry.world_to_shadow( ), projected ) &&
 			    !frustum::frusta_intersect( camera, projected ) ) {
 				// removed high-priority lights must also release the cache slot that
 				// Portal 2 reserved for them before this exact visibility test.
@@ -217,6 +218,9 @@ namespace p2boost {
 				if( state && state[ game::active( )->shadow_high_priority ] != 0 && retained_high_priority > 0 )
 					--retained_high_priority;
 
+				// match the stock selector's own cull: without this the light keeps
+				// last frame's depth slot, which this frame may hand to another light.
+				shadow_manager->SetFlashlightDepthTexture( entry.engine_handle( ), nullptr, 0 );
 				cache->m_depth_culls.fetch_add( 1, std::memory_order_relaxed );
 				continue;
 			}

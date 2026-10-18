@@ -278,6 +278,8 @@ namespace p2boost {
 				return update_command( args );
 			if( _stricmp( command, "p2boost_multicore" ) == 0 )
 				return multicore_command( args );
+			if( _stricmp( command, "p2boost_shadow_cull" ) == 0 )
+				return shadow_cull_command( args );
 			if( _stricmp( command, "r_intensity" ) == 0 )
 				return intensity_command( args );
 
@@ -317,6 +319,7 @@ namespace p2boost {
 			    { "p2boost_dump_metrics", "Write frame metrics to CSV." },
 			    { "p2boost_update", "Update p2boost to the latest release. Optional 'force' reinstalls." },
 			    { "p2boost_multicore", "Force mat_queue_mode 2 (multicore rendering). Re-enforced on every level load." },
+			    { "p2boost_shadow_cull", "Exact main-view projected-shadow depth culling (0 default, 1 experimental)." },
 			    { "r_intensity", "Scale final-frame RGB brightness (0.0 to 2.0, 1.0 neutral)." },
 			};
 
@@ -428,10 +431,11 @@ namespace p2boost {
 			                     "[p2boost]   fixes         %s\n", m_enabled ? "enabled" : "disabled" );
 			console_print( "[p2boost]   frame limiter %s\n",
 			               m_frame_limiter.installed( ) ? "OK" : "OFF" );
-			console_print( "[p2boost]   shadow cache  %s (%u hits, %u culled)\n",
+			console_print( "[p2boost]   shadow cache  %s (%u hits, %u culled, exact cull %s)\n",
 			               m_shadow_cache.installed( ) ? "OK" : "OFF",
 			               m_shadow_cache.hit_count( ),
-			               m_shadow_cache.culled_count( ) );
+			               m_shadow_cache.culled_count( ),
+			               m_shadow_cache.exact_cull( ) ? "on" : "off" );
 			console_print( "[p2boost]   flat textures %s (%zu of %zu ready%s)\n",
 			               m_flat_textures.available( ) ? ( m_flat_textures.enabled( ) ? "on" : "off" ) : "OFF",
 			               m_flat_textures.ready_texture_count( ),
@@ -580,6 +584,26 @@ namespace p2boost {
 			if( enabled )
 				enforce_render_threading( );
 			console_print( "[p2boost] multicore rendering %s\n", enabled ? "enabled" : "disabled" );
+			return sdk::Stop;
+		}
+
+		// opt into exact depth culling. stencil portal, monitor, and reflection
+		// views reuse the main view's depth maps, so a light visible only through
+		// one of them can lose its shadow map while this is on.
+		sdk::PluginResult shadow_cull_command( const sdk::CCommand& args ) {
+			bool enabled{ };
+			if( args.ArgC( ) == 1 ) {
+				console_print( "[p2boost] p2boost_shadow_cull = %d\n", m_shadow_cache.exact_cull( ) ? 1 : 0 );
+				return sdk::Stop;
+			}
+
+			if( !parse_toggle( args, enabled ) ) {
+				console_print( "usage: p2boost_shadow_cull 0|1\n" );
+				return sdk::Stop;
+			}
+
+			m_shadow_cache.set_exact_cull( enabled );
+			console_print( "[p2boost] exact shadow-depth culling %s\n", enabled ? "enabled (experimental)" : "disabled" );
 			return sdk::Stop;
 		}
 
