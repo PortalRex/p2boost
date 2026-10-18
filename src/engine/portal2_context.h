@@ -14,6 +14,7 @@ namespace p2boost {
 		void refresh( ) noexcept;
 
 		Module m_engine;
+		Module m_input_system;
 		Module m_client;
 		Module m_material_system;
 		Module m_surface;

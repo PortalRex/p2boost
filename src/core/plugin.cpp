@@ -4,6 +4,7 @@
 #include "demo_provenance.h"
 #include "display_adjustments.h"
 #include "remote_view.h"
+#include "flashlight_buckets.h"
 #include "flat_textures.h"
 #include "frame_limiter.h"
 #include "frame_metrics.h"
@@ -14,6 +15,7 @@
 #include "portal2_context.h"
 #include "runtime_verification.h"
 #include "sdk.h"
+#include "xinput_throttle.h"
 
 #include <Windows.h>
 
@@ -81,6 +83,10 @@ namespace p2boost {
 				m_verification.m_errors.emplace_back( "frame-limiter signature mismatch" );
 			if( m_verification.m_supported && !m_shadow_cache.install( m_modules, m_interfaces, &m_metrics ) )
 				m_verification.m_errors.emplace_back( "projected-shadow signature mismatch" );
+			if( m_verification.m_supported && !m_flashlight_buckets.install( m_modules ) )
+				m_verification.m_errors.emplace_back( "flashlight-bucket signature mismatch" );
+			if( m_verification.m_supported && !m_xinput_throttle.install( m_modules ) )
+				m_verification.m_errors.emplace_back( "inputsystem XInput signature mismatch" );
 			if( m_verification.m_supported && !m_flat_textures.install( m_modules, m_interfaces, m_device ) )
 				m_verification.m_errors.emplace_back( "optional flat-texture hooks unavailable" );
 			if( m_verification.m_supported && !m_display_adjustments.install( m_commands, m_device, &m_metrics ) )
@@ -110,9 +116,11 @@ namespace p2boost {
 					console_print( "[p2boost]   - %s\n", error.c_str( ) );
 			}
 
-			console_print( "[p2boost] features: frame_limiter=%s shadow_cache=%s flat_textures=%s display=%s viewport_patch=%s overlay=%s\n",
+			console_print( "[p2boost] features: frame_limiter=%s shadow_cache=%s flashlight_flush=%s xinput_throttle=%s flat_textures=%s display=%s viewport_patch=%s overlay=%s\n",
 			               m_frame_limiter.installed( ) ? "OK" : "OFF",
 			               m_shadow_cache.installed( ) ? "OK" : "OFF",
+			               m_flashlight_buckets.installed( ) ? "OK" : "OFF",
+			               m_xinput_throttle.installed( ) ? "OK" : "OFF",
 			               m_flat_textures.available( ) ? "OK" : "OFF",
 			               m_display_adjustments.available( ) ? "OK" : "OFF",
 			               m_display_adjustments.viewport_commit_patched( ) ? "OK" : "OFF",
@@ -142,6 +150,8 @@ namespace p2boost {
 			m_overlay.disconnect( );
 			m_demo_provenance.disconnect( );
 			m_shadow_cache.remove( );
+			m_flashlight_buckets.remove( );
+			m_xinput_throttle.remove( );
 			m_frame_limiter.remove( );
 			m_commands.disconnect( );
 			m_interfaces.disconnect( );
@@ -290,6 +300,10 @@ namespace p2boost {
 				return shadow_cull_command( args );
 			if( _stricmp( command, "p2boost_remote_view_fps" ) == 0 )
 				return remote_view_fps_command( args );
+			if( _stricmp( command, "p2boost_flashlight_flush" ) == 0 )
+				return flashlight_flush_command( args );
+			if( _stricmp( command, "p2boost_xinput_throttle" ) == 0 )
+				return xinput_throttle_command( args );
 			if( _stricmp( command, "r_intensity" ) == 0 )
 				return intensity_command( args );
 
@@ -331,6 +345,8 @@ namespace p2boost {
 			    { "p2boost_multicore", "Force mat_queue_mode 2 (multicore rendering). Re-enforced on every level load." },
 			    { "p2boost_shadow_cull", "Exact main-view projected-shadow depth culling (0 default, 1 experimental)." },
 			    { "p2boost_remote_view_fps", "Render the +remote_view partner picture at most N times per second (0 = every frame)." },
+			    { "p2boost_flashlight_flush", "Flush projected-texture surface buckets in O(used) instead of O(capacity) (1 default)." },
+			    { "p2boost_xinput_throttle", "Re-probe absent XInput controller slots once per second instead of every frame (1 default)." },
 			    { "r_intensity", "Scale final-frame RGB brightness (0.0 to 2.0, 1.0 neutral)." },
 			};
 
@@ -387,7 +403,7 @@ namespace p2boost {
 			               "limiter=%d shadow_cache=%d shadow_hits=%u shadow_culled=%u tracing=%d overlay=%d overlay_available=%d "
 			               "display_available=%d viewport_commit=%d gamma_passes=%llu viewport_passes=%llu intensity=%g demo_marker=%d "
 			               "flat_available=%d flat=%d flat_textures=%zu flat_ready=%zu flat_normal=%d flat_binds=%llu "
-			               "flat_uploads=%llu/%llu/%llu sar=%d samples=%zu mat_queue_mode=%d multicore=%d root=%s\n",
+			               "flat_uploads=%llu/%llu/%llu sar=%d samples=%zu mat_queue_mode=%d multicore=%d flashlight_flush=%d/%d xinput_throttle=%d/%d/%llu root=%s\n",
 			               m_verification.m_supported,
 			               m_verification.m_dxvk_vulkan,
 			               m_verification.m_dxvk_shipped,
@@ -422,6 +438,11 @@ namespace p2boost {
 			               m_metrics.count( ),
 			               queue,
 			               m_force_multicore ? 1 : 0,
+			               m_flashlight_buckets.installed( ),
+			               m_flashlight_buckets.enabled( ),
+			               m_xinput_throttle.installed( ),
+			               m_xinput_throttle.enabled( ),
+			               static_cast< unsigned long long >( m_xinput_throttle.skipped_count( ) ),
 			               m_verification.m_game_root.c_str( ) );
 
 			const std::string game_label = m_verification.m_game.empty( ) ? std::string{ } : std::string{ " (" } + m_verification.m_game + ")";
@@ -447,6 +468,11 @@ namespace p2boost {
 			               m_shadow_cache.hit_count( ),
 			               m_shadow_cache.culled_count( ),
 			               m_shadow_cache.exact_cull( ) ? "on" : "off" );
+			console_print( "[p2boost]   flashlight flush %s\n",
+			               m_flashlight_buckets.installed( ) ? ( m_flashlight_buckets.enabled( ) ? "on" : "off" ) : "OFF" );
+			console_print( "[p2boost]   xinput throttle %s (%llu absent-slot probes skipped)\n",
+			               m_xinput_throttle.installed( ) ? ( m_xinput_throttle.enabled( ) ? "on" : "off" ) : "OFF",
+			               static_cast< unsigned long long >( m_xinput_throttle.skipped_count( ) ) );
 			console_print( "[p2boost]   flat textures %s (%zu of %zu ready%s)\n",
 			               m_flat_textures.available( ) ? ( m_flat_textures.enabled( ) ? "on" : "off" ) : "OFF",
 			               m_flat_textures.ready_texture_count( ),
@@ -624,6 +650,44 @@ namespace p2boost {
 			return sdk::Stop;
 		}
 
+		// release only the used projected-texture surface elements per flush.
+		sdk::PluginResult flashlight_flush_command( const sdk::CCommand& args ) {
+			bool enabled{ };
+			if( args.ArgC( ) == 1 ) {
+				console_print( "[p2boost] p2boost_flashlight_flush = %d\n", m_flashlight_flush ? 1 : 0 );
+				return sdk::Stop;
+			}
+
+			if( !parse_toggle( args, enabled ) ) {
+				console_print( "usage: p2boost_flashlight_flush 0|1\n" );
+				return sdk::Stop;
+			}
+
+			m_flashlight_flush = enabled;
+			apply_enabled_state( );
+			console_print( "[p2boost] flashlight bucket flush %s\n", enabled ? "enabled" : "disabled" );
+			return sdk::Stop;
+		}
+
+		// re-probe absent controller slots once per second instead of every poll.
+		sdk::PluginResult xinput_throttle_command( const sdk::CCommand& args ) {
+			bool enabled{ };
+			if( args.ArgC( ) == 1 ) {
+				console_print( "[p2boost] p2boost_xinput_throttle = %d\n", m_xinput_throttle_requested ? 1 : 0 );
+				return sdk::Stop;
+			}
+
+			if( !parse_toggle( args, enabled ) ) {
+				console_print( "usage: p2boost_xinput_throttle 0|1\n" );
+				return sdk::Stop;
+			}
+
+			m_xinput_throttle_requested = enabled;
+			apply_enabled_state( );
+			console_print( "[p2boost] absent XInput slot throttling %s\n", enabled ? "enabled" : "disabled" );
+			return sdk::Stop;
+		}
+
 		// parse one bounded integer argument, or report the current value.
 		static bool parse_bounded( const sdk::CCommand& args, int minimum, int maximum, int& value ) noexcept {
 			if( args.ArgC( ) != 2 )
@@ -669,9 +733,12 @@ namespace p2boost {
 		}
 
 		void apply_enabled_state( ) noexcept {
-			// both performance fixes share one reversible master switch.
+			// the performance fixes share one reversible master switch; each newer
+			// fix also has its own toggle and stays on by default.
 			m_frame_limiter.set_enabled( m_enabled );
 			m_shadow_cache.set_enabled( m_enabled );
+			m_flashlight_buckets.set_enabled( m_enabled && m_flashlight_flush );
+			m_xinput_throttle.set_enabled( m_enabled && m_xinput_throttle_requested );
 			m_overlay.set_fixes_enabled( m_enabled );
 		}
 
@@ -690,6 +757,8 @@ namespace p2boost {
 		FrameMetrics            m_metrics;
 		FrameLimiter            m_frame_limiter;
 		ProjectedShadowCache    m_shadow_cache;
+		FlashlightBuckets       m_flashlight_buckets;
+		XInputThrottle          m_xinput_throttle;
 		DisplayAdjustments      m_display_adjustments;
 		RemoteView              m_remote_view;
 		AutoUpdate              m_auto_update;
@@ -701,6 +770,8 @@ namespace p2boost {
 		bool                    m_enabled{ };
 		bool                    m_last_focused{ };
 		bool                    m_force_multicore{ true };
+		bool                    m_flashlight_flush{ true };
+		bool                    m_xinput_throttle_requested{ true };
 		mutable con_var_t*      m_queue_mode{ };
 		mutable int             m_last_queue_mode{ -1 };
 	};

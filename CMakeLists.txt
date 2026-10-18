@@ -56,12 +56,14 @@ add_library(p2boost_core STATIC
   src/features/remote_view.cpp
   src/features/demo_provenance.cpp
   "${P2BOOST_GAMMA_SHADER_HEADER}"
+  src/core/flashlight_buckets.cpp
   src/core/frame_limiter.cpp
   src/core/frame_metrics.cpp
   src/core/projected_shadow_cache.cpp
   src/core/profiler_overlay.cpp
   src/core/runtime_verification.cpp
   src/core/auto_update.cpp
+  src/core/xinput_throttle.cpp
   src/engine/game_profile.cpp
   src/engine/portal2_context.cpp
   src/engine/portal_stories_mel.cpp

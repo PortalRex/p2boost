@@ -7,6 +7,7 @@ namespace p2boost {
 
 	void portal2_modules_t::refresh( ) noexcept {
 		m_engine          = Module{ L"engine.dll" };
+		m_input_system    = Module{ L"inputsystem.dll" };
 		m_client          = Module{ L"client.dll" };
 		m_material_system = Module{ L"materialsystem.dll" };
 		m_surface         = Module{ L"vguimatsurface.dll" };

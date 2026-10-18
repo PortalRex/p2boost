@@ -42,7 +42,17 @@ namespace p2boost::game {
 		// (+remote_view) player assigned to that slot.
 		const char* split_view_player{ "55 8B EC 8B 45 08 8B C8 83 E1 1F BA 01 00 00 00 D3 E2 8B C8 C1 F9 05 85 14 8D ? ? ? ? 74 0B 50 E8 ? ? ? ? 83 C4 04 5D C3 8B 04 85 ? ? ? ? 5D C3" };
 
+		// CShadowMgr::ClearAllFlashlightMaterialBuckets, matched in full. its two
+		// calls are the m_Elements multilist and m_UsedSortIDs RemoveAll.
+		const char* flashlight_bucket_flush{ "53 8B D9 80 BB B8 41 01 00 00 75 59 0F B7 83 9C 41 01 00 B9 FF FF 00 00 66 3B C1 74 48 8B 8B 90 41 01 00 56 57 0F B7 C0 8D 34 40 C1 E6 08 FF 84 31 8C 02 00 00 8D BC 31 40 02 00 00 8D 4F 30 E8 ? ? ? ? 8B CF E8 ? ? ? ? 8B 8B 90 41 01 00 0F B7 84 31 F2 02 00 00 BA FF FF 00 00 66 3B C2 75 C2 5F 5E 5B C3" };
+
+		// inputsystem PollXDevices: the indirect XInputGetState call for each slot.
+		const char* xinput_get_state_call{ "8B 47 2C 03 C0 8D 4C C7 0C 51 53 FF 15 ? ? ? ? 85 C0 0F 84" };
+
 		std::ptrdiff_t xref_frame_complete{ 17 };
+		std::ptrdiff_t xref_xinput_get_state_pointer{ 13 };
+		std::ptrdiff_t xref_flashlight_elements_remove_all{ 64 };
+		std::ptrdiff_t xref_flashlight_sort_ids_remove_all{ 71 };
 		std::ptrdiff_t xref_flat_texture_device_global{ 17 };
 		std::ptrdiff_t xref_shadow_manager_object{ 4 };
 		std::ptrdiff_t xref_flashlight_models_global{ 15 };
@@ -62,6 +72,15 @@ namespace p2boost::game {
 		std::ptrdiff_t shadow_world_to_shadow{ 0x0c };
 		std::ptrdiff_t shadow_high_priority{ 0x94 };
 		std::ptrdiff_t shadow_target_entity{ 0xa0 };
+
+		// engine CShadowMgr: m_FlashlightStates (16-byte aligned FlashlightInfo_t
+		// nodes) and m_bSinglePassFlashlightStateEnabled.
+		std::ptrdiff_t shadow_flashlight_states{ 0x14190 };
+		std::ptrdiff_t shadow_flashlight_head{ 0x1419c };
+		std::ptrdiff_t shadow_single_pass_flashlight{ 0x141b8 };
+		std::ptrdiff_t flashlight_state_size{ 0x300 };
+		std::ptrdiff_t flashlight_state_next{ 0x2f2 };
+		std::ptrdiff_t flashlight_material_buckets{ 0x240 };
 
 		std::ptrdiff_t view_fov{ 0x68 };
 		std::ptrdiff_t view_origin{ 0x70 };
