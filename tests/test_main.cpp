@@ -7,6 +7,7 @@
 #include "frame_metrics.h"
 #include "hook.h"
 #include "nvidia_profile.h"
+#include "occlusion_skip.h"
 #include "pattern.h"
 #include "game_profile.h"
 #include "projected_frustum.h"
@@ -677,6 +678,37 @@ namespace {
 		       !p2boost::xinput_probe_skippable( true, 200, 200 ) && !p2boost::xinput_probe_skippable( true, 300, 200 );
 	}
 
+	bool test_occlusion_skip( ) {
+		// engine.dll 0x10105b2b and client.dll 0x100e66ba in build 23973718.
+		constexpr std::uint8_t world_bytes[]{ 0xa1, 0x2c, 0xf0, 0x43, 0x10, 0x8b, 0x50, 0x24, 0x8b, 0x58, 0x2c,
+		                                      0x89, 0x55, 0xd8, 0x8b, 0x50, 0x3c, 0x8b, 0x40, 0x28, 0x48 };
+		constexpr std::uint8_t call_bytes[]{ 0x8b, 0x55, 0xfc, 0x52, 0x56, 0x50, 0x8b, 0xcf, 0xe8, 0xf9, 0xba,
+		                                     0xff, 0xff, 0x8b, 0x8d, 0xbc, 0x5f, 0xff, 0xff, 0x8b, 0x95 };
+
+		const p2boost::game::profile_t& game  = p2boost::game::portal2( );
+		const p2boost::Address          world = p2boost::pattern::find( p2boost::Address( world_bytes ), sizeof( world_bytes ),
+		                                                                p2boost::pattern::parse( game.world_occluder_count ) );
+		const p2boost::Address          call  = p2boost::pattern::find( p2boost::Address( call_bytes ), sizeof( call_bytes ),
+		                                                                p2boost::pattern::parse( game.occluded_renderables_call ) );
+		if( world.as< const std::uint8_t* >( ) != world_bytes || world.at< std::uintptr_t >( game.xref_world_brush_pointer ) != 0x1043f02cu )
+			return false;
+		const std::uintptr_t base   = reinterpret_cast< std::uintptr_t >( call_bytes );
+		const std::uintptr_t target = call.add( game.xref_occluded_renderables_call ).rel32( 1 ).as< std::uintptr_t >( ) - base + 0x100e66bau;
+		if( call.as< const std::uint8_t* >( ) != call_bytes || target != 0x100e21c0u )
+			return false;
+
+		// only a loaded world with zero occluders makes the pass redundant.
+		std::array< std::uint8_t, 0x40 > brush{ };
+		const int                        none = 0;
+		const int                        some = 3;
+		std::memcpy( brush.data( ) + game.world_occluder_count_offset, &none, sizeof( none ) );
+		if( !p2boost::occlusion_pass_redundant( brush.data( ), game.world_occluder_count_offset ) ||
+		    p2boost::occlusion_pass_redundant( nullptr, game.world_occluder_count_offset ) )
+			return false;
+		std::memcpy( brush.data( ) + game.world_occluder_count_offset, &some, sizeof( some ) );
+		return !p2boost::occlusion_pass_redundant( brush.data( ), game.world_occluder_count_offset );
+	}
+
 	bool test_flashlight_bucket_flush( ) {
 		if( !test_flashlight_bucket_signature( ) )
 			return false;
@@ -758,9 +790,10 @@ int main( ) {
 	const bool frustum          = test_projected_frustum_views( );
 	const bool flashlight_flush = test_flashlight_bucket_flush( );
 	const bool xinput_throttle  = test_xinput_throttle( );
+	const bool occlusion_skip   = test_occlusion_skip( );
 	std::printf( "address=%s rel32=%s pattern=%s hook_chain=%s callsite=%s callsite_chain=%s "
 	             "hash=%s overlay_abi=%s metrics=%s overlay=%s "
-	             "phase=%s qpc=%s flat_alpha=%s flat_color=%s gamma_curve=%s intensity=%s viewport_scale=%s degenerate_clamp=%s commit_patch=%s nvidia_vendor=%s dxvk_fp=%s frustum=%s flashlight_flush=%s xinput_throttle=%s\n",
+	             "phase=%s qpc=%s flat_alpha=%s flat_color=%s gamma_curve=%s intensity=%s viewport_scale=%s degenerate_clamp=%s commit_patch=%s nvidia_vendor=%s dxvk_fp=%s frustum=%s flashlight_flush=%s xinput_throttle=%s occlusion_skip=%s\n",
 	             address ? "ok" : "FAIL",
 	             relative_call ? "ok" : "FAIL",
 	             pattern ? "ok" : "FAIL",
@@ -784,9 +817,10 @@ int main( ) {
 	             dxvk_fp ? "ok" : "FAIL",
 	             frustum ? "ok" : "FAIL",
 	             flashlight_flush ? "ok" : "FAIL",
-	             xinput_throttle ? "ok" : "FAIL" );
+	             xinput_throttle ? "ok" : "FAIL",
+	             occlusion_skip ? "ok" : "FAIL" );
 	return address && relative_call && pattern && hook && callsite && callsite_chain && hash && overlay_abi && metrics && overlay && phase && qpc && flat_alpha && flat_color && gamma_curve &&
-	               intensity && viewport_scale && degenerate_clamp && commit_patch && nvidia_vendor && dxvk_fp && frustum && flashlight_flush && xinput_throttle
+	               intensity && viewport_scale && degenerate_clamp && commit_patch && nvidia_vendor && dxvk_fp && frustum && flashlight_flush && xinput_throttle && occlusion_skip
 	           ? 0
 	           : 1;
 }

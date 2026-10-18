@@ -10,6 +10,7 @@
 #include "frame_metrics.h"
 #include "game_window.h"
 #include "nvidia_profile.h"
+#include "occlusion_skip.h"
 #include "profiler_overlay.h"
 #include "projected_shadow_cache.h"
 #include "portal2_context.h"
@@ -87,6 +88,8 @@ namespace p2boost {
 				m_verification.m_errors.emplace_back( "flashlight-bucket signature mismatch" );
 			if( m_verification.m_supported && !m_xinput_throttle.install( m_modules ) )
 				m_verification.m_errors.emplace_back( "inputsystem XInput signature mismatch" );
+			if( m_verification.m_supported && !m_occlusion_skip.install( m_modules ) )
+				m_verification.m_errors.emplace_back( "occlusion-pass signature mismatch" );
 			if( m_verification.m_supported && !m_flat_textures.install( m_modules, m_interfaces, m_device ) )
 				m_verification.m_errors.emplace_back( "optional flat-texture hooks unavailable" );
 			if( m_verification.m_supported && !m_display_adjustments.install( m_commands, m_device, &m_metrics ) )
@@ -116,11 +119,12 @@ namespace p2boost {
 					console_print( "[p2boost]   - %s\n", error.c_str( ) );
 			}
 
-			console_print( "[p2boost] features: frame_limiter=%s shadow_cache=%s flashlight_flush=%s xinput_throttle=%s flat_textures=%s display=%s viewport_patch=%s overlay=%s\n",
+			console_print( "[p2boost] features: frame_limiter=%s shadow_cache=%s flashlight_flush=%s xinput_throttle=%s occlusion_skip=%s flat_textures=%s display=%s viewport_patch=%s overlay=%s\n",
 			               m_frame_limiter.installed( ) ? "OK" : "OFF",
 			               m_shadow_cache.installed( ) ? "OK" : "OFF",
 			               m_flashlight_buckets.installed( ) ? "OK" : "OFF",
 			               m_xinput_throttle.installed( ) ? "OK" : "OFF",
+			               m_occlusion_skip.installed( ) ? "OK" : "OFF",
 			               m_flat_textures.available( ) ? "OK" : "OFF",
 			               m_display_adjustments.available( ) ? "OK" : "OFF",
 			               m_display_adjustments.viewport_commit_patched( ) ? "OK" : "OFF",
@@ -152,6 +156,7 @@ namespace p2boost {
 			m_shadow_cache.remove( );
 			m_flashlight_buckets.remove( );
 			m_xinput_throttle.remove( );
+			m_occlusion_skip.remove( );
 			m_frame_limiter.remove( );
 			m_commands.disconnect( );
 			m_interfaces.disconnect( );
@@ -304,6 +309,8 @@ namespace p2boost {
 				return flashlight_flush_command( args );
 			if( _stricmp( command, "p2boost_xinput_throttle" ) == 0 )
 				return xinput_throttle_command( args );
+			if( _stricmp( command, "p2boost_occlusion_skip" ) == 0 )
+				return occlusion_skip_command( args );
 			if( _stricmp( command, "r_intensity" ) == 0 )
 				return intensity_command( args );
 
@@ -347,6 +354,7 @@ namespace p2boost {
 			    { "p2boost_remote_view_fps", "Render the +remote_view partner picture at most N times per second (0 = every frame)." },
 			    { "p2boost_flashlight_flush", "Flush projected-texture surface buckets in O(used) instead of O(capacity) (1 default)." },
 			    { "p2boost_xinput_throttle", "Re-probe absent XInput controller slots once per second instead of every frame (1 default)." },
+			    { "p2boost_occlusion_skip", "Skip the renderable occlusion pass on maps without occluders, where it never culls (1 default)." },
 			    { "r_intensity", "Scale final-frame RGB brightness (0.0 to 2.0, 1.0 neutral)." },
 			};
 
@@ -403,7 +411,7 @@ namespace p2boost {
 			               "limiter=%d shadow_cache=%d shadow_hits=%u shadow_culled=%u tracing=%d overlay=%d overlay_available=%d "
 			               "display_available=%d viewport_commit=%d gamma_passes=%llu viewport_passes=%llu intensity=%g demo_marker=%d "
 			               "flat_available=%d flat=%d flat_textures=%zu flat_ready=%zu flat_normal=%d flat_binds=%llu "
-			               "flat_uploads=%llu/%llu/%llu sar=%d samples=%zu mat_queue_mode=%d multicore=%d flashlight_flush=%d/%d xinput_throttle=%d/%d/%llu root=%s\n",
+			               "flat_uploads=%llu/%llu/%llu sar=%d samples=%zu mat_queue_mode=%d multicore=%d flashlight_flush=%d/%d xinput_throttle=%d/%d/%llu occlusion_skip=%d/%d/%llu root=%s\n",
 			               m_verification.m_supported,
 			               m_verification.m_dxvk_vulkan,
 			               m_verification.m_dxvk_shipped,
@@ -443,6 +451,9 @@ namespace p2boost {
 			               m_xinput_throttle.installed( ),
 			               m_xinput_throttle.enabled( ),
 			               static_cast< unsigned long long >( m_xinput_throttle.skipped_count( ) ),
+			               m_occlusion_skip.installed( ),
+			               m_occlusion_skip.enabled( ),
+			               static_cast< unsigned long long >( m_occlusion_skip.skipped_count( ) ),
 			               m_verification.m_game_root.c_str( ) );
 
 			const std::string game_label = m_verification.m_game.empty( ) ? std::string{ } : std::string{ " (" } + m_verification.m_game + ")";
@@ -473,6 +484,9 @@ namespace p2boost {
 			console_print( "[p2boost]   xinput throttle %s (%llu absent-slot probes skipped)\n",
 			               m_xinput_throttle.installed( ) ? ( m_xinput_throttle.enabled( ) ? "on" : "off" ) : "OFF",
 			               static_cast< unsigned long long >( m_xinput_throttle.skipped_count( ) ) );
+			console_print( "[p2boost]   occlusion skip %s (%llu passes skipped)\n",
+			               m_occlusion_skip.installed( ) ? ( m_occlusion_skip.enabled( ) ? "on" : "off" ) : "OFF",
+			               static_cast< unsigned long long >( m_occlusion_skip.skipped_count( ) ) );
 			console_print( "[p2boost]   flat textures %s (%zu of %zu ready%s)\n",
 			               m_flat_textures.available( ) ? ( m_flat_textures.enabled( ) ? "on" : "off" ) : "OFF",
 			               m_flat_textures.ready_texture_count( ),
@@ -688,6 +702,25 @@ namespace p2boost {
 			return sdk::Stop;
 		}
 
+		// skip the renderable occlusion pass while the world has no occluders.
+		sdk::PluginResult occlusion_skip_command( const sdk::CCommand& args ) {
+			bool enabled{ };
+			if( args.ArgC( ) == 1 ) {
+				console_print( "[p2boost] p2boost_occlusion_skip = %d\n", m_occlusion_skip_requested ? 1 : 0 );
+				return sdk::Stop;
+			}
+
+			if( !parse_toggle( args, enabled ) ) {
+				console_print( "usage: p2boost_occlusion_skip 0|1\n" );
+				return sdk::Stop;
+			}
+
+			m_occlusion_skip_requested = enabled;
+			apply_enabled_state( );
+			console_print( "[p2boost] occlusion pass skipping %s\n", enabled ? "enabled" : "disabled" );
+			return sdk::Stop;
+		}
+
 		// parse one bounded integer argument, or report the current value.
 		static bool parse_bounded( const sdk::CCommand& args, int minimum, int maximum, int& value ) noexcept {
 			if( args.ArgC( ) != 2 )
@@ -739,6 +772,7 @@ namespace p2boost {
 			m_shadow_cache.set_enabled( m_enabled );
 			m_flashlight_buckets.set_enabled( m_enabled && m_flashlight_flush );
 			m_xinput_throttle.set_enabled( m_enabled && m_xinput_throttle_requested );
+			m_occlusion_skip.set_enabled( m_enabled && m_occlusion_skip_requested );
 			m_overlay.set_fixes_enabled( m_enabled );
 		}
 
@@ -759,6 +793,7 @@ namespace p2boost {
 		ProjectedShadowCache    m_shadow_cache;
 		FlashlightBuckets       m_flashlight_buckets;
 		XInputThrottle          m_xinput_throttle;
+		OcclusionSkip           m_occlusion_skip;
 		DisplayAdjustments      m_display_adjustments;
 		RemoteView              m_remote_view;
 		AutoUpdate              m_auto_update;
@@ -772,6 +807,7 @@ namespace p2boost {
 		bool                    m_force_multicore{ true };
 		bool                    m_flashlight_flush{ true };
 		bool                    m_xinput_throttle_requested{ true };
+		bool                    m_occlusion_skip_requested{ true };
 		mutable con_var_t*      m_queue_mode{ };
 		mutable int             m_last_queue_mode{ -1 };
 	};

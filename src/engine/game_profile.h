@@ -49,7 +49,17 @@ namespace p2boost::game {
 		// inputsystem PollXDevices: the indirect XInputGetState call for each slot.
 		const char* xinput_get_state_call{ "8B 47 2C 03 C0 8D 4C C7 0C 51 53 FF 15 ? ? ? ? 85 C0 0F 84" };
 
+		// engine RecomputeOccluderEdgeList loading host_state.worldbrush and its
+		// numoccluders, and the client's ExtractOccludedRenderables with its sole
+		// call inside BuildRenderablesList.
+		const char* world_occluder_count{ "A1 ? ? ? ? 8B 50 24 8B 58 2C 89 55 D8 8B 50 3C 8B 40 28 48" };
+		const char* occluded_renderables_call{ "8B 55 FC 52 56 50 8B CF E8 ? ? ? ? 8B 8D ? ? ? ? 8B 95" };
+		const char* occluded_renderables{ "55 8B EC 83 EC 08 F6 05 ? ? ? ? 01 75 16 83 0D ? ? ? ? 01 68 ? ? ? ? B9 ? ? ? ? E8 ? ? ? ? 8B 0D ? ? ? ? 33 C0 39 41 30 75 09 8B 45 08 8B E5 5D C2 0C 00" };
+
 		std::ptrdiff_t xref_frame_complete{ 17 };
+		std::ptrdiff_t xref_world_brush_pointer{ 1 };
+		std::ptrdiff_t xref_occluded_renderables_call{ 8 };
+		std::ptrdiff_t world_occluder_count_offset{ 0x28 };
 		std::ptrdiff_t xref_xinput_get_state_pointer{ 13 };
 		std::ptrdiff_t xref_flashlight_elements_remove_all{ 64 };
 		std::ptrdiff_t xref_flashlight_sort_ids_remove_all{ 71 };

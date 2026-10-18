@@ -255,6 +255,9 @@ try {
 		}
 	}
 
+	# counters after the rounds prove each variant's patch actually ran.
+	(Invoke-Game @('p2boost_status')).Trim() | Set-Content -LiteralPath (Join-Path $output 'p2boost-status-after.txt')
+
 	if($ProfileSeconds) {
 		$profiler = Join-Path $repo 'research\scripts\capture-cpu-profile.ps1'
 		foreach($entry in $variants) {

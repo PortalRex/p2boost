@@ -58,6 +58,7 @@ add_library(p2boost_core STATIC
   "${P2BOOST_GAMMA_SHADER_HEADER}"
   src/core/flashlight_buckets.cpp
   src/core/frame_limiter.cpp
+  src/core/occlusion_skip.cpp
   src/core/frame_metrics.cpp
   src/core/projected_shadow_cache.cpp
   src/core/profiler_overlay.cpp
