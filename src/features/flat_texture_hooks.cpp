@@ -573,6 +573,14 @@ namespace p2boost {
 		if( !original )
 			return;
 
+		// a disabled mode never substitutes a sampler, so the render workers must not
+		// pay for string classification on every material bind.
+		if( !instance->enabled( ) ) {
+			clear_material_pass( );
+			original( context, material, proxy_data );
+			return;
+		}
+
 		// preserve the outer pass when the material system performs a nested Bind.
 		const bool          previous_excluded    = g_material_excluded;
 		const std::uint32_t previous_flat_mask   = g_flat_sampler_mask;
