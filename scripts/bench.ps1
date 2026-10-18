@@ -35,7 +35,11 @@ if(-not (Test-Path -LiteralPath $presentMon)) {
 if(-not $OutputDirectory) {
 	$OutputDirectory = Join-Path $repo ('artifacts\bench\' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
 }
-$output = [IO.Path]::GetFullPath($OutputDirectory)
+$output = if([IO.Path]::IsPathRooted($OutputDirectory)) {
+	[IO.Path]::GetFullPath($OutputDirectory)
+} else {
+	[IO.Path]::GetFullPath((Join-Path $repo $OutputDirectory))
+}
 New-Item -ItemType Directory -Force $output | Out-Null
 
 $variants = foreach($spec in $Variant) {
@@ -114,6 +118,13 @@ function Measure-Capture([string]$Path) {
 	$rows = @(Import-Csv -LiteralPath $Path)
 	# PresentMon cannot time the first present it observes on a swap chain.
 	$rows = @($rows | Group-Object SwapChainAddress | ForEach-Object { $_.Group | Select-Object -Skip 1 })
+	# Tearing down the trace session stalls the game for up to ~120 ms about two
+	# seconds before PresentMon exits, so the capture runs longer than measured
+	# and only the first $Seconds of frames count.
+	if($rows.Count) {
+		$end = [double]$rows[0].CPUStartQPC + $Seconds * [Diagnostics.Stopwatch]::Frequency
+		$rows = @($rows | Where-Object { [double]$_.CPUStartQPC -lt $end })
+	}
 	# --v2_metrics names the present-to-present interval FrameTime.
 	$frames = @($rows | ForEach-Object { [double]$_.FrameTime } | Where-Object { $_ -gt 0 })
 	if($frames.Count -lt 100) {
@@ -150,6 +161,8 @@ function Get-Interval([double[]]$Values) {
 	[pscustomobject]@{ Mean = $mean; HalfWidth = $quantile * [Math]::Sqrt($variance / $count) }
 }
 
+# extra recording discarded by Measure-Capture; see the teardown note there.
+$captureTail = 3
 $pluginTarget = Join-Path $GameRoot 'p2boost.dll'
 $pluginBackup = Join-Path $output 'p2boost.installed.dll'
 $swappedPlugin = $false
@@ -227,7 +240,7 @@ try {
 			# turn that into a terminating error if it were invoked directly.
 			$recorder = Start-Process -FilePath $presentMon -WindowStyle Hidden -Wait -PassThru -ArgumentList @(
 				'--process_id', $game.Id, '--output_file', "`"$capture`"", '--v2_metrics', '--qpc_time',
-				'--stop_existing_session', '--timed', $Seconds, '--terminate_after_timed', '--no_console_stats')
+				'--stop_existing_session', '--timed', ($Seconds + $captureTail), '--terminate_after_timed', '--no_console_stats')
 			if($recorder.ExitCode -ne 0) {
 				throw "PresentMon exited with $($recorder.ExitCode)"
 			}
