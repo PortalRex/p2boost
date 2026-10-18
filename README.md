@@ -68,11 +68,15 @@ changes and one conservative projected-shadow selection correction:
   discarding it every frame. It still resets phase after real renderer work or
   a hitch and continues to respect `fps_max`, VSync, fullscreen, and refresh
   settings.
-- The projected-shadow cache skips byte-identical receiver-projection rebuilds
-  only within one completed client-network generation. It keeps the engine's
-  dirty-list cleanup, shadow-depth rendering, lighting, and all visual settings.
-  A full vanilla rebuild follows every completed entity update, entity, map,
-  focus, plugin, and A/B state transition. This uses `VClient016` rather than a
+- The projected-shadow cache skips byte-identical receiver-projection rebuilds.
+  It keeps the engine's dirty-list cleanup, shadow-depth rendering, lighting,
+  and all visual settings. Lights projected through the client leaf system stay
+  cached until the light is destroyed or its record changes, or a map, focus,
+  model-transfer, plugin, or A/B transition occurs. The leaf system already
+  moves receivers between lit leaves whenever their bounds change. Lights bound
+  to a target entity read that entity's live child hierarchy, so a full vanilla
+  rebuild still follows every completed entity update for them. The engine's
+  leafless flashlight mode bypasses the cache entirely. This uses `VClient016` rather than a
   listen-server callback, so host and remote Orange receive the same lifetime
   boundary. The supported engine already calls
   `IShadowMgr::RemoveAllShadowsFromModel` inside `ChangeInstance`, as prescribed

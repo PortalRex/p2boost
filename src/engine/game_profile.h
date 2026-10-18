@@ -54,6 +54,7 @@ namespace p2boost::game {
 		std::ptrdiff_t shadow_engine_handle{ 0x04 };
 		std::ptrdiff_t shadow_world_to_shadow{ 0x0c };
 		std::ptrdiff_t shadow_high_priority{ 0x94 };
+		std::ptrdiff_t shadow_target_entity{ 0xa0 };
 
 		std::ptrdiff_t view_fov{ 0x68 };
 		std::ptrdiff_t view_origin{ 0x70 };
@@ -62,6 +63,7 @@ namespace p2boost::game {
 		std::ptrdiff_t view_far_z{ 0x8c };
 		std::ptrdiff_t view_aspect_ratio{ 0x98 };
 
+		std::ptrdiff_t vmt_destroy_shadow{ 17 };
 		std::ptrdiff_t vmt_update_projected{ 24 };
 
 		std::ptrdiff_t surface_start_drawing_operand{ 127 };

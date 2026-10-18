@@ -50,7 +50,9 @@ namespace p2boost {
 		const Address                      manager      = manager_xref.at< Address >( game::active( )->xref_shadow_manager_object );
 		const client_shadow_manager_view_t manager_view{ manager.as< void* >( ) };
 		void**                             update_projected_slot = manager_view.update_projected_slot( );
-		if( !manager_view || !update_projected_slot )
+		void**                             destroy_shadow_slot   = manager_view.destroy_shadow_slot( );
+		if( !manager_view || !update_projected_slot || !destroy_shadow_slot ||
+		    !modules.m_client.contains( *destroy_shadow_slot ) )
 			return false;
 
 		// method 24 is CClientShadowMgr::UpdateProjectedTexture. its second direct
@@ -94,6 +96,12 @@ namespace p2boost {
 			remove( );
 			return false;
 		}
+		// slot 17 is the only path that frees a client shadow: the deferred
+		// destroy queue drains back through this same vtable entry.
+		if( !m_destroy_shadow.install( destroy_shadow_slot, reinterpret_cast< void* >( &DestroyShadow ) ) ) {
+			remove( );
+			return false;
+		}
 		if( !m_update_projected.install( update_projected_slot, reinterpret_cast< void* >( &UpdateProjected ) ) ) {
 			remove( );
 			return false;
@@ -114,8 +122,9 @@ namespace p2boost {
 		m_frame_stage.remove( );
 		m_build_active_depth.remove( );
 		m_update_projected.remove( );
+		m_destroy_shadow.remove( );
 		m_change_instance.remove( );
-		invalidate( );
+		invalidate_all( );
 		m_metrics                       = nullptr;
 		m_flashlight_models_cvar_parent = nullptr;
 		m_remove_dirty                  = nullptr;
@@ -146,8 +155,30 @@ namespace p2boost {
 		// engine shadows before it returns success. The model move also changes
 		// hidden client receiver ownership that is not part of ClientShadow_t, so
 		// no p2boost cache entry may survive it.
-		cache->invalidate( );
+		cache->invalidate_all( );
 		return true;
+	}
+
+	void __fastcall ProjectedShadowCache::DestroyShadow( void* self, void*, unsigned int handle ) {
+		ProjectedShadowCache* cache = m_instance;
+		if( !cache )
+			return;
+
+		auto original = cache->m_destroy_shadow.previous< destroy_shadow_fn_t >( );
+
+		// forget the handle before the slot can be recycled. a recreated light
+		// starts with no leaf projection even if its record bytes match.
+		{
+			const std::lock_guard lock{ cache->m_state_mutex };
+			const auto            index = static_cast< std::uint16_t >( handle & 0xffffu );
+			const auto            state = cache->find_state( index );
+			if( state != cache->m_states.end( ) )
+				cache->m_states.erase( state );
+			++cache->m_epoch;
+		}
+
+		if( original )
+			original( self, handle );
 	}
 
 	void __fastcall ProjectedShadowCache::FrameStageNotify( void* self, void*, int stage ) {
@@ -243,15 +274,22 @@ namespace p2boost {
 	void ProjectedShadowCache::invalidate( ) noexcept {
 		// A generation prevents a rebuild finishing during invalidation from
 		// publishing receiver state that belongs to the previous scene lifetime.
+		// generation-scoped entries now mismatch; leaf-projected ones survive.
+		const std::lock_guard lock{ m_state_mutex };
+		++m_generation;
+	}
+
+	void ProjectedShadowCache::invalidate_all( ) noexcept {
 		const std::lock_guard lock{ m_state_mutex };
 		m_states.clear( );
 		++m_generation;
+		++m_epoch;
 	}
 
 	void ProjectedShadowCache::set_enabled( bool enabled ) noexcept {
 		// cached state must not cross a patched/unpatched A/B transition.
 		if( m_enabled.exchange( enabled, std::memory_order_relaxed ) != enabled )
-			invalidate( );
+			invalidate_all( );
 	}
 
 	void __fastcall ProjectedShadowCache::UpdateProjected( void* self, void*, unsigned int handle, bool force ) {
@@ -279,11 +317,20 @@ namespace p2boost {
 			return;
 		}
 
+		// a projection built in the engine's leafless flashlight mode carries no
+		// receivers, so neither reuse it nor record it.
+		sdk::IShadowMgr* shadow_manager = cache->m_shadow_manager_parent ? *cache->m_shadow_manager_parent : nullptr;
+		if( !shadow_manager || shadow_manager->LeaflessFlashlightMode( ) ) {
+			original( self, handle, force );
+			return;
+		}
+
 		// read the reversed `r_flashlightmodels` ConVar value used by this path.
 		const int       models_value = flashlight_models_value( cache->m_flashlight_models_cvar_parent );
 		const bool      collecting   = cache->m_metrics && cache->m_metrics->collecting( );
 		const Stopwatch timer{ collecting };
 		std::uint64_t   generation{ };
+		std::uint64_t   epoch{ };
 
 		{
 			// invalidation and a cache hit must be one transaction. otherwise an
@@ -291,6 +338,7 @@ namespace p2boost {
 			// before the engine receiver rebuild is skipped.
 			const std::lock_guard lock{ cache->m_state_mutex };
 			generation = cache->m_generation;
+			epoch      = cache->m_epoch;
 
 			auto prior = cache->find_state( index );
 
@@ -298,10 +346,12 @@ namespace p2boost {
 			const bool same_models = known_state && prior->m_flashlight_models_value == models_value;
 			const bool same_entry  = known_state && std::memcmp( prior->m_entry.data( ), entry.bytes( ), prior->m_entry.size( ) ) == 0;
 
-			// BSP/client-leaf receiver membership is not stored in ClientShadow_t.
-			// limiting reuse to one simulation generation keeps that hidden state
-			// stable while still removing duplicate rebuilds at high render rates.
-			if( cache->m_enabled.load( std::memory_order_relaxed ) && same_models && same_entry ) {
+			// a leaf-projected light hands its leaves to the client leaf system,
+			// which re-adds the light to every renderable whose bounds move into
+			// them, so its result outlives the update. a target-entity light
+			// walks that entity's live children instead and stays update-scoped.
+			const bool current = known_state && ( prior->m_persistent || prior->m_generation == generation );
+			if( cache->m_enabled.load( std::memory_order_relaxed ) && current && same_models && same_entry ) {
 				cache->m_remove_dirty( self, handle );
 				cache->m_hits.fetch_add( 1, std::memory_order_relaxed );
 				if( collecting )
@@ -316,13 +366,14 @@ namespace p2boost {
 			cache->m_metrics->record_shadow_update( timer.elapsed_ms( ), false );
 
 		// the original call may run engine callbacks. re-resolve the entry and
-		// reject the result if any callback advanced the scene generation.
+		// reject the result if any callback ended the lifetime it was built in.
 		const std::lock_guard lock{ cache->m_state_mutex };
-		if( cache->m_generation != generation )
-			return;
-
 		entry = manager.entry( index );
 		if( !entry )
+			return;
+
+		const bool persistent = !entry.has_target_entity( );
+		if( cache->m_epoch != epoch || ( !persistent && cache->m_generation != generation ) )
 			return;
 
 		auto prior = cache->find_state( index );
@@ -335,6 +386,8 @@ namespace p2boost {
 
 		std::memcpy( prior->m_entry.data( ), entry.bytes( ), prior->m_entry.size( ) );
 		prior->m_flashlight_models_value = models_value;
+		prior->m_generation              = generation;
+		prior->m_persistent              = persistent;
 	}
 
 }

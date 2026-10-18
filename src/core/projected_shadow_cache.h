@@ -14,15 +14,26 @@
 namespace p2boost {
 
 	class FrameMetrics;
-	// reuse a projected-shadow receiver list only within one simulation
-	// generation. Dirty-list cleanup still runs on every cache hit.
+	// reuse a byte-identical projected-light rebuild. lights projected through
+	// the client leaf system stay cached until the light, map, or device changes:
+	// the leaf system itself moves receivers between lit leaves. lights bound
+	// to a target entity read its live child hierarchy, so their reuse stays
+	// limited to one client-update generation. Dirty-list cleanup still runs on
+	// every cache hit.
 	class ProjectedShadowCache {
 	public:
 		~ProjectedShadowCache( );
 
 		bool install( const portal2_modules_t& modules, const Portal2Interfaces& interfaces, FrameMetrics* metrics );
 		void remove( );
+
+		// end the current client-update generation. only target-entity lights
+		// depend on per-update entity state, so leaf-projected lights survive.
 		void invalidate( ) noexcept;
+
+		// drop every cached light: map, device, model-transfer, and A/B changes.
+		void invalidate_all( ) noexcept;
+
 		void set_enabled( bool enabled ) noexcept;
 
 		// exact depth culling tests only the main camera, but stencil portal,
@@ -38,7 +49,7 @@ namespace p2boost {
 
 		bool installed( ) const noexcept {
 			return m_update_projected.installed( ) && m_build_active_depth.installed( ) && m_frame_stage.installed( ) &&
-			       m_change_instance.installed( );
+			       m_change_instance.installed( ) && m_destroy_shadow.installed( );
 		}
 
 		unsigned int hit_count( ) const noexcept {
@@ -54,6 +65,8 @@ namespace p2boost {
 			std::uint16_t                                       m_handle{ };
 			std::array< std::uint8_t, game::shadow_entry_size > m_entry{ };
 			int                                                 m_flashlight_models_value{ };
+			std::uint64_t                                       m_generation{ };
+			bool                                                m_persistent{ };
 		};
 
 		using state_iterator_t = std::vector< cached_state_t >::iterator;
@@ -63,8 +76,10 @@ namespace p2boost {
 		using build_active_depth_fn_t = int( __thiscall* )( void*, const void*, int, std::uint16_t*, int* );
 		using frame_stage_fn_t        = void( __thiscall* )( void*, int );
 		using change_instance_fn_t    = bool( __thiscall* )( void*, unsigned short, void* );
+		using destroy_shadow_fn_t     = void( __thiscall* )( void*, unsigned int );
 
 		static void __fastcall UpdateProjected( void* self, void*, unsigned int handle, bool force );
+		static void __fastcall DestroyShadow( void* self, void*, unsigned int handle );
 		static int __fastcall BuildActiveDepthList(
 		    void* self, void*, const void* view, int maximum, std::uint16_t* output, int* high_priority_count );
 		static void __fastcall FrameStageNotify( void* self, void*, int stage );
@@ -77,10 +92,12 @@ namespace p2boost {
 		CallSitePatch                 m_build_active_depth;
 		VmtHook                       m_frame_stage;
 		VmtHook                       m_change_instance;
+		VmtHook                       m_destroy_shadow;
 		FrameMetrics*                 m_metrics{ };
 		std::vector< cached_state_t > m_states;
 		std::mutex                    m_state_mutex;
 		std::uint64_t                 m_generation{ };
+		std::uint64_t                 m_epoch{ };
 		int**                         m_flashlight_models_cvar_parent{ };
 		remove_dirty_fn_t             m_remove_dirty{ };
 		build_active_depth_fn_t       m_original_build_active_depth{ };

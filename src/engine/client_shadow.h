@@ -34,6 +34,12 @@ namespace p2boost {
 			return read< std::uint16_t >( game::active( )->shadow_engine_handle );
 		}
 
+		// BuildFlashlight walks this entity's live child hierarchy instead of
+		// the leaf system when it is set; 0xffffffff is the invalid EHANDLE.
+		bool has_target_entity( ) const noexcept {
+			return read< std::uint32_t >( game::active( )->shadow_target_entity ) != 0xffffffffu;
+		}
+
 	private:
 		template < typename value_t >
 		value_t read( std::ptrdiff_t offset ) const noexcept {
@@ -59,6 +65,10 @@ namespace p2boost {
 
 		void** update_projected_slot( ) const noexcept {
 			return vmt_slot( m_manager, game::active( )->vmt_update_projected );
+		}
+
+		void** destroy_shadow_slot( ) const noexcept {
+			return vmt_slot( m_manager, game::active( )->vmt_destroy_shadow );
 		}
 
 		client_shadow_entry_view_t entry( std::uint16_t handle ) const noexcept {

@@ -189,13 +189,13 @@ namespace p2boost {
 
 		void LevelInit( const char* ) override {
 			m_demo_provenance.reset( );
-			m_shadow_cache.invalidate( );
+			m_shadow_cache.invalidate_all( );
 			enforce_render_threading( );
 		}
 
 		void ServerActivate( sdk::edict_t*, int, int client_max ) override {
 			// the activated server owns a new receiver and entity lifetime.
-			m_shadow_cache.invalidate( );
+			m_shadow_cache.invalidate_all( );
 			m_metrics.set_coop( client_max > 1 );
 		}
 
@@ -214,7 +214,7 @@ namespace p2boost {
 				// DXVK can recreate swapchain-backed resources after a display
 				// transition. never carry a shadow cache across that boundary,
 				// and re-assert the render thread mode the engine may reset.
-				m_shadow_cache.invalidate( );
+				m_shadow_cache.invalidate_all( );
 				enforce_render_threading( );
 				m_last_focused = focused;
 			}
@@ -225,7 +225,7 @@ namespace p2boost {
 			m_metrics.set_simulating( false );
 			m_metrics.set_coop( false );
 			m_flat_textures.discard_pending_uploads( );
-			m_shadow_cache.invalidate( );
+			m_shadow_cache.invalidate_all( );
 		}
 
 		void ClientFullyConnect( sdk::edict_t* ) override {
