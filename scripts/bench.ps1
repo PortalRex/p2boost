@@ -19,6 +19,7 @@ param(
 	[string]$GameRoot = 'D:\SteamLibrary\steamapps\common\Portal 2',
 	[string]$OutputDirectory = '',
 	[int]$NetconPort = 2121,
+	[string]$NetconPassword = '',
 	[string[]]$LaunchOption = @('-novid', '-high', '-vulkan'),
 	[switch]$KeepGameOpen
 )
@@ -42,7 +43,7 @@ $output = if([IO.Path]::IsPathRooted($OutputDirectory)) {
 }
 New-Item -ItemType Directory -Force $output | Out-Null
 
-$variants = foreach($spec in $Variant) {
+$variants = @(foreach($spec in $Variant) {
 	$separator = $spec.IndexOf('=')
 	if($separator -lt 1) {
 		throw "Variant '$spec' must be name=command;command"
@@ -51,15 +52,16 @@ $variants = foreach($spec in $Variant) {
 		Name     = $spec.Substring(0, $separator)
 		Commands = @($spec.Substring($separator + 1).Split(';') | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 	}
-}
+})
 if(@($variants.Name | Select-Object -Unique).Count -ne $variants.Count) {
 	throw 'Variant names must be unique.'
 }
 
 # The net console accepts commands from the main menu, unlike RCON, which only
 # listens while a server is running. A random password keeps the listener
-# private for this run.
-$password = [Guid]::NewGuid().ToString('N')
+# private for this run unless -KeepGameOpen needs a known one for
+# scripts\invoke-netcon.ps1.
+$password = if($NetconPassword) { $NetconPassword } else { [Guid]::NewGuid().ToString('N') }
 $script:client = $null
 $script:stream = $null
 $script:console = [Text.StringBuilder]::new()

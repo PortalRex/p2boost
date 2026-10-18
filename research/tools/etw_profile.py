@@ -19,7 +19,7 @@ import pickle
 import re
 import sys
 
-IMAGE_RE = re.compile(r"^\s*I-(?:DC)?Start,\s*\d+,\s*(.+?) \(\s*(\d+)\),\s*(0x[0-9a-f]+),\s*(0x[0-9a-f]+),.*?,\s*\"?([^,\"]+\.(?:dll|exe))\"?", re.I)
+IMAGE_RE = re.compile(r"^\s*I-(?:DC)?Start,\s*\d+,\s*(.+?) \(\s*(\d+)\),\s*(0x[0-9a-f]+),\s*(0x[0-9a-f]+),.*?,\s*\"?([^,\"]+\.(?:dll|exe|sys))\"?", re.I)
 SAMPLE_RE = re.compile(r"^\s*SampledProfile,\s*(\d+),\s*(.+?) \(\s*(\d+)\),\s*(\d+),\s*(0x[0-9a-f]+),")
 STACK_RE = re.compile(r"^\s*Stack,\s*(\d+),\s*(\d+),\s*(\d+),\s*(0x[0-9a-f]+),")
 THREAD_RE = re.compile(r"^\s*T-(?:DC)?Start,\s*\d+,\s*(.+?) \(\s*(\d+)\),\s*(\d+),.*?,\s*(0x[0-9a-f]+),")
@@ -43,7 +43,7 @@ class Modules:
 			if address < end:
 				return name, address - begin
 		if address >= 0x80000000:
-			return "kernel", 0
+			return "kernel:?", 0
 		return "?", address
 
 
@@ -71,8 +71,11 @@ def parse(path, target, modules, samples, thread_start):
 				continue
 			if "I-Start," in head or "I-DCStart," in head:
 				match = IMAGE_RE.match(line)
-				if match and match.group(1).strip().lower() == target:
+				# kernel drivers are mapped once, in the System process.
+				if match and match.group(1).strip().lower() in ( target, "system" ):
 					name = match.group(5).replace("\\", "/").split("/")[-1].lower()
+					if match.group(1).strip().lower() == "system":
+						name = "kernel:" + name
 					modules.add(int(match.group(3), 16), int(match.group(4), 16), name)
 				continue
 			if "T-Start," in head or "T-DCStart," in head:
