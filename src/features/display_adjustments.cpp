@@ -501,6 +501,8 @@ namespace p2boost {
 			instance->release_resources( );
 			instance->m_scaled_view         = { };
 			instance->m_scaled_view_pending = false;
+			if( const auto listener = instance->m_reset_listener.load( std::memory_order_acquire ) )
+				listener( instance->m_reset_context );
 		}
 		return next ? next( device, parameters ) : D3DERR_INVALIDCALL;
 	}

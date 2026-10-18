@@ -35,10 +35,10 @@ to your autoexec when you build from source.
 - More consistent `fps_max` frame delivery without changing simulation, input,
   VSync, fullscreen, or refresh-rate behavior.
 - A client-update-scoped projected-shadow cache that skips duplicate
-  high-refresh rebuilds, plus exact per-view frustum rejection for projected
-  shadow maps that cannot contribute to the main, portal, split-screen, or
-  remote view. Model-instance transfers invalidate p2boost's receiver cache
-  after the supported engine performs Valve's model-shadow cleanup.
+  high-refresh rebuilds, plus opt-in exact frustum rejection for projected
+  shadow maps outside the main camera (`p2boost_shadow_cull`). Model-instance
+  transfers invalidate p2boost's receiver cache after the supported engine
+  performs Valve's model-shadow cleanup.
 - Working `mat_monitorgamma` and `mat_viewportscale` output on DXVK, including
   independent local split-screen viewports and remote-view composition. The same
   final-frame pass accepts Quake-style `r_intensity` brightness scaling (neutral
@@ -56,8 +56,13 @@ to your autoexec when you build from source.
 - Automatic NVIDIA application-profile setup for the Vulkan alt-tab black
   screen. AMD, Intel, and other adapters are detected and skipped quietly.
 
-No cvars are forced. There is no mandatory graphics reduction, dummy prewarming,
-demo or simulation change, replacement game DLL, or D3D9 proxy.
+One cvar is forced by default: `mat_queue_mode 2` (multicore rendering), which
+Portal 2's auto-detection resolves to single-threaded on modern CPUs and some
+maps reset through `logic_auto`. p2boost re-asserts it every frame;
+`p2boost_multicore 0` stops that. On one CPU-bound test scene it measured 150
+FPS at `mat_queue_mode 0` versus 260 FPS forced to 2. There is no mandatory
+graphics reduction, dummy prewarming, demo or simulation change, replacement
+game DLL, or D3D9 proxy.
 
 ## Verified performance changes
 
@@ -68,11 +73,15 @@ changes and one conservative projected-shadow selection correction:
   discarding it every frame. It still resets phase after real renderer work or
   a hitch and continues to respect `fps_max`, VSync, fullscreen, and refresh
   settings.
-- The projected-shadow cache skips byte-identical receiver-projection rebuilds
-  only within one completed client-network generation. It keeps the engine's
-  dirty-list cleanup, shadow-depth rendering, lighting, and all visual settings.
-  A full vanilla rebuild follows every completed entity update, entity, map,
-  focus, plugin, and A/B state transition. This uses `VClient016` rather than a
+- The projected-shadow cache skips byte-identical receiver-projection rebuilds.
+  It keeps the engine's dirty-list cleanup, shadow-depth rendering, lighting,
+  and all visual settings. Lights projected through the client leaf system stay
+  cached until the light is destroyed or its record changes, or a map, focus,
+  model-transfer, plugin, or A/B transition occurs. The leaf system already
+  moves receivers between lit leaves whenever their bounds change. Lights bound
+  to a target entity read that entity's live child hierarchy, so a full vanilla
+  rebuild still follows every completed entity update for them. The engine's
+  leafless flashlight mode bypasses the cache entirely. This uses `VClient016` rather than a
   listen-server callback, so host and remote Orange receive the same lifetime
   boundary. The supported engine already calls
   `IShadowMgr::RemoveAllShadowsFromModel` inside `ChangeInstance`, as prescribed
@@ -85,9 +94,13 @@ changes and one conservative projected-shadow selection correction:
   shadow-depth scene render that cannot affect a pixel. p2boost retains all of
   Portal 2's existing visibility, priority, split-screen, and shadow-limit
   decisions, then applies a separating-axis test to the two finite frusta. It
-  keeps uncertain, singular, and near-touching cases. This implementation was
-  added from static analysis at the user's request and is intentionally not
-  presented as benchmark-verified until an in-game A/B capture is supplied.
+  keeps uncertain, singular, and near-touching cases, and clears a culled
+  light's depth texture exactly as the stock selector does. This test is
+  **off by default** (`p2boost_shadow_cull 1` enables it): only the main view
+  (and each split-screen player's main view) builds a depth list.
+  `ViewDrawScene_PortalStencil`, monitor, and reflection views reuse the main
+  view's depth maps, so a light visible only through a portal can lose its
+  shadow map when the test is on. It is not benchmark-verified.
 
 The DXVK compatibility layer also restores two shipped display controls. A
 final gamma pass makes `mat_monitorgamma` functional, while the missing viewport
@@ -247,6 +260,19 @@ To remove the plugin:
   64-frame graph, one-second hitch count, and shadow-cache activity.
 - `p2boost_trace 0|1` records bounded frame and shadow-cache metrics.
 - `p2boost_dump_metrics` writes `p2boost_metrics.csv` in the game root.
+- `p2boost_multicore 0|1` stops or resumes forcing `mat_queue_mode 2`
+  (default `1`). Turning it off leaves `mat_queue_mode` at its current value.
+- `p2boost_remote_view_fps <0..1000>` caps how often the co-op `+remote_view`
+  partner picture renders (default `0`, every frame). Holding remote view
+  makes Portal 2 render a complete second scene for the partner every frame;
+  with a cap the picture renders at most N times per second and the last one
+  is redrawn in between, while your own view still updates every frame. It
+  never affects local split-screen players and stays inactive while
+  `mat_viewportscale` is below 1. Measured in online co-op: 270 FPS with
+  remote view held, 400 FPS at `p2boost_remote_view_fps 60`.
+- `p2boost_shadow_cull 0|1` toggles the experimental exact projected-shadow
+  depth culling described above. It defaults to `0`; with no argument it
+  prints the current value.
 - `p2boost_update [force]` downloads the latest GitHub release in the
   background, verifies its SHA-256 against the published checksum, and swaps
   the installed `p2boost.dll` next to the game executable (the previous copy is
