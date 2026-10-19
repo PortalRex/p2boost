@@ -40,9 +40,11 @@ it:
    before or after p2boost.
 
 `p2boost_enable 0|1` is the global switch: every performance change follows
-it, so one command compares stock and p2boost. Each change also has its own
-toggle, all defaulting to on. Display features (gamma, viewport scale,
-`r_intensity`, flat textures) are user settings and do not follow the switch.
+it, so one command compares stock and p2boost. Each change is also an entry
+in one table in `src/core/plugin.cpp`, controlled with
+`p2boost_fix <name> <value>` and on by default. Section headings below give
+each fix's name. Display features (gamma, viewport scale, `r_intensity`, flat
+textures) are user settings and do not follow the switch.
 
 ## Measuring performance
 
@@ -98,9 +100,9 @@ file. `p2boost_status` reports `dxvk_shipped` and the exact hash.
 
 **Result.** Split-screen lobby: 2.03x frame rate (3.94 → 1.94 ms mean) with
 GPU busy time unchanged, so the whole saving is CPU translation cost. A light
-1400 FPS scene is unchanged. See [benchmarks/report.md](../benchmarks/report.md).
+1400 FPS scene is unchanged.
 
-### Multicore rendering (`p2boost_multicore`)
+### Multicore rendering (`multicore`)
 
 **Problem.** Portal 2's `mat_queue_mode -1` auto-detection resolves to 0
 (single-threaded) on modern CPUs, and Portal Stories: Mel maps force 0 again
@@ -109,13 +111,13 @@ through a `logic_auto` after spawn.
 **Change.** p2boost runs `mat_queue_mode 2` through the engine's client
 command path, so the change callback runs, and re-asserts it every frame.
 The first time it raises the value, it remembers the game's own value and
-restores it when `p2boost_enable 0`, `p2boost_multicore 0`, or plugin unload
+restores it when `p2boost_enable 0`, `p2boost_fix multicore 0`, or plugin unload
 turns forcing off. `mat_queue_mode` is archived, so a config that already
 saved 2 is left alone.
 
 **Result.** One CPU-bound scene: 150 FPS at mode 0 vs 260 FPS at mode 2.
 
-### Frame limiter overshoot (always on with `p2boost_enable`)
+### Frame limiter overshoot (`frame_limiter`)
 
 **Problem.** `CEngine::Frame` accumulates elapsed time and compares it with
 the `fps_max` interval. After producing a frame it zeroes the accumulator
@@ -128,7 +130,7 @@ so real hitches still restart the phase and no catch-up frames occur.
 
 **Result.** `fps_max 360`: 352 → 360 FPS in both A/B orders.
 
-### Projected-shadow cache (always on with `p2boost_enable`)
+### Projected-shadow cache (`shadow_cache`)
 
 **Problem.** `C_EnvProjectedTexture` calls
 `CClientShadowMgr::UpdateProjectedTexture` every client update, which
@@ -150,7 +152,7 @@ flashlight mode bypasses the cache.
 **Result.** Split-screen lobby: +6.4% and +6.6% average FPS in the two A/B
 orders.
 
-### Flashlight material-bucket flush (`p2boost_flashlight_flush`)
+### Flashlight material-bucket flush (`flashlight_flush`)
 
 **Problem.** `CShadowMgr::ClearAllFlashlightMaterialBuckets` (engine
 `0x101222c0`) runs `CMaterialsBuckets::Flush` for every flashlight, twice
@@ -179,7 +181,7 @@ code over 200 randomized add/flush rounds.
 
 **Result.** +10.6% ± 1.3 (lobby).
 
-### Absent XInput controller probes (`p2boost_xinput_throttle`)
+### Absent XInput controller probes (`xinput_throttle`)
 
 **Problem.** Portal 2's `inputsystem.dll` `PollXDevices` (`0x10006ea0`)
 calls `XInputGetState` for all four slots on every input poll, which is
@@ -201,7 +203,7 @@ second instead of one frame.
 **Result.** +10.7% ± 1.5 (lobby, no controller). Together with the bucket
 flush: +17.8% ± 0.8.
 
-### Occlusion pass on maps without occluders (`p2boost_occlusion_skip`)
+### Occlusion pass on maps without occluders (`occlusion_skip`)
 
 **Problem.** `CClientLeafSystem::BuildRenderablesList` runs
 `ExtractOccludedRenderables` (client `0x100e21c0`) for every view. For each
@@ -223,7 +225,7 @@ count.
 
 **Result.** +2.9% ± 0.8 (lobby, with the other fixes on).
 
-### In-world VGUI screens in shadow-depth views (`p2boost_vgui_shadow_skip`)
+### In-world VGUI screens in shadow-depth views (`vgui_shadow_skip`)
 
 **Problem.** Every flashlight shadow-depth pass drew `C_VGuiScreen` entities
 (in-world panels such as the lobby's wall displays). Each draw laid out and
@@ -239,7 +241,7 @@ projected light, and this is not visible in shipped maps.
 
 **Result.** Lobby: 400 → 430 FPS.
 
-### Same-frame shadow-depth reuse (`p2boost_shadow_depth_reuse`)
+### Same-frame shadow-depth reuse (`shadow_depth_reuse`)
 
 **Problem.** Each split-screen view, and a held `+remote_view`, runs
 `ComputeShadowDepthTextures` and re-renders the depth map of every selected
@@ -258,7 +260,7 @@ needs the high-resolution range. Which lights receive shadows never changes.
 views when each player stands in a spotlight. Single-view online co-op does
 not render a second view, so it gains only with `+remote_view` held.
 
-### Exact shadow-depth culling (`p2boost_shadow_cull`)
+### Exact shadow-depth culling (`shadow_cull`)
 
 **Problem.** Portal 2 selects the shadow-depth lights for a view by
 comparing the axis-aligned box around each light's frustum with the camera
@@ -277,9 +279,9 @@ through a portal can lose its shadow while this is on.
 
 **Result.** In the lobby it culled no light and measured +0.6% (within noise).
 It is on by default so every optimization is active; set
-`p2boost_shadow_cull 0` if a shadow seen through a portal ever disappears.
+`p2boost_fix shadow_cull 0` if a shadow seen through a portal ever disappears.
 
-### +remote_view picture cap (`p2boost_remote_view_fps`)
+### +remote_view picture cap (`remote_view_fps`)
 
 **Problem.** Holding `+remote_view` in co-op makes `CViewRender::Render`
 render a complete second scene for the partner's picture every frame.
@@ -291,7 +293,7 @@ view still renders every frame. Local split-screen players are never
 affected, and the cap is inactive while `mat_viewportscale` is below 1.
 
 **Visual effect.** The partner picture updates at 60 FPS instead of your
-frame rate. Set `p2boost_remote_view_fps 0` to render it every frame.
+frame rate. Set `p2boost_fix remote_view_fps 0` to render it every frame.
 
 **Result.** Online co-op with remote view held: 270 → 400 FPS at 60.
 
@@ -330,8 +332,8 @@ These do not change performance and do not follow `p2boost_enable`.
   UI, video, particles, render targets, lightmaps, and cubemaps are excluded
   by shader and texture-group classification. Its VGUI exclusion chains
   `CEngineVGui::Paint` (`VEngineVGui001` slot 14).
-- **Profiler overlay (`p2boost_overlay`) and tracing (`p2boost_trace`,
-  `p2boost_dump_metrics`).** Frames are timed at the verified `CEngine::Frame`
+- **Profiler overlay (`p2boost_overlay`) and tracing (`p2boost_trace`;
+  stopping it writes `p2boost_metrics.csv`).** Frames are timed at the verified `CEngine::Frame`
   completion, not the 60 Hz `GameFrame` callback. The overlay is drawn in each
   local client's final VGUI paint, which also works for Orange on a remote
   co-op connection.
@@ -427,16 +429,19 @@ save 1–2%.
 - `src/core`: performance changes, runtime verification, metrics, overlay,
   and the plugin entry point.
 - `src/engine`: module and interface context, typed Source ABI wrappers,
-  console bridge, and the per-game signature/offset profile
-  (`game_profile.h`).
+  engine data layouts (`tier1.h`, `material_buckets.h`, `client_shadow.h`,
+  `client_view.h`), the console bridge, and the per-game signature/offset
+  profile (`game_profile.h`).
 - `src/features`: display adjustments, remote view, demo provenance, and flat
   textures.
 - `src/memory`: pattern scanning and chain-aware hook primitives.
 - `src/platform`: D3D9 layout, window handling, and the NVIDIA profile bridge.
 - `src/util`: timing, math, and projected-frustum helpers.
-- `scripts`: build, install, benchmark (`bench.ps1`), and game-control
-  helpers.
-- `research`: Ghidra scripts, profilers, archived probes, and the
-  reverse-engineering report. Nothing there is linked into `p2boost.dll`.
+- `scripts`: build, format, install, package, DXVK install/restore, the
+  benchmark runner (`bench.ps1`) and its game-control helpers, and
+  `bootstrap-tools.ps1`.
+- `research`: the profiling and Ghidra tools and the archived
+  reverse-engineering log (see `research/README.md`). Nothing there is
+  linked into `p2boost.dll`.
 - `tests`: native unit tests for patch primitives, signatures, and the exact
   algorithms above.

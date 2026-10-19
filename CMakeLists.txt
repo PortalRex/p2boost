@@ -1,8 +1,6 @@
 cmake_minimum_required(VERSION 3.24)
 project(p2boost VERSION 1.2.6 LANGUAGES CXX)
 
-option(P2BOOST_BUILD_RESEARCH_TOOLS "Build offline profiling tools from research/" OFF)
-
 if(NOT WIN32)
   message(FATAL_ERROR "p2boost targets Portal 2 for Windows")
 endif()
@@ -44,9 +42,9 @@ add_custom_command(
   VERBATIM
 )
 
-# The release library contains the two benchmark-proven fixes, the optional
-# flat-texture mode, and their shared runtime support. Historical probes stay
-# under research/ and are never compiled into p2boost.dll.
+# The release library holds every feature and its runtime support; the DLL
+# adds only the plugin entry point, console bridge, and NVIDIA profile code.
+# Nothing under research/ is compiled.
 add_library(p2boost_core STATIC
   src/features/flat_material_pass.cpp
   src/features/flat_texture_codec.cpp
@@ -116,23 +114,3 @@ target_compile_options(p2boost_tests PRIVATE /W4 /WX /permissive- /Zc:__cplusplu
 target_link_libraries(p2boost_tests PRIVATE p2boost_core bcrypt)
 add_test(NAME p2boost_tests COMMAND p2boost_tests)
 
-if(P2BOOST_BUILD_RESEARCH_TOOLS)
-  # Compile the archived hook primitives separately so they can never leak
-  # into the production static library or DLL.
-  add_library(p2boost_research_hooks STATIC
-    research/runtime/native_d3d9/research_hooks.cpp
-  )
-  target_include_directories(p2boost_research_hooks PRIVATE
-    ${P2BOOST_INCLUDE_DIRECTORIES}
-    research/runtime/native_d3d9
-  )
-  target_compile_definitions(p2boost_research_hooks PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
-  target_compile_options(p2boost_research_hooks PRIVATE /W4 /WX /permissive- /Zc:__cplusplus)
-
-  add_executable(p2profile research/tools/p2profile.cpp)
-  target_include_directories(p2profile PRIVATE ${P2BOOST_INCLUDE_DIRECTORIES})
-  target_compile_definitions(p2profile PRIVATE WIN32_LEAN_AND_MEAN NOMINMAX)
-  target_compile_options(p2profile PRIVATE /W4 /WX /permissive- /Zc:__cplusplus)
-  target_link_options(p2profile PRIVATE /guard:cf)
-  target_link_libraries(p2profile PRIVATE dbghelp)
-endif()

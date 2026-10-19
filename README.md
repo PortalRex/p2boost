@@ -63,33 +63,34 @@ and verify the game files in Steam (or use `scripts\restore-dxvk.ps1`).
 
 ## What p2boost changes
 
-Every performance change is on by default, has its own command, and follows
-the global switch `p2boost_enable`. Run `p2boost_enable 0` to compare against
-stock Portal 2 at any time, and `p2boost_enable 1` to turn everything back
-on.
+Every performance fix is on by default. `p2boost_enable 0` switches all of
+them off at once so you can compare against stock Portal 2; `p2boost_enable 1`
+turns them back on. Each fix can also be changed on its own with
+`p2boost_fix <name> <value>`; `p2boost_fix` alone lists them with their
+current values.
 
-| Command | Default | What it does |
+| Fix | Default | What it does |
 |---|:---:|---|
-| `p2boost_enable 0\|1` | 1 | Global switch for every performance change below. |
-| `p2boost_multicore 0\|1` | 1 | Keeps Portal 2's multicore rendering (`mat_queue_mode 2`) on; the game turns it off on modern CPUs. |
-| `p2boost_flashlight_flush 0\|1` | 1 | Clears the engine's per-light surface lists in proportion to what was used, not to their all-time size. |
-| `p2boost_xinput_throttle 0\|1` | 1 | Checks empty controller slots once per second instead of every frame. A newly plugged controller is detected within a second. |
-| `p2boost_occlusion_skip 0\|1` | 1 | Skips an occlusion pass that cannot hide anything on maps without occluders (all official maps). |
-| `p2boost_vgui_shadow_skip 0\|1` | 1 | Stops in-world wall screens from being redrawn into every light's shadow map. |
-| `p2boost_shadow_depth_reuse 0\|1` | 1 | In split-screen, the second player reuses shadow maps the first view already rendered this frame. |
-| `p2boost_shadow_cull 0\|1` | 1 | Skips shadow maps for lights whose volume cannot touch your view. Set it to 0 if a shadow seen only through a portal ever disappears. |
-| `p2boost_remote_view_fps <0..1000>` | 60 | Renders the co-op `+remote_view` partner picture at most this many times per second (0 = every frame). Your own view is unaffected. |
+| `frame_limiter` | 1 | Makes `fps_max` deliver the frame rate you set instead of about 2% less. |
+| `shadow_cache` | 1 | Skips rebuilding projected-light data that has not changed. |
+| `multicore` | 1 | Keeps Portal 2's multicore rendering (`mat_queue_mode 2`) on; the game turns it off on modern CPUs. |
+| `flashlight_flush` | 1 | Clears the engine's per-light surface lists in proportion to what was used, not to their all-time size. |
+| `xinput_throttle` | 1 | Checks empty controller slots once per second instead of every frame. A newly plugged controller is detected within a second. |
+| `occlusion_skip` | 1 | Skips an occlusion pass that cannot hide anything on maps without occluders (all official maps). |
+| `vgui_shadow_skip` | 1 | Stops in-world wall screens from being redrawn into every light's shadow map. |
+| `shadow_depth_reuse` | 1 | In split-screen, the second player reuses shadow maps the first view already rendered this frame. |
+| `shadow_cull` | 1 | Skips shadow maps for lights whose volume cannot touch your view. Set it to 0 if a shadow seen only through a portal ever disappears. |
+| `remote_view_fps` | 60 | Renders the co-op `+remote_view` partner picture at most this many times per second (0 = every frame). Your own view is unaffected. |
 
-The frame limiter correction (accurate `fps_max`) and the projected-shadow
-cache are always part of `p2boost_enable`.
-
-Other commands:
+Commands:
 
 | Command | What it does |
 |---|---|
-| `p2boost_status` | Shows build support, renderer, DXVK version, and the state and counters of every feature. |
+| `p2boost_status` | Build support, renderer, DXVK version, and every fix with its counters. |
+| `p2boost_enable 0\|1` | Global switch for all fixes. |
+| `p2boost_fix [name] [value]` | Lists the fixes, or shows or sets one. |
 | `p2boost_overlay 0\|1\|2` | Frame-time overlay: off, full profiler, or large FPS counter (turns red during hitches). |
-| `p2boost_trace 0\|1`, `p2boost_dump_metrics` | Record frame times and write them to `p2boost_metrics.csv` in the game folder. |
+| `p2boost_trace 0\|1` | Records frame times; `p2boost_trace 0` writes them to `p2boost_metrics.csv` in the game folder. |
 | `p2boost_update [force]` | Downloads and verifies the latest release in the background; it loads on the next start. |
 | `p2boost_flat_textures 0\|1` | Optional visual mode (off by default): solid-color surfaces, with transparency and the UI kept intact. |
 | `r_intensity <0.0..2.0>` | Overall brightness multiplier (1.0 = unchanged). |
@@ -137,6 +138,5 @@ intervals:
 
 [docs/technical.md](docs/technical.md) explains every change: the problem,
 how it was found, what is patched, why the picture stays the same, and the
-measurements. [benchmarks/report.md](benchmarks/report.md) holds earlier
-validation runs, and [research/report.md](research/report.md) the archived
-reverse-engineering record.
+measurements. [research/](research/README.md) holds the profiling and
+reverse-engineering tools and the archived investigation log.

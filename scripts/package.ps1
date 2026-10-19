@@ -1,33 +1,20 @@
 param(
     [string]$Configuration = 'Release',
-    [string]$BuildDirectory = ''
+    [string]$BuildDirectory = '',
+    [string]$DxvkVersion = '3.0.2',
+    [string]$Output = ''
 )
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
-$destination = Join-Path $repo "out\p2boost-$Configuration"
-if (Test-Path -LiteralPath $destination) { Remove-Item -LiteralPath $destination -Recurse -Force }
-New-Item -ItemType Directory -Force $destination | Out-Null
-foreach ($name in '.clang-format','README.md','LICENSE','THIRD_PARTY_NOTICES.md','CMakeLists.txt','CMakePresets.json') {
-    Copy-Item -LiteralPath (Join-Path $repo $name) -Destination $destination
-}
-foreach ($directory in 'src','tests','scripts','third_party','.github') {
-    Copy-Item -LiteralPath (Join-Path $repo $directory) -Destination $destination -Recurse
-}
-New-Item -ItemType Directory -Force (Join-Path $destination 'benchmarks') | Out-Null
-Copy-Item -LiteralPath (Join-Path $repo 'benchmarks\report.md') -Destination (Join-Path $destination 'benchmarks')
 
-# Package reproducible research source, never local Ghidra databases or derived
-# analysis artifacts from ignored directories.
-$researchDestination = Join-Path $destination 'research'
-New-Item -ItemType Directory -Force $researchDestination | Out-Null
-Copy-Item -LiteralPath (Join-Path $repo 'research\README.md') -Destination $researchDestination
-Copy-Item -LiteralPath (Join-Path $repo 'research\report.md') -Destination $researchDestination
-foreach ($directory in 'benchmarks','cfg','runtime','scripts','tools') {
-    Copy-Item -LiteralPath (Join-Path $repo "research\$directory") -Destination $researchDestination -Recurse
+# every official DXVK x86 build we redistribute must match an approved hash.
+$known = @{
+    '3.0.2' = '44A2E749694128710CCE3A545C954BD9D986DD6A8EA61BB08D931C2EF0190488'
 }
-New-Item -ItemType Directory -Force (Join-Path $researchDestination 'ghidra') | Out-Null
-Copy-Item -LiteralPath (Join-Path $repo 'research\ghidra\scripts') `
-    -Destination (Join-Path $researchDestination 'ghidra') -Recurse
+if (-not $known.ContainsKey($DxvkVersion)) {
+    throw "DXVK $DxvkVersion is not approved. Known versions: $($known.Keys -join ', ')"
+}
+$dxvkHash = $known[$DxvkVersion]
 
 if (-not $BuildDirectory) {
     $candidate = Get-ChildItem (Join-Path $repo 'build') -Directory -ErrorAction SilentlyContinue |
@@ -36,11 +23,54 @@ if (-not $BuildDirectory) {
     if (-not $candidate) { throw "No $Configuration p2boost build was found." }
     $BuildDirectory = $candidate.DirectoryName
 }
-Copy-Item -LiteralPath (Join-Path $BuildDirectory 'p2boost.dll') -Destination $destination
-Copy-Item -LiteralPath (Join-Path $BuildDirectory 'p2boost.pdb') -Destination $destination
-$archive = "${destination}.zip"
-# enumerate hidden and ordinary root entries once so PowerShell versions that
-# include dotfiles in wildcards cannot duplicate the format policy.
-$archiveItems = Get-ChildItem -LiteralPath $destination -Force | Select-Object -ExpandProperty FullName
-Compress-Archive -LiteralPath $archiveItems -DestinationPath $archive -Force
-Write-Host "Packaged $archive"
+if (-not $Output) { $Output = Join-Path $repo "out\p2boost-dropin-win32.zip" }
+
+$temporary = Join-Path $repo '.tools\dxvk-package'
+New-Item -ItemType Directory -Force $temporary | Out-Null
+New-Item -ItemType Directory -Force (Split-Path $Output) | Out-Null
+
+# stage the exact layout of a Portal 2 installation so the zip can be extracted
+# straight into the game root.
+$stage = Join-Path $temporary 'stage'
+if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
+New-Item -ItemType Directory -Force (Join-Path $stage 'bin') | Out-Null
+Copy-Item -LiteralPath (Join-Path $BuildDirectory 'p2boost.dll') -Destination $stage -Force
+Copy-Item -LiteralPath (Join-Path $repo 'README.md') -Destination $stage -Force
+Copy-Item -LiteralPath (Join-Path $repo 'THIRD_PARTY_NOTICES.md') -Destination $stage -Force
+
+$archive = Join-Path $temporary "dxvk-$DxvkVersion.tar.gz"
+$uri = "https://github.com/doitsujin/dxvk/releases/download/v$DxvkVersion/dxvk-$DxvkVersion.tar.gz"
+if (-not (Test-Path -LiteralPath $archive)) {
+    Write-Host "Downloading DXVK $DxvkVersion from GitHub..."
+    Invoke-WebRequest -Uri $uri -OutFile $archive
+}
+& tar -xzf $archive -C $temporary
+$source = Join-Path $temporary "dxvk-$DxvkVersion\x32\d3d9.dll"
+if (-not (Test-Path -LiteralPath $source)) { throw "32-bit D3D9 DLL not found in the release archive" }
+$actual = (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash
+if ($actual -ne $dxvkHash) {
+    throw "DXVK $DxvkVersion SHA-256 $actual does not match the approved hash $dxvkHash"
+}
+Copy-Item -LiteralPath $source -Destination (Join-Path $stage 'bin\dxvk_d3d9.dll') -Force
+
+# The build archive contains no license text; fetch the exact zlib license from
+# the matching source tag so the redistributed binary keeps its notice.
+$license = Join-Path $temporary "dxvk-$DxvkVersion-LICENSE"
+if (-not (Test-Path -LiteralPath $license)) {
+    $licenseUri = "https://raw.githubusercontent.com/doitsujin/dxvk/v$DxvkVersion/LICENSE"
+    Invoke-WebRequest -Uri $licenseUri -OutFile $license
+}
+if (-not (Test-Path -LiteralPath $license) -or (Get-Item -LiteralPath $license).Length -eq 0) {
+    throw "DXVK license could not be fetched from the v$DxvkVersion source tag"
+}
+Copy-Item -LiteralPath $license -Destination (Join-Path $stage 'LICENSE.dxvk.txt') -Force
+
+# Pass the top-level entries once: file entries are stored by their names while
+# directory entries keep their structure, which is exactly the game layout.
+$stageItems = Get-ChildItem -LiteralPath $stage -Force | Select-Object -ExpandProperty FullName
+Remove-Item -LiteralPath $Output -Force -ErrorAction SilentlyContinue
+Compress-Archive -LiteralPath $stageItems -DestinationPath $Output -Force
+$hash = (Get-FileHash -LiteralPath $Output -Algorithm SHA256).Hash.ToLowerInvariant()
+"$hash  $(Split-Path -Leaf $Output)" | Set-Content -LiteralPath "$Output.sha256" -Encoding ascii
+Write-Host "Packaged $Output"
+Write-Host "Layout: p2boost.dll, bin\dxvk_d3d9.dll, README.md, THIRD_PARTY_NOTICES.md, LICENSE.dxvk.txt"

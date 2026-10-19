@@ -31,7 +31,7 @@ $focusGame = Join-Path $PSScriptRoot 'set-game-foreground.ps1'
 $stopGame = Join-Path $PSScriptRoot 'stop-portal2.ps1'
 $presentMon = Join-Path $repo '.tools\downloads\PresentMon.exe'
 if(-not (Test-Path -LiteralPath $presentMon)) {
-	throw 'PresentMon is missing; run research\scripts\bootstrap-tools.ps1 first.'
+	throw 'PresentMon is missing; run scripts\bootstrap-tools.ps1 first.'
 }
 if(-not $OutputDirectory) {
 	$OutputDirectory = Join-Path $repo ('artifacts\bench\' + (Get-Date -Format 'yyyyMMdd-HHmmss'))

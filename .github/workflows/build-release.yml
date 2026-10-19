@@ -54,7 +54,7 @@ jobs:
           } else {
             "p2boost-nightly-win32.zip"
           }
-          ./scripts/package-dropin.ps1 -Configuration Release -Output "out/$name"
+          ./scripts/package.ps1 -Configuration Release -Output "out/$name"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
           # the in-game updater (p2boost_update) downloads the raw DLL and its

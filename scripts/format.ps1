@@ -20,8 +20,6 @@ if (-not $clangFormatPath) {
 
 $files = Get-ChildItem $repo\src, $repo\tests -Recurse -File |
     Where-Object { $_.Extension -in '.cpp', '.hpp', '.h' }
-$researchHelpers = Get-ChildItem $repo\research\runtime\native_d3d9\research_hooks.* -File
-$files = @($files) + @($researchHelpers)
 
 if ($Check) {
     & $clangFormatPath --dry-run --Werror @($files.FullName)

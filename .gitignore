@@ -2,7 +2,6 @@
 build/
 out/
 artifacts/
-benchmarks/raw/
 research/ghidra/projects/
 *.user
 *.suo
