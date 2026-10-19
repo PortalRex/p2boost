@@ -73,7 +73,7 @@ current values.
 |---|:---:|---|
 | `frame_limiter` | 1 | Makes `fps_max` deliver the frame rate you set instead of about 2% less. |
 | `shadow_cache` | 1 | Skips rebuilding projected-light data that has not changed. |
-| `multicore` | 1 | Keeps Portal 2's multicore rendering (`mat_queue_mode 2`) on; the game turns it off on modern CPUs. |
+| `multicore` | 1 | Keeps Portal 2's multicore rendering (`mat_queue_mode 2`) on, even when the video options or a mod's map script turn it off. |
 | `flashlight_flush` | 1 | Clears the engine's per-light surface lists in proportion to what was used, not to their all-time size. |
 | `xinput_throttle` | 1 | Checks empty controller slots once per second instead of every frame. A newly plugged controller is detected within a second. |
 | `occlusion_skip` | 1 | Skips an occlusion pass that cannot hide anything on maps without occluders (all official maps). |

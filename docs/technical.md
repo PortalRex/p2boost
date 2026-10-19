@@ -104,9 +104,11 @@ GPU busy time unchanged, so the whole saving is CPU translation cost. A light
 
 ### Multicore rendering (`multicore`)
 
-**Problem.** Portal 2's `mat_queue_mode -1` auto-detection resolves to 0
-(single-threaded) on modern CPUs, and Portal Stories: Mel maps force 0 again
-through a `logic_auto` after spawn.
+**Problem.** `mat_queue_mode -1` (the default) already selects queued
+multithreaded rendering on any CPU with two or more physical cores
+(`CMaterialSystem::AllowThreading`), but the video options' "Multicore
+rendering: Disabled" saves 0, and Portal Stories: Mel maps force 0 through a
+`logic_auto` after spawn. Mode 0 renders single-threaded.
 
 **Change.** p2boost runs `mat_queue_mode 2` through the engine's client
 command path, so the change callback runs, and re-asserts it every frame.
@@ -116,6 +118,8 @@ turns forcing off. `mat_queue_mode` is archived, so a config that already
 saved 2 is left alone.
 
 **Result.** One CPU-bound scene: 150 FPS at mode 0 vs 260 FPS at mode 2.
+Split-screen lobby, stock: mode 0 158, mode -1 249 FPS. With the default
+`-1` this fix changes nothing; it only matters where 0 was set.
 
 ### Frame limiter overshoot (`frame_limiter`)
 
