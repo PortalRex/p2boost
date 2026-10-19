@@ -22,7 +22,7 @@ def data_uri(path, width=1600, quality=82):
 
 SCENES = [
     ("split", "Split-screen co-op lobby", "ss_map mp_coop_lobby_3, both players' views rendered", 158, 704,
-     "with p2boost_fix split_view2_fps 120"),
+     "with p2boost_fix partner_view_fps 120"),
     ("single", "One view", "sp_a2_laser_relays, the co-op host without +remote_view", 346, 953, ""),
 ]
 template = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "slider_template.html"), encoding="utf-8").read()

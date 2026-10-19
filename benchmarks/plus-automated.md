@@ -29,9 +29,9 @@ Fixes are named as in `p2boost_fix <name> <value>`.
 | best, launched `+threadpool_affinity 0` | 486.6 | 3.21 | 258 |
 | best, no in-world VGUI screens (measurement only) | 554.0 | 2.71 | 282 |
 | best, view 2 not rendered (measurement only) | 805.1 | 2.12 | 357 |
-| best + `split_view2_fps 240` | 605.4 | 2.71 | 294 |
-| best + `split_view2_fps 144` | 681.5 | 2.66 | 295 |
-| best + `split_view2_fps 120` | 703.5 | 2.54 | 315 |
+| best + `partner_view_fps 240` | 605.4 | 2.71 | 294 |
+| best + `partner_view_fps 144` | 681.5 | 2.66 | 295 |
+| best + `partner_view_fps 120` | 703.5 | 2.54 | 315 |
 
 `p2boost_fix shadow_depth_fps`: 0 = 447.7, 120 = 498.0, 60 = 493.8 (3 x 10 s).
 

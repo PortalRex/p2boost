@@ -17,9 +17,9 @@ MAPS = [
     ("mp_coop_tbeam_redirect", "Course 4: Excursion Funnels, Funnel Redirect"),
     ("mp_coop_catapult_catch", "Course 6: Art Therapy, Catapult Catch"),
 ]
-VANILLA = state(enable=0, multicore=0) + ["p2boost_fix split_view2_fps 0"]
+VANILLA = state(enable=0, multicore=0) + ["p2boost_fix partner_view_fps 0"]
 VANILLA[VANILLA.index("mat_queue_mode -1")] = "mat_queue_mode 0"
-OPT = state(depth_fps=120, snd_async=1) + ["p2boost_fix split_view2_fps 120"]
+OPT = state(depth_fps=120, snd_async=1) + ["p2boost_fix partner_view_fps 120"]
 OUT = os.path.join(RESULTS_ROOT, "I_coop_maps")
 # optional map names on the command line re-run only those and merge into scenes.json
 if sys.argv[1:]:

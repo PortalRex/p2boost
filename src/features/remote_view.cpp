@@ -108,6 +108,7 @@ namespace p2boost {
 		m_local_slot_mask = local_mask.as< const std::uint32_t* >( );
 		m_remote_players  = remote.as< const std::uint32_t* >( );
 		m_viewport_scale  = commands.find_variable( "mat_viewportscale" );
+		m_force_user      = commands.find_variable( "in_forceuser" );
 
 		// picture reuse records and redraws the remote rect on the device, in
 		// render-thread order, through the material system's call queue.
@@ -136,7 +137,6 @@ namespace p2boost {
 	void RemoteView::remove( ) {
 		m_render_view.remove( );
 		m_max_fps.store( 0, std::memory_order_relaxed );
-		m_local_slot1_fps.store( 0, std::memory_order_relaxed );
 
 		// queued calls execute on the render thread; let every pending one
 		// finish before its code and the device resources go away.
@@ -152,6 +152,7 @@ namespace p2boost {
 		m_local_slot_mask    = nullptr;
 		m_remote_players     = nullptr;
 		m_viewport_scale     = nullptr;
+		m_force_user         = nullptr;
 		m_reuse_supported    = false;
 		m_picture_rect_valid = false;
 		if( m_instance == this )
@@ -183,9 +184,20 @@ namespace p2boost {
 		       ( m_local_slot_mask[ 0 ] & ( 1u << slot ) ) == 0 && m_remote_players[ slot ] != 0;
 	}
 
-	void RemoteView::set_local_slot1_fps( int fps ) noexcept {
-		m_local_slot1_fps.store( std::clamp( fps, 0, 1000 ), std::memory_order_relaxed );
-		invalidate( );
+	// the slot whose picture may be reused: with two local players, the one
+	// in_forceuser does not send input to; otherwise the remote-view slot.
+	int RemoteView::partner_slot( ) const noexcept {
+		if( !m_local_slot_mask || !m_remote_players )
+			return -1;
+
+		if( ( m_local_slot_mask[ 0 ] & 3u ) == 3u ) {
+			const int controlled = m_force_user && m_force_user->value_integer( ) == 1 ? 1 : 0;
+			return 1 - controlled;
+		}
+		for( int slot = 0; slot <= 1; ++slot )
+			if( slot_is_remote( slot ) )
+				return slot;
+		return -1;
 	}
 
 	bool RemoteView::queue_device_call( bool save, const RECT& rect ) {
@@ -220,15 +232,10 @@ namespace p2boost {
 		if( !original )
 			return;
 
-		// a remote (+remote_view) slot uses the remote cap; local slot 1 uses
-		// its own opt-in cap; the primary local view is never capped.
+		// only the partner's slot is ever capped; the controlled view renders.
 		const int slot = instance->view_slot( self, view );
-		int       fps  = 0;
-		if( instance->slot_is_remote( slot ) )
-			fps = instance->m_max_fps.load( std::memory_order_relaxed );
-		else if( slot == 1 )
-			fps = instance->m_local_slot1_fps.load( std::memory_order_relaxed );
-		if( fps <= 0 ) {
+		const int fps  = instance->m_max_fps.load( std::memory_order_relaxed );
+		if( fps <= 0 || slot < 0 || slot != instance->partner_slot( ) ) {
 			original( self, view, hud_view, clear_flags, what_to_draw );
 			return;
 		}
@@ -238,10 +245,10 @@ namespace p2boost {
 		const LONG    top  = setup.at< int >( game::active( )->view_y );
 		const RECT    rect{ left, top, left + setup.at< int >( game::active( )->view_width ), top + setup.at< int >( game::active( )->view_height ) };
 
-		// picture reuse copies whole back-buffer pixels, so it stays off while
-		// mat_viewportscale renders the slot smaller than its final rect.
-		const bool reusable = instance->reuse_available( ) && rect.right > rect.left && rect.bottom > rect.top &&
-		                      std::fabs( instance->m_viewport_scale->value_float( ) - 1.0f ) < 0.0001f;
+		// the device calls copy and redraw the slot's rendered pixels; with
+		// mat_viewportscale below 1 that is the scaled rect DisplayAdjustments
+		// has yet to expand, and the redraw asks it for the same expansion.
+		const bool reusable = instance->reuse_available( ) && rect.right > rect.left && rect.bottom > rect.top;
 
 		LARGE_INTEGER now{ };
 		QueryPerformanceCounter( &now );
@@ -280,10 +287,21 @@ namespace p2boost {
 		if( render_target )
 			render_target->Release( );
 
-		RECT       rect{ std::max< LONG >( requested.left, 0 ),
-                   std::max< LONG >( requested.top, 0 ),
-                   std::min< LONG >( requested.right, static_cast< LONG >( description.Width ) ),
-                   std::min< LONG >( requested.bottom, static_cast< LONG >( description.Height ) ) };
+		RECT rect{ std::max< LONG >( requested.left, 0 ),
+		           std::max< LONG >( requested.top, 0 ),
+		           std::min< LONG >( requested.right, static_cast< LONG >( description.Width ) ),
+		           std::min< LONG >( requested.bottom, static_cast< LONG >( description.Height ) ) };
+
+		// a scaled slot's pixels sit in the scaled rect until DisplayAdjustments
+		// expands them at the slot's next unscaled viewport, which the engine
+		// sets after RenderView; a save therefore sees the expansion pending.
+		if( save ) {
+			viewport_scale_t view{ };
+			m_source_scaled = m_display && m_display->pending_scaled_view( view ) && std::memcmp( &view.m_destination, &rect, sizeof( rect ) ) == 0;
+			m_source_view   = m_source_scaled ? view : viewport_scale_t{ };
+			m_source_rect   = m_source_scaled ? view.m_source : rect;
+		}
+		rect                  = m_source_rect;
 		const bool valid_rect = ready && rect.right > rect.left && rect.bottom > rect.top;
 		const UINT width      = valid_rect ? static_cast< UINT >( rect.right - rect.left ) : 0;
 		const UINT height     = valid_rect ? static_cast< UINT >( rect.bottom - rect.top ) : 0;
@@ -302,7 +320,8 @@ namespace p2boost {
 		           m_picture_height == height ) {
 			// draw instead of StretchRect: copying into a multisampled back buffer
 			// is not portable D3D9.
-			draw_picture( device, rect );
+			if( draw_picture( device, rect ) && m_source_scaled && m_display )
+				m_display->queue_scaled_view( m_source_view );
 		}
 
 		if( back_buffer )

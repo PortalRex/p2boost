@@ -281,21 +281,30 @@ through a portal can lose its shadow while this is on.
 It is on by default so every optimization is active; set
 `p2boost_fix shadow_cull 0` if a shadow seen through a portal ever disappears.
 
-### +remote_view picture cap (`remote_view_fps`)
+### Partner view cap (`partner_view_fps`)
 
 **Problem.** Holding `+remote_view` in co-op makes `CViewRender::Render`
-render a complete second scene for the partner's picture every frame.
+render a complete second scene for the partner's picture every frame, and
+local split-screen renders the second player's half the same way: about
+0.80 ms per frame, 39% of the main thread in the lobby after every other
+change.
 
-**Change.** `RenderView` (VMT slot 6) renders the remote slot at most N times
-per second (default 60). After a real render a queued device call copies the
-slot from the back buffer, and the skipped frames redraw that copy. Your own
-view still renders every frame. Local split-screen players are never
-affected, and the cap is inactive while `mat_viewportscale` is below 1.
+**Change.** `RenderView` (VMT slot 6) renders the partner's slot at most N
+times per second (default 120). After a real render a queued device call
+copies the slot from the back buffer, and the skipped frames redraw that
+copy. The partner's slot is the remote-view slot, or with two local players
+the one `in_forceuser` does not send input to, so switching the controlled
+player moves the cap to the other half. The controlled view always renders
+every frame. With `mat_viewportscale` below 1 the copy is the scaled render,
+taken while `DisplayAdjustments` still has its expansion pending, and the
+redraw queues the same expansion.
 
-**Visual effect.** The partner picture updates at 60 FPS instead of your
-frame rate. Set `p2boost_fix remote_view_fps 0` to render it every frame.
+**Visual effect.** The partner's picture updates at N FPS instead of your
+frame rate. Set `p2boost_fix partner_view_fps 0` to render it every frame.
 
 **Result.** Online co-op with remote view held: 270 → 400 FPS at 60.
+Split-screen lobby: 495 → 605 (240), 682 (144), 704 FPS (120); not
+rendering the second view at all measured 805.
 
 ### Cross-frame shadow-depth reuse (`shadow_depth_fps`, opt-in)
 
@@ -320,24 +329,6 @@ The key now compares one byte.
 
 **Result.** Split-screen lobby, 3 × 10 s: 0 = 448, 60 = 494, 120 = 498 FPS
 (2 × 10 s: 450 → 485). Off by default because it is a visual trade-off.
-
-### Split-screen second-view cap (`split_view2_fps`, opt-in)
-
-**Problem.** In local split-screen the second player's `RenderView` costs
-about 0.80 ms per frame, 39% of the main thread in the lobby after every
-other change; nothing cheaper than not rendering it exists.
-
-**Change.** The `+remote_view` picture schedule is applied to local
-split-screen slot 1: `RenderView` renders it at most N times per second and
-the skipped frames redraw the copy taken after the last real render. Slot 0
-(the first player) always renders every frame. Local slot 1 is otherwise
-untouched: with the cap at 0 the remote-view path still only acts on a slot
-the engine filled with a remote player.
-
-**Result.** Split-screen lobby: 495 → 605 (240), 682 (144), 704 FPS (120).
-Not rendering the second view at all measured 805, so 120 recovers most of
-that. Off by default because the second player's picture then updates at
-N FPS.
 
 ### Flat-texture hook overhead
 

@@ -43,9 +43,8 @@ namespace p2boost {
 			vgui_shadow_skip,
 			shadow_depth_reuse,
 			shadow_cull,
-			remote_view_fps,
+			partner_view_fps,
 			shadow_depth_fps,
-			split_view2_fps,
 			count
 		};
 
@@ -66,9 +65,8 @@ namespace p2boost {
 		    { "vgui_shadow_skip", 1, 1, "keep in-world VGUI screens out of shadow-depth maps" },
 		    { "shadow_depth_reuse", 1, 1, "reuse depth maps another view rendered this frame" },
 		    { "shadow_cull", 1, 1, "skip depth maps whose light volume misses the view" },
-		    { "remote_view_fps", 60, 1000, "+remote_view partner picture renders per second (0 = every frame)" },
+		    { "partner_view_fps", 120, 1000, "co-op partner's view (+remote_view, or the split-screen player not in control) renders per second (0 = every frame)" },
 		    { "shadow_depth_fps", 0, 1000, "also reuse shadow-depth maps across frames, refreshed this often (0 = off)" },
-		    { "split_view2_fps", 0, 1000, "split-screen second player's 3D view renders per second (0 = every frame)" },
 		};
 
 		constexpr std::size_t fix_count{ static_cast< std::size_t >( fix_t::count ) };
@@ -667,8 +665,7 @@ namespace p2boost {
 			case fix_t::shadow_depth_reuse:
 			case fix_t::shadow_depth_fps:
 				return m_shadow_depth_reuse.installed( );
-			case fix_t::remote_view_fps:
-			case fix_t::split_view2_fps:
+			case fix_t::partner_view_fps:
 				return m_remote_view.reuse_available( );
 			default:
 				return false;
@@ -706,7 +703,7 @@ namespace p2boost {
 					               static_cast< unsigned long long >( m_shadow_depth_reuse.rendered_count( ) ),
 					               static_cast< unsigned long long >( m_shadow_depth_reuse.reused_count( ) ) );
 					break;
-				case fix_t::remote_view_fps:
+				case fix_t::partner_view_fps:
 					std::snprintf( detail, sizeof( detail ), "%llu rendered, %llu reused",
 					               static_cast< unsigned long long >( m_remote_view.rendered_count( ) ),
 					               static_cast< unsigned long long >( m_remote_view.reused_count( ) ) );
@@ -771,10 +768,8 @@ namespace p2boost {
 			m_frame_limiter.set_enabled( on( fix_t::frame_limiter ) );
 			m_shadow_cache.set_enabled( on( fix_t::shadow_cache ) );
 			m_shadow_cache.set_exact_cull( on( fix_t::shadow_cull ) );
-			if( m_remote_view.reuse_available( ) ) {
-				m_remote_view.set_max_fps( m_enabled ? fix( fix_t::remote_view_fps ) : 0 );
-				m_remote_view.set_local_slot1_fps( m_enabled ? fix( fix_t::split_view2_fps ) : 0 );
-			}
+			if( m_remote_view.reuse_available( ) )
+				m_remote_view.set_max_fps( m_enabled ? fix( fix_t::partner_view_fps ) : 0 );
 			if( on( fix_t::multicore ) )
 				enforce_render_threading( );
 			else

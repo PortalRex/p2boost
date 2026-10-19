@@ -9,7 +9,7 @@ try:
     g.run("sv_lan 1", "ss_map mp_coop_lobby_3"); time.sleep(45)
     g.run("fps_max 0", "p2boost_overlay 0", "jpeg_quality 95", *state(depth_fps=120, snd_async=1)); time.sleep(5)
     for cap in (0, 120):
-        g.run(f"p2boost_fix split_view2_fps {cap}"); time.sleep(2)
+        g.run(f"p2boost_fix partner_view_fps {cap}"); time.sleep(2)
         g.screenshot(f"static_cap{cap}")
         g.run("cmd2 +forward", "cmd2 +left"); time.sleep(0.7)
         g.screenshot(f"moving_cap{cap}_a"); time.sleep(0.5)

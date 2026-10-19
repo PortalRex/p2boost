@@ -82,6 +82,22 @@ namespace p2boost {
 			m_intensity.store( std::clamp( intensity, min_intensity, max_intensity ), std::memory_order_relaxed );
 		}
 
+		// render thread: the scaled split-screen slot whose expansion to its
+		// final rect is still pending, if any.
+		bool pending_scaled_view( viewport_scale_t& view ) const noexcept {
+			if( !m_scaled_view_pending )
+				return false;
+			view = m_scaled_view;
+			return true;
+		}
+
+		// render thread: a picture another feature redrew into a scaled slot
+		// needs the same expansion the engine's own render of it would get.
+		void queue_scaled_view( const viewport_scale_t& view ) noexcept {
+			m_scaled_view         = view;
+			m_scaled_view_pending = true;
+		}
+
 		// another feature's default-pool resources must also be released before
 		// IDirect3DDevice9::Reset; this one hook already owns that boundary.
 		using reset_listener_fn_t = void ( * )( void* context );

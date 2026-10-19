@@ -1,6 +1,7 @@
 #pragma once
 
 #include "console_commands.h"
+#include "display_adjustments.h"
 #include "hook.h"
 #include "portal2_context.h"
 
@@ -12,16 +13,17 @@
 
 namespace p2boost {
 
-	class DisplayAdjustments;
-
 	// a held +remote_view assigns the co-op partner to split-screen slot 1, and
 	// CViewRender::Render then runs a complete second RenderView for that slot
 	// every frame: visibility, render lists, portal recursion, shadow depth,
-	// and water for a picture only ss_pipscale of the screen wide. the
-	// remote_view_fps fix renders that remote slot at most N times per second
-	// and redraws the last picture in between. the primary local view is never
-	// affected; the opt-in split_view2_fps fix applies the same schedule to
-	// local split-screen slot 1 (the second player's half of the screen).
+	// and water for a picture only ss_pipscale of the screen wide. local
+	// split-screen renders the second player's half the same way. the
+	// partner_view_fps fix renders the partner's slot at most N times per
+	// second and redraws the last picture in between: the remote slot, or in
+	// local split-screen the player in_forceuser is not sending input to. the
+	// view being controlled always renders every frame. with mat_viewportscale
+	// below 1 the picture is the scaled render and DisplayAdjustments expands
+	// it as it would the engine's own.
 	class RemoteView {
 	public:
 		~RemoteView( );
@@ -51,13 +53,6 @@ namespace p2boost {
 			return m_max_fps.load( std::memory_order_relaxed );
 		}
 
-		// local split-screen slot 1 (the second player) may also be capped; that
-		// player then sees the 3D scene at most N times per second.
-		void set_local_slot1_fps( int fps ) noexcept;
-		int  local_slot1_fps( ) const noexcept {
-			return m_local_slot1_fps.load( std::memory_order_relaxed );
-		}
-
 		// forget the last picture so the next remote frame renders for real.
 		void invalidate( ) noexcept {
 			m_picture_rect_valid = false;
@@ -82,6 +77,7 @@ namespace p2boost {
 
 		int  view_slot( const void* self, const void* view ) const noexcept;
 		bool slot_is_remote( int slot ) const noexcept;
+		int  partner_slot( ) const noexcept;
 		bool queue_device_call( bool save, const RECT& rect );
 		bool ensure_picture( IDirect3DDevice9* device, UINT width, UINT height, D3DFORMAT format );
 		bool draw_picture( IDirect3DDevice9* device, const RECT& rect );
@@ -94,18 +90,24 @@ namespace p2boost {
 		DisplayAdjustments*   m_display{ };
 		sdk::IMaterialSystem* m_material_system{ };
 		con_var_t*            m_viewport_scale{ };
+		con_var_t*            m_force_user{ };
 		const std::uint32_t*  m_local_slot_mask{ };
 		const std::uint32_t*  m_remote_players{ };
 		bool                  m_reuse_supported{ };
 
 		std::atomic_int m_max_fps{ };
-		std::atomic_int m_local_slot1_fps{ };
 
 		// main-thread picture schedule.
 		LARGE_INTEGER m_frequency{ };
 		LONGLONG      m_last_render{ };
 		RECT          m_picture_rect{ };
 		bool          m_picture_rect_valid{ };
+
+		// render-thread picture placement: the rect the picture was copied
+		// from, which is the scaled render when mat_viewportscale is below 1.
+		RECT             m_source_rect{ };
+		bool             m_source_scaled{ };
+		viewport_scale_t m_source_view{ };
 
 		// render-thread resources; released before device Reset.
 		IDirect3DTexture9*    m_picture{ };

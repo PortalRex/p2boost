@@ -24,7 +24,7 @@ seconds = float(sys.argv[1]) if len(sys.argv) > 1 else 15
 label = sys.argv[2] if len(sys.argv) > 2 else "best"
 extra = sys.argv[3:]
 OUT = os.path.join(RESULTS_ROOT, "K_profile")
-BEST = state(depth_fps=120, snd_async=1) + ["p2boost_fix split_view2_fps 120"] + extra
+BEST = state(depth_fps=120, snd_async=1) + ["p2boost_fix partner_view_fps 120"] + extra
 g = Game(OUT)
 
 
