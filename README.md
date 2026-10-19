@@ -82,10 +82,12 @@ current values.
 | `shadow_cull` | 1 | Skips shadow maps for lights whose volume cannot touch your view. Set it to 0 if a shadow seen only through a portal ever disappears. |
 | `partner_view_fps` | 120 | Renders your co-op partner's view at most this many times per second and redraws the last picture in between (0 = every frame): the `+remote_view` picture, or in local split-screen the half of the player you are not controlling (`in_forceuser`). The view you control always renders every frame. Works with `mat_viewportscale`. |
 | `shadow_depth_fps` | 120 | Keeps shadow maps across frames and refreshes each at most this many times per second (0 = every frame). A light that moves re-renders at once; a moving object's shadow can lag by up to 1/N s. |
+| `frame_queue_depth` | 2 | Lets the render thread run up to two frames behind the game instead of one (`mat_queue_mode 2` only), so a frame whose rendering takes longer than the next game frame no longer stalls it. Adds up to one frame of display latency; 1 = the engine's behaviour. |
 
 Split-screen lobby on a Ryzen 7 7800X3D / RTX 5090: stock 158 → every fix
 with `partner_view_fps 120` 704 → with `shadow_depth_fps 120` as well
-about 740. The automated A/B runs are in
+about 740 → with `frame_queue_depth 2` about 755 (679 without it in the
+same run). The automated A/B runs are in
 [benchmarks/plus-automated.md](benchmarks/plus-automated.md).
 
 Commands:
