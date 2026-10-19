@@ -306,7 +306,7 @@ frame rate. Set `p2boost_fix partner_view_fps 0` to render it every frame.
 Split-screen lobby: 495 → 605 (240), 682 (144), 704 FPS (120); not
 rendering the second view at all measured 805.
 
-### Cross-frame shadow-depth reuse (`shadow_depth_fps`, opt-in)
+### Cross-frame shadow-depth reuse (`shadow_depth_fps`)
 
 **Problem.** After same-frame reuse the first view still re-renders every
 selected flashlight's depth map each frame, although most lights and most
@@ -328,7 +328,9 @@ happens to agree between two views of one frame and differs between frames.
 The key now compares one byte.
 
 **Result.** Split-screen lobby, 3 × 10 s: 0 = 448, 60 = 494, 120 = 498 FPS
-(2 × 10 s: 450 → 485). Off by default because it is a visual trade-off.
+(2 × 10 s: 450 → 485). On by default at 120; it is a small visual trade-off
+(moving casters only), and `p2boost_fix shadow_depth_fps 0` restores
+per-frame rendering.
 
 ### Flat-texture hook overhead
 
@@ -421,8 +423,8 @@ Recorded so they are not retried without new evidence. Details are in
   gaining nothing because the lobby's lights appeared to change their setup
   every frame. That was the key bug described under `shadow_depth_fps`
   (three uninitialized bytes after the bool at `CViewSetup+0x34`); with a
-  one-byte compare the lights are stable and the cap gains about 8%. It
-  ships opt-in because moving casters' shadows lag by up to 1/N s.
+  one-byte compare the lights are stable and the cap gains about 8%. It is
+  on by default at 120; moving casters' shadows lag by up to 1/N s.
 - **Main-thread kernel time** in ETW profiles (~6–8%) is largely ETW's own
   user-stack walking (`RtlpWalkFrameChain`, `RtlpLookupFunctionEntryForStackWalks`)
   plus GPU-driver work, not something the game does.

@@ -66,7 +66,7 @@ namespace p2boost {
 		    { "shadow_depth_reuse", 1, 1, "reuse depth maps another view rendered this frame" },
 		    { "shadow_cull", 1, 1, "skip depth maps whose light volume misses the view" },
 		    { "partner_view_fps", 120, 1000, "co-op partner's view (+remote_view, or the split-screen player not in control) renders per second (0 = every frame)" },
-		    { "shadow_depth_fps", 0, 1000, "also reuse shadow-depth maps across frames, refreshed this often (0 = off)" },
+		    { "shadow_depth_fps", 120, 1000, "also reuse shadow-depth maps across frames, refreshed this often (0 = off)" },
 		};
 
 		constexpr std::size_t fix_count{ static_cast< std::size_t >( fix_t::count ) };
