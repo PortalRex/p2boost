@@ -377,25 +377,50 @@ Recorded so they are not retried without new evidence. Details are in
   workers, PVS-decompression caching, portal mesh caching, and
   managed-texture preloading** were each measured as neutral or as only
   moving a stall.
+- **Engine threading options that ship disabled on PC**, measured in the
+  lobby (4 interleaved rounds): `host_threaded_sound 1` +0.8% ± 0.2,
+  `r_threaded_shadow_clip 1` −0.1%, `r_queued_decals 1` +0.1%,
+  `r_queued_post_processing 1` ±0. Too small to justify changing engine
+  threading behavior.
+- **Reusing shadow-depth maps across frames.** A deliberately unsafe test
+  build reused any depth map whose light setup matched the previous frame,
+  ignoring moving objects. It reused no more than same-frame reuse already
+  does, because the lobby's lights change their setup every frame, so a
+  correct version (which would also have to track moving objects and depth
+  bias) would gain nothing here.
+- **Main-thread kernel time** in ETW profiles (~6–8%) is largely ETW's own
+  user-stack walking (`RtlpWalkFrameChain`, `RtlpLookupFunctionEntryForStackWalks`)
+  plus GPU-driver work, not something the game does.
 
 ## Known remaining costs
 
-Measured in the split-screen lobby with all fixes on, using diagnostic
-switches that change visuals and are not fixes:
+Measured in the split-screen lobby with every change above on (about
+600 FPS), using diagnostic switches that change visuals and are not fixes:
 
 | Disabled for measurement | FPS gain |
 |---|---:|
-| Projected-texture shadow depth maps (`r_flashlightdepthtexture 0`) | +26.9% |
-| Render-to-texture blob shadows (`r_shadows 0`) | +11.6% |
-| All VGUI (`r_drawvgui 0`) | +0.8% |
+| Projected-texture shadow depth maps (`r_flashlightdepthtexture 0`) | +13.6% ± 2.4 |
+| The whole client shadow manager (`r_shadows 0`, includes the above) | +15.8% ± 2.6 |
+| All 2D VGUI (`r_drawvgui 0`) | +0.8% ± 1.0 |
 
-Most of the shadow-depth cost on the main thread (about 340 µs per frame) is
-the engine rebuilding a CPU-side dynamic mesh of every opaque world surface
-for each depth pass (`Shader_WorldShadowDepthFill` and
-`Shader_WorldZFillSurfChain_Single`, engine `0x100e4240`/`0x100e7d90`). Valve's
-later engine draws that fill from static, position-only vertex buffers
-instead (`r_csm_static_vb`, `Shader_DrawDepthFillChainsStatic`). That is the
-largest remaining candidate.
+Before same-frame depth reuse, the depth maps cost +26.9%. A profile diff of
+the remaining depth cost (about 230 µs of main-thread time per frame) shows:
+
+- About 74 µs: the engine rebuilding a CPU-side dynamic mesh of every opaque
+  world surface for each depth pass (`Shader_WorldShadowDepthFill` and
+  `Shader_WorldZFillSurfChain_Single`, engine `0x100e4240`, `0x100e4120`,
+  `0x100e70b0`, `0x100e7d90`). Valve's later engine draws that fill from
+  static, position-only vertex buffers instead (`r_csm_static_vb`,
+  `Shader_DrawDepthFillChainsStatic`); porting it could save the vertex-copy
+  part (about 40 µs, ~2.5%).
+- About 25 µs: frustum culling of each depth view's renderable list.
+
+Other remaining main-thread costs are necessary per-view work:
+`ComputeTranslucency` (about 78 µs per frame across the normal views), the
+renderable frustum cull, BSP world-list building, and in-world VGUI screens.
+The VGUI screens spend part of their time in `CFontTextureCache`'s per-glyph
+RB-tree lookups (vguimatsurface `0x100150e0`), where a faster cache might
+save 1–2%.
 
 ## Source layout
 
