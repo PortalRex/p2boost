@@ -12,6 +12,8 @@ from PIL import Image
 
 root, out = sys.argv[1:3]
 DEEP = "--deep" in sys.argv  # captures taken at each chamber's exit, not the elevators
+# red_racer's exit is an airlock whose pushers and map-end logic move the players, so it stays at the start
+WHERE = {"mp_coop_paint_red_racer": ", at the arrival elevators (its exit airlock resets the players)"}
 scenes = json.load(open(os.path.join(root, "scenes.json")))
 
 
@@ -33,7 +35,7 @@ for key, scene in scenes.items():
 <section class="compare" id="{key.replace('mp_coop_', '')}">
   <header class="compare-head">
     <h2>{scene["title"]}</h2>
-    <p class="where"><code>ss_map {key}</code>, split-screen, both players' views{", at the chamber exit looking back over the puzzle" if DEEP else ""}</p>
+    <p class="where"><code>ss_map {key}</code>, split-screen, both players' views{WHERE.get(key, ", at the chamber exit looking back over the puzzle") if DEEP else ""}</p>
   </header>
   <div class="stage" data-compare>
     <img class="after" src="{b}" alt="{scene['title']}, with p2boost" draggable="false">

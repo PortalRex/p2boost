@@ -26,7 +26,7 @@ THREAD_RIGHTS = 0x0002 | 0x0008 | 0x0040  # suspend/resume, get context, query i
 PROCESS_RIGHTS = 0x0010 | 0x0400  # vm read, query information
 WOW64_CONTEXT_CONTROL = 0x00010001
 WOW64_CONTEXT_INTEGER = 0x00010002
-STACK_BYTES = 1024
+STACK_BYTES = 2048
 
 
 class THREADENTRY32(ctypes.Structure):
@@ -164,6 +164,7 @@ class Sampler:
                 self.threads[tid] = handle
         self.stack = (ctypes.c_ubyte * STACK_BYTES)()
         self.context = WOW64_CONTEXT()
+        self.return_cache = {}
 
     def main_thread(self):
         return min(self.threads, key=lambda tid: thread_times(self.threads[tid])[0])
@@ -172,7 +173,7 @@ class Sampler:
         ranked = sorted(self.threads, key=lambda tid: -thread_times(self.threads[tid])[1])
         return ranked[:count]
 
-    def sample(self, tid, depth=16):
+    def sample(self, tid, depth=40):
         """(qpc, [eip, caller, caller's caller...]); the thread is suspended only
         for the context read."""
         handle = self.threads[tid]
@@ -186,24 +187,46 @@ class Sampler:
         if not ok:
             return None
         frames = [context.Eip]
-        ebp, esp = context.Ebp, context.Esp
+        esp = context.Esp
         # copy the top of the stack after resuming: frames above the current
-        # one rarely move within the microseconds this takes
+        # one rarely move within the microseconds this takes. the engine omits
+        # frame pointers, so instead of an EBP chain every stack word that is
+        # a return address (the bytes before it encode a call) counts as a
+        # caller; this over-counts stale addresses but attributes inclusive
+        # time to frameless functions.
         read = ctypes.c_size_t()
         base = esp & ~0xF
-        if ebp >= base and ebp - base < STACK_BYTES - 8 and kernel32.ReadProcessMemory(
-                self.process, ctypes.c_void_p(base), self.stack, STACK_BYTES, ctypes.byref(read)):
+        if kernel32.ReadProcessMemory(self.process, ctypes.c_void_p(base), self.stack, STACK_BYTES, ctypes.byref(read)):
             words = (wt.DWORD * (read.value // 4)).from_buffer(self.stack)
-            for _ in range(depth):
-                index = (ebp - base) // 4
-                if index + 1 >= len(words):
+            seen = set()
+            for word in words:
+                if word in seen or not self.is_return_address(word):
+                    continue
+                seen.add(word)
+                frames.append(word)
+                if len(frames) > depth:
                     break
-                nxt, ret = words[index], words[index + 1]
-                if not self.modules.in_code(ret) or nxt <= ebp or nxt - base >= read.value:
-                    break
-                frames.append(ret)
-                ebp = nxt
         return stamp, frames
+
+    def is_return_address(self, address):
+        """true when the instruction before address is a call."""
+        known = self.return_cache.get(address)
+        if known is not None:
+            return known
+        result = False
+        if self.modules.in_code(address):
+            buffer = (ctypes.c_ubyte * 8)()
+            read = ctypes.c_size_t()
+            if kernel32.ReadProcessMemory(self.process, ctypes.c_void_p(address - 8), buffer, 8, ctypes.byref(read)) and read.value == 8:
+                b = bytes(buffer)
+                result = (b[3] == 0xE8                                   # call rel32
+                          or (b[6] == 0xFF and (b[7] >> 3) & 7 == 2)      # call [reg]/[reg+disp8]: ff 10..17 / ff 50..57 d8
+                          or (b[5] == 0xFF and (b[6] >> 3) & 7 == 2)      # call [reg+disp8]
+                          or (b[2] == 0xFF and (b[3] >> 3) & 7 == 2)      # call [reg+disp32]
+                          or (b[1] == 0xFF and (b[2] >> 3) & 7 == 2 and b[3] == 0x24)  # call [reg+reg*s+disp32]? keep loose
+                          or (b[4] == 0xFF and (b[5] >> 3) & 7 == 2))     # call [reg+reg]
+        self.return_cache[address] = result
+        return result
 
     def run(self, tids, seconds, hz):
         """returns {tid: [(qpc, frames), ...]}"""

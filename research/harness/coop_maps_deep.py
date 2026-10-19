@@ -24,6 +24,7 @@ MAPS = [
     ("mp_coop_infinifling_train", "Course 2: Mass and Velocity, Infinifling"),
     ("mp_coop_wall_block", "Course 3: Hard-Light Surfaces, Bridge Block"),
     ("mp_coop_paint_red_racer", "Course 5: Mobility Gels, Red Racer"),
+    ("mp_coop_paint_speed_catch", "Course 5: Mobility Gels, Speed Catch"),
     ("mp_coop_catapult_catch", "Course 6: Art Therapy, Catapult Catch"),
 ]
 VANILLA = state(enable=0, multicore=0) + ["p2boost_fix split_view2_fps 0"]
@@ -42,7 +43,10 @@ ANCHORS = {"mp_coop_wall_5": (-2092.0, -1624.0, -127.0)}
 ANCHORS_P2 = {"mp_coop_wall_5": (-2095.0, -1819.0, -127.0)}
 # how far to step from the anchor toward the puzzle; the exit corridor of
 # rat_maze and the raised exit of infinifling_train need more than the default
-STEPS = {"mp_coop_rat_maze": 360.0, "mp_coop_infinifling_train": 400.0, "mp_coop_wall_5": 0.0}
+# red_racer's exit door is the airlock: standing in it ends the map and
+# respawns both players, so stand well in front of it
+STEPS = {"mp_coop_rat_maze": 360.0, "mp_coop_infinifling_train": 400.0, "mp_coop_wall_5": 0.0,
+         "mp_coop_paint_red_racer": 240.0, "mp_coop_paint_speed_catch": 400.0}
 
 
 def placement(map_name):
