@@ -55,3 +55,11 @@ Fixes are named as in `p2boost_fix <name> <value>`.
   ("Your partner has disconnected"); single-view co-op needs a real partner.
 - `research/scripts/capture-cpu-profile.ps1` triggers a UAC prompt on this
   host, so CPU profiles cannot be captured unattended.
+
+## DXVK build, second machine (i7-14700KF, RTX 4070 SUPER, 2560x1440)
+
+`scripts\bench.ps1`, split-screen lobby, all fixes at their defaults, whole
+game sessions alternated between the two `bin\dxvk_d3d9.dll` builds, 3 x 8 s
+each: the game's own DXVK 481.6 FPS; DXVK 3.0.2 1,078.4 and 1,063.2 FPS.
+On this machine 3.0.2 is 2.2x faster, the opposite of the result above, so
+the DXVK choice depends on the hardware or driver.

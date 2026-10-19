@@ -11,13 +11,13 @@ polling when no controller is plugged in, an occlusion pass that can never
 cull anything on official maps, and the slow 2020-era DXVK the game ships
 with.
 
-On the test system (i7-14700KF, RTX 4070 SUPER, split-screen co-op lobby,
-uncapped):
+On the test system (i7-14700KF, RTX 4070 SUPER, 2560x1440, uncapped, all
+defaults):
 
-| | Frame rate |
-|---|---:|
-| Approved DXVK replacement alone | about 2x |
-| p2boost's engine fixes on top (`p2boost_enable 1` vs `0`) | +25% |
+| Scene | Game's own DXVK | DXVK 3.0.2, `p2boost_enable 0` | DXVK 3.0.2, `p2boost_enable 1` |
+|---|---:|---:|---:|
+| Split-screen co-op lobby (`ss_map mp_coop_lobby_3`) | 482 FPS (fixes on) | 392 FPS | 1,077 FPS |
+| Single player (`map sp_a2_laser_relays`) | | 737 FPS | 1,446 FPS |
 
 Your gain depends on your CPU and the scene; CPU-heavy scenes such as the
 co-op lobby gain the most.
@@ -84,11 +84,8 @@ current values.
 | `shadow_depth_fps` | 120 | Keeps shadow maps across frames and refreshes each at most this many times per second (0 = every frame). A light that moves re-renders at once; a moving object's shadow can lag by up to 1/N s. |
 | `frame_queue_depth` | 2 | Lets the render thread run up to two frames behind the game instead of one (`mat_queue_mode 2` only), so a frame whose rendering takes longer than the next game frame no longer stalls it. Adds up to one frame of display latency; 1 = the engine's behaviour. |
 
-Split-screen lobby on a Ryzen 7 7800X3D / RTX 5090: stock 158 → every fix
-with `partner_view_fps 120` 704 → with `shadow_depth_fps 120` as well
-about 740 → with `frame_queue_depth 2` about 755 (679 without it in the
-same run). The automated A/B runs are in
-[benchmarks/plus-automated.md](benchmarks/plus-automated.md).
+Per-fix contributions, measured on a second machine (Ryzen 7 7800X3D,
+RTX 5090), are in [benchmarks/plus-automated.md](benchmarks/plus-automated.md).
 
 Commands:
 
