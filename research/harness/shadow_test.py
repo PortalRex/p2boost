@@ -46,7 +46,7 @@ try:
     step('ent_fire !picker addoutput "targetname p2t_cube"')
     step("ent_fire p2t_cube DisableMotion", f'ent_fire p2t_cube addoutput "origin {CUBE_A}"', wait=2)
     step("noclip", "setpos 4040 4130 180", "setang 14.5 8 0", wait=2)
-    g.log(g.run("p2boost_shadow_depth_views").strip())
+    g.log(g.run("p2boost_fix shadow_depth_fps").strip())
 
     shots = []
     for index, cap in enumerate(CAPS):

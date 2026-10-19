@@ -19,6 +19,22 @@ and verify the changes described in [docs/technical.md](../docs/technical.md).
 - `tools/disasm.py` disassembles PE bytes at preferred addresses and finds
   byte signatures (`--find`), used to verify every signature is unique.
 
+`harness/` drives the game unattended over the net console, without input
+injection or elevation:
+
+- `harness.py` launches, drives, captures, and quits the game; `bench.py`
+  runs interleaved suites measured with `p2boost_trace`.
+- `run_all.py [main|stock|sp|partner|l1000]` holds the suites behind
+  [benchmarks/plus-automated.md](../benchmarks/plus-automated.md).
+- `sampler.py` is a user-mode main-thread sampler (no ETW, no UAC);
+  `profile_lobby.py` profiles the split-screen lobby with it.
+- `coop_maps.py`, `coop_maps_deep.py` (spawns from `bsp_spawns.py`), and
+  `capture_compare.py` capture before/after frames; `make_slider*.py` and
+  `compose.py` turn them into a slider page or video.
+- `partner_test.py` and `shadow_test.py` check the two caps' visual
+  behavior: the partner picture following `in_forceuser`, and shadow
+  freshness under a stationary light.
+
 Run `scripts\bootstrap-tools.ps1` once to fetch PresentMon, a JDK, and Ghidra
 into `.tools`. `report.md` is the archived reverse-engineering log from the
 earlier native-D3D9 and Vulkan investigations; some files it mentions were
