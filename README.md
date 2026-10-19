@@ -262,6 +262,18 @@ To remove the plugin:
 - `p2boost_dump_metrics` writes `p2boost_metrics.csv` in the game root.
 - `p2boost_multicore 0|1` stops or resumes forcing `mat_queue_mode 2`
   (default `1`). Turning it off leaves `mat_queue_mode` at its current value.
+- `p2boost_vgui_shadow_skip 0|1` (default `1`) stops flashlight shadow-depth
+  passes from painting in-world VGUI screens. Every depth pass laid out and
+  drew each wall screen's panels, text included, into a depth-only target.
+  The panels sit flush on walls, so they no longer blocking a projected light
+  is not visible. Split-screen co-op lobby: 400 -> 430 FPS.
+- `p2boost_shadow_depth_reuse 0|1` (default `1`) lets a later view in the same
+  frame reuse a flashlight depth map an earlier view already rendered into the
+  same texture. Depth maps are drawn from the light, so each split-screen view
+  (or a held `+remote_view`) otherwise re-renders identical maps. Lights are
+  handed out in a stable order when they all fit, so each keeps its depth slot
+  across views; which lights receive shadows never changes. Split-screen co-op
+  lobby: 430 -> 470 FPS, shadows identical in both views.
 - `p2boost_remote_view_fps <0..1000>` caps how often the co-op `+remote_view`
   partner picture renders (default `0`, every frame). Holding remote view
   makes Portal 2 render a complete second scene for the partner every frame;

@@ -369,7 +369,7 @@ namespace p2boost {
 			    { "p2boost_xinput_throttle", "Re-probe absent XInput controller slots once per second instead of every frame (1 default)." },
 			    { "p2boost_occlusion_skip", "Skip the renderable occlusion pass on maps without occluders, where it never culls (1 default)." },
 			    { "p2boost_vgui_shadow_skip", "Skip painting in-world VGUI screens into flashlight shadow-depth maps (1 default)." },
-			    { "p2boost_shadow_depth_reuse", "Reuse a flashlight depth map rendered earlier in the same frame by another view (0 default, experimental)." },
+			    { "p2boost_shadow_depth_reuse", "Reuse a flashlight depth map rendered earlier in the same frame by another view (1 default)." },
 			    { "r_intensity", "Scale final-frame RGB brightness (0.0 to 2.0, 1.0 neutral)." },
 			};
 
@@ -683,7 +683,7 @@ namespace p2boost {
 			}
 
 			m_shadow_cache.set_exact_cull( enabled );
-			console_print( "[p2boost] exact shadow-depth culling %s\n", enabled ? "enabled (experimental)" : "disabled" );
+			console_print( "[p2boost] exact shadow-depth culling %s\n", enabled ? "enabled" : "disabled" );
 			return sdk::Stop;
 		}
 
@@ -763,7 +763,7 @@ namespace p2boost {
 
 			m_shadow_depth_reuse_requested = enabled;
 			apply_enabled_state( );
-			console_print( "[p2boost] same-frame shadow-depth reuse %s\n", enabled ? "enabled (experimental)" : "disabled" );
+			console_print( "[p2boost] same-frame shadow-depth reuse %s\n", enabled ? "enabled" : "disabled" );
 			return sdk::Stop;
 		}
 
@@ -879,7 +879,7 @@ namespace p2boost {
 		bool                    m_xinput_throttle_requested{ true };
 		bool                    m_occlusion_skip_requested{ true };
 		bool                    m_vgui_shadow_skip_requested{ true };
-		bool                    m_shadow_depth_reuse_requested{ };
+		bool                    m_shadow_depth_reuse_requested{ true };
 		mutable con_var_t*      m_queue_mode{ };
 		mutable int             m_last_queue_mode{ -1 };
 	};
