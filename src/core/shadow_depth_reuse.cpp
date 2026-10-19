@@ -3,6 +3,8 @@
 #include "address.h"
 #include "game_profile.h"
 
+#include <Windows.h>
+
 #include <algorithm>
 #include <cstring>
 
@@ -30,7 +32,10 @@ namespace p2boost {
 			append( game->view_ortho_rect, game->view_ortho_rect_end );
 		else
 			cursor += game->view_ortho_rect_end - game->view_ortho_rect;
-		append( game->view_flags, game->view_flags + 4 );
+		// m_bViewToProjectionOverride is a bool: the three bytes after it are
+		// leftover stack, equal between two views of one frame but not across
+		// frames.
+		append( game->view_flags, game->view_flags + 1 );
 		append( game->view_fov, game->view_projection_end );
 		append( game->view_draw_flags, game->view_draw_flags + 1 );
 		return key;
@@ -60,9 +65,12 @@ namespace p2boost {
 		if( !modules.m_client.contains( globals, sizeof( void* ) ) )
 			return false;
 
-		m_globals  = globals.as< void* const* >( );
-		m_entries  = { };
-		m_instance = this;
+		LARGE_INTEGER frequency{ };
+		QueryPerformanceFrequency( &frequency );
+		m_frequency = frequency.QuadPart;
+		m_globals   = globals.as< void* const* >( );
+		m_entries   = { };
+		m_instance  = this;
 		if( !m_update_depth.install( update_slot, reinterpret_cast< void* >( &UpdateShadowDepthTexture ) ) ) {
 			m_instance = nullptr;
 			m_globals  = nullptr;
@@ -95,15 +103,27 @@ namespace p2boost {
 
 		// runs on the main thread inside ComputeShadowDepthTextures; the
 		// queued render worker draws these in the same order.
-		const int   frame = Address{ globals }.at< int >( game::active( )->globals_framecount );
-		const key_t key   = make_key( view );
-		auto        entry = std::find_if( reuse->m_entries.begin( ), reuse->m_entries.end( ), [ depth ]( const entry_t& candidate ) {
+		if( reuse->m_invalidate.exchange( false, std::memory_order_acq_rel ) )
+			reuse->m_entries = { };
+
+		LARGE_INTEGER now{ };
+		QueryPerformanceCounter( &now );
+		const game::profile_t* game  = game::active( );
+		const int              frame = Address{ globals }.at< int >( game->globals_framecount );
+		const key_t            key   = make_key( view );
+		auto                   entry = std::find_if( reuse->m_entries.begin( ), reuse->m_entries.end( ), [ depth ]( const entry_t& candidate ) {
             return candidate.m_texture == depth;
         } );
 
-		if( entry != reuse->m_entries.end( ) && reuse->enabled( ) && entry->m_frame == frame && entry->m_key == key ) {
-			reuse->m_reused.fetch_add( 1, std::memory_order_relaxed );
-			return true;
+		// the same light in the same texture: always reusable later in the same
+		// frame, and across frames while its refresh interval has not elapsed.
+		if( entry != reuse->m_entries.end( ) && reuse->enabled( ) && entry->m_frame >= 0 && entry->m_key == key ) {
+			const int  fps   = reuse->m_max_fps.load( std::memory_order_relaxed );
+			const bool fresh = fps > 0 && now.QuadPart - entry->m_time < reuse->m_frequency / fps;
+			if( entry->m_frame == frame || fresh ) {
+				reuse->m_reused.fetch_add( 1, std::memory_order_relaxed );
+				return true;
+			}
 		}
 
 		const bool rendered = original( self, color, depth, view );
@@ -113,13 +133,29 @@ namespace p2boost {
 		// are known when reuse is switched on mid-frame.
 		if( entry == reuse->m_entries.end( ) ) {
 			entry = std::min_element( reuse->m_entries.begin( ), reuse->m_entries.end( ), []( const entry_t& left, const entry_t& right ) {
-				return left.m_frame < right.m_frame;
+				return left.m_time < right.m_time;
 			} );
 		}
 		entry->m_texture = depth;
 		entry->m_frame   = rendered ? frame : -1;
+		entry->m_time    = now.QuadPart;
 		entry->m_key     = key;
+
+		const Address setup{ const_cast< void* >( view ) };
+		for( int axis = 0; axis < 3; ++axis ) {
+			entry->m_view.m_origin[ axis ] = setup.at< float >( game->view_origin + 4 * axis );
+			entry->m_view.m_angles[ axis ] = setup.at< float >( game->view_angles + 4 * axis );
+		}
+		entry->m_view.m_fov   = setup.at< float >( game->view_fov );
+		entry->m_view.m_frame = entry->m_frame;
 		return rendered;
+	}
+
+	std::array< ShadowDepthReuse::light_view_t, 32 > ShadowDepthReuse::views( ) const noexcept {
+		std::array< light_view_t, 32 > result{ };
+		for( std::size_t index = 0; index < m_entries.size( ); ++index )
+			result[ index ] = m_entries[ index ].m_texture ? m_entries[ index ].m_view : light_view_t{ };
+		return result;
 	}
 
 }

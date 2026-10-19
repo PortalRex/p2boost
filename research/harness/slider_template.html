@@ -1,0 +1,95 @@
+<title>p2boost Before and After</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* layout: one column of full-width comparison stages, Aperture test-chamber signage as the visual cue */
+:root {
+  --bg: #eef0ee;
+  --fg: #16181a;
+  --muted: #5c6268;
+  --panel: #ffffff;
+  --line: #cfd4d2;
+  --accent: #e8831c;   /* Aperture orange */
+  --accent-2: #1f8fcf; /* portal blue */
+  --display: "Barlow Condensed", "Arial Narrow", Impact, sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #141618; --fg: #ecedee; --muted: #9aa1a8; --panel: #1d2023; --line: #33383d; --accent: #f29a3a; --accent-2: #4fb0e8; color-scheme: dark }
+}
+:root[data-theme="dark"] { --bg: #141618; --fg: #ecedee; --muted: #9aa1a8; --panel: #1d2023; --line: #33383d; --accent: #f29a3a; --accent-2: #4fb0e8; color-scheme: dark }
+
+body { background: var(--bg); color: var(--fg); font-family: var(--body); line-height: 1.5; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-inline: 16px; padding-block: 28px 56px; }
+h1 { font-family: var(--display); font-weight: 700; font-size: clamp(34px, 5vw, 56px); line-height: 1; letter-spacing: 0.01em; margin: 0 0 6px; text-wrap: balance; text-transform: uppercase; }
+.lede { color: var(--muted); margin: 0 0 28px; max-width: 65ch; }
+.lede code, .meta code { font-family: var(--mono); font-size: 0.92em; }
+.compare { margin-block: 36px; }
+.compare-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; margin-bottom: 10px; }
+h2 { font-family: var(--display); font-weight: 600; font-size: 28px; margin: 0; text-transform: uppercase; letter-spacing: 0.02em; }
+.where { margin: 0; color: var(--muted); font-size: 15px; }
+.stage { position: relative; width: 100%; aspect-ratio: 16 / 9; max-width: 100%; overflow: hidden; border-radius: 6px; background: #000; user-select: none; touch-action: none; }
+.stage img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; max-width: none; }
+.before-wrap { position: absolute; inset: 0; width: 50%; overflow: hidden; }
+.before-wrap img { width: 100%; }
+.stage .before { width: auto; }
+.handle { position: absolute; top: 0; bottom: 0; left: 50%; width: 3px; background: #fff; transform: translateX(-50%); pointer-events: none; box-shadow: 0 0 0 1px rgba(0,0,0,.35); }
+.knob { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 46px; height: 46px; border-radius: 50%; background: #fff; color: #111; display: grid; place-items: center; font-size: 13px; letter-spacing: -2px; box-shadow: 0 2px 10px rgba(0,0,0,.45); }
+.range { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: ew-resize; }
+.range:focus-visible + .tag-l { outline: 3px solid var(--accent-2); }
+.tag { position: absolute; bottom: 14px; display: flex; flex-direction: column; gap: 0; padding: 8px 14px; border-radius: 6px; background: rgba(10,10,12,.82); color: #fff; pointer-events: none; font-variant-numeric: tabular-nums; }
+.tag span { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: #c9ccd1; }
+.tag strong { font-family: var(--display); font-size: 34px; line-height: 1.05; font-weight: 700; }
+.tag-l { left: 14px; }
+.tag-r { right: 14px; align-items: flex-end; text-align: right; }
+.tag-r strong { color: var(--accent); }
+.meta { color: var(--muted); font-size: 14px; margin: 10px 0 0; max-width: 75ch; }
+.table { margin-top: 44px; overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 15px; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-family: var(--display); text-transform: uppercase; letter-spacing: 0.06em; font-size: 15px; font-weight: 600; color: var(--muted); }
+td.n, th.n { text-align: right; }
+td.gain { color: var(--accent); font-weight: 500; }
+.note { color: var(--muted); font-size: 14px; max-width: 70ch; }
+@media (prefers-reduced-motion: no-preference) { .handle, .before-wrap { transition: none; } }
+</style>
+
+<div class="wrap">
+  <h1>p2boost before and after</h1>
+  <p class="lede">Drag the handle. Left of it is vanilla Portal 2 (<code>mat_queue_mode 0</code>, no plugin fixes); right of it is the same frame with every p2boost optimization that gets the split-screen lobby past 700 FPS. The in-game counter sits top-right of each half. Captured on an RTX 5090 and a 7800X3D at 2560x1440.</p>
+
+<!--SCENES-->
+
+  <div class="table">
+    <table>
+      <thead><tr><th>Scene</th><th>Setting</th><th class="n">Avg FPS</th><th class="n">p99 frame</th><th class="n">Gain</th></tr></thead>
+      <tbody>
+        <tr><td rowspan="3">Split-screen lobby</td><td>Vanilla, <code>mat_queue_mode 0</code></td><td class="n">158.3</td><td class="n">8.28 ms</td><td class="n"></td></tr>
+        <tr><td>All p2boost fixes, depth refresh 120, <code>snd_mix_async 1</code></td><td class="n">489.9</td><td class="n">3.00 ms</td><td class="n gain">+209%</td></tr>
+        <tr><td>+ <code>p2boost_split_view2_fps 120</code></td><td class="n">703.5</td><td class="n">2.54 ms</td><td class="n gain">+344%</td></tr>
+        <tr><td rowspan="2">One view (sp_a2_laser_relays)</td><td>Vanilla, <code>mat_queue_mode 0</code></td><td class="n">345.9</td><td class="n">4.31 ms</td><td class="n"></td></tr>
+        <tr><td>All p2boost fixes, depth refresh 120, <code>snd_mix_async 1</code></td><td class="n">953.2</td><td class="n">1.76 ms</td><td class="n gain">+176%</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note">Each number is the mean of two interleaved 10-second runs measured by p2boost's own frame trace, with the game driven over its network console so nobody touched the keyboard. The split view 2 cap is the one visible trade: the second local player's scene refreshes 120 times a second while their HUD and the first player's view stay uncapped.</p>
+</div>
+
+<script>
+for (const stage of document.querySelectorAll('[data-compare]')) {
+  const range = stage.querySelector('.range');
+  const before = stage.querySelector('.before-wrap');
+  const handle = stage.querySelector('.handle');
+  const apply = () => {
+    const v = range.value;
+    before.style.width = v + '%';
+    handle.style.left = v + '%';
+  };
+  range.addEventListener('input', apply);
+  // the inner image must stay stage-sized while the wrapper narrows
+  const fit = () => { stage.querySelector('.before').style.width = stage.clientWidth + 'px'; };
+  new ResizeObserver(fit).observe(stage);
+  fit();
+  apply();
+}
+</script>

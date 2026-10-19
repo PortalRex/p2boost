@@ -297,6 +297,48 @@ frame rate. Set `p2boost_fix remote_view_fps 0` to render it every frame.
 
 **Result.** Online co-op with remote view held: 270 → 400 FPS at 60.
 
+### Cross-frame shadow-depth reuse (`shadow_depth_fps`, opt-in)
+
+**Problem.** After same-frame reuse the first view still re-renders every
+selected flashlight's depth map each frame, although most lights and most
+of what they shadow are static from one frame to the next.
+
+**Change.** `shadow_depth_fps N` extends the same-frame cache: a depth map
+whose light `CViewSetup` key is unchanged is also reused across frames until
+it is older than 1/N s. A light whose position, angles, FOV, or projection
+changes still re-renders immediately, because its key changes; only the
+shadows of moving casters under a stationary light can lag, by under 1/N s.
+`LevelInit` and focus changes drop the cache, since those can leave a depth
+texture's contents undefined. `p2boost_shadow_depth_views` prints the cached
+views for diagnosis.
+
+The earlier cross-frame experiment (see the rejected list) never matched
+across frames because the key copied four bytes at `CViewSetup+0x34`, where
+only the first is a written bool; the other three are leftover stack that
+happens to agree between two views of one frame and differs between frames.
+The key now compares one byte.
+
+**Result.** Split-screen lobby, 3 × 10 s: 0 = 448, 60 = 494, 120 = 498 FPS
+(2 × 10 s: 450 → 485). Off by default because it is a visual trade-off.
+
+### Split-screen second-view cap (`split_view2_fps`, opt-in)
+
+**Problem.** In local split-screen the second player's `RenderView` costs
+about 0.80 ms per frame, 39% of the main thread in the lobby after every
+other change; nothing cheaper than not rendering it exists.
+
+**Change.** The `+remote_view` picture schedule is applied to local
+split-screen slot 1: `RenderView` renders it at most N times per second and
+the skipped frames redraw the copy taken after the last real render. Slot 0
+(the first player) always renders every frame. Local slot 1 is otherwise
+untouched: with the cap at 0 the remote-view path still only acts on a slot
+the engine filled with a remote player.
+
+**Result.** Split-screen lobby: 495 → 605 (240), 682 (144), 704 FPS (120).
+Not rendering the second view at all measured 805, so 120 recovers most of
+that. Off by default because the second player's picture then updates at
+N FPS.
+
 ### Flat-texture hook overhead
 
 The optional flat-texture mode hooks `IMaterial::Bind` on the material-system
@@ -384,12 +426,12 @@ Recorded so they are not retried without new evidence. Details are in
   `r_threaded_shadow_clip 1` −0.1%, `r_queued_decals 1` +0.1%,
   `r_queued_post_processing 1` ±0. Too small to justify changing engine
   threading behavior.
-- **Reusing shadow-depth maps across frames.** A deliberately unsafe test
-  build reused any depth map whose light setup matched the previous frame,
-  ignoring moving objects. It reused no more than same-frame reuse already
-  does, because the lobby's lights change their setup every frame, so a
-  correct version (which would also have to track moving objects and depth
-  bias) would gain nothing here.
+- **Reusing shadow-depth maps across frames** was first recorded here as
+  gaining nothing because the lobby's lights appeared to change their setup
+  every frame. That was the key bug described under `shadow_depth_fps`
+  (three uninitialized bytes after the bool at `CViewSetup+0x34`); with a
+  one-byte compare the lights are stable and the cap gains about 8%. It
+  ships opt-in because moving casters' shadows lag by up to 1/N s.
 - **Main-thread kernel time** in ETW profiles (~6–8%) is largely ETW's own
   user-stack walking (`RtlpWalkFrameChain`, `RtlpLookupFunctionEntryForStackWalks`)
   plus GPU-driver work, not something the game does.

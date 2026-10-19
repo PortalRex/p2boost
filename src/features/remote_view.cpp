@@ -136,6 +136,7 @@ namespace p2boost {
 	void RemoteView::remove( ) {
 		m_render_view.remove( );
 		m_max_fps.store( 0, std::memory_order_relaxed );
+		m_local_slot1_fps.store( 0, std::memory_order_relaxed );
 
 		// queued calls execute on the render thread; let every pending one
 		// finish before its code and the device resources go away.
@@ -162,7 +163,7 @@ namespace p2boost {
 		invalidate( );
 	}
 
-	int RemoteView::remote_slot( const void* self, const void* view ) const noexcept {
+	int RemoteView::view_slot( const void* self, const void* view ) const noexcept {
 		if( !self || !view || !m_local_slot_mask || !m_remote_players )
 			return -1;
 
@@ -172,12 +173,19 @@ namespace p2boost {
 		if( reinterpret_cast< std::uintptr_t >( view ) < first || offset % stride != 0 || offset / stride > 1 )
 			return -1;
 
-		// a local split-screen player owns its slot outright; only a slot that
-		// the engine filled with a remote (+remote_view) player qualifies.
-		const int slot = static_cast< int >( offset / stride );
-		if( ( m_local_slot_mask[ 0 ] & ( 1u << slot ) ) != 0 || !m_remote_players[ slot ] )
-			return -1;
-		return slot;
+		return static_cast< int >( offset / stride );
+	}
+
+	// a local split-screen player owns its slot outright; a remote slot is one
+	// the engine filled with a remote (+remote_view) player.
+	bool RemoteView::slot_is_remote( int slot ) const noexcept {
+		return slot >= 0 && slot <= 1 && m_local_slot_mask && m_remote_players &&
+		       ( m_local_slot_mask[ 0 ] & ( 1u << slot ) ) == 0 && m_remote_players[ slot ] != 0;
+	}
+
+	void RemoteView::set_local_slot1_fps( int fps ) noexcept {
+		m_local_slot1_fps.store( std::clamp( fps, 0, 1000 ), std::memory_order_relaxed );
+		invalidate( );
 	}
 
 	bool RemoteView::queue_device_call( bool save, const RECT& rect ) {
@@ -212,8 +220,15 @@ namespace p2boost {
 		if( !original )
 			return;
 
-		const int fps = instance->m_max_fps.load( std::memory_order_relaxed );
-		if( fps <= 0 || instance->remote_slot( self, view ) < 0 ) {
+		// a remote (+remote_view) slot uses the remote cap; local slot 1 uses
+		// its own opt-in cap; the primary local view is never capped.
+		const int slot = instance->view_slot( self, view );
+		int       fps  = 0;
+		if( instance->slot_is_remote( slot ) )
+			fps = instance->m_max_fps.load( std::memory_order_relaxed );
+		else if( slot == 1 )
+			fps = instance->m_local_slot1_fps.load( std::memory_order_relaxed );
+		if( fps <= 0 ) {
 			original( self, view, hud_view, clear_flags, what_to_draw );
 			return;
 		}

@@ -44,6 +44,8 @@ namespace p2boost {
 			shadow_depth_reuse,
 			shadow_cull,
 			remote_view_fps,
+			shadow_depth_fps,
+			split_view2_fps,
 			count
 		};
 
@@ -65,6 +67,8 @@ namespace p2boost {
 		    { "shadow_depth_reuse", 1, 1, "reuse depth maps another view rendered this frame" },
 		    { "shadow_cull", 1, 1, "skip depth maps whose light volume misses the view" },
 		    { "remote_view_fps", 60, 1000, "+remote_view partner picture renders per second (0 = every frame)" },
+		    { "shadow_depth_fps", 0, 1000, "also reuse shadow-depth maps across frames, refreshed this often (0 = off)" },
+		    { "split_view2_fps", 0, 1000, "split-screen second player's 3D view renders per second (0 = every frame)" },
 		};
 
 		constexpr std::size_t fix_count{ static_cast< std::size_t >( fix_t::count ) };
@@ -280,6 +284,7 @@ namespace p2boost {
 		void LevelInit( const char* ) override {
 			m_demo_provenance.reset( );
 			m_shadow_cache.invalidate_all( );
+			m_shadow_depth_reuse.invalidate( );
 			m_remote_view.invalidate( );
 			enforce_render_threading( );
 		}
@@ -306,6 +311,8 @@ namespace p2boost {
 				// transition. never carry a shadow cache across that boundary,
 				// and re-assert the render thread mode the engine may reset.
 				m_shadow_cache.invalidate_all( );
+				m_shadow_depth_reuse.invalidate( );
+				m_remote_view.invalidate( );
 				enforce_render_threading( );
 				m_last_focused = focused;
 			}
@@ -367,6 +374,8 @@ namespace p2boost {
 				return update_command( args );
 			if( _stricmp( command, "p2boost_flat_textures" ) == 0 )
 				return flat_textures_command( args );
+			if( _stricmp( command, "p2boost_shadow_depth_views" ) == 0 )
+				return shadow_depth_views_command( );
 			if( _stricmp( command, "r_intensity" ) == 0 )
 				return intensity_command( args );
 
@@ -405,6 +414,7 @@ namespace p2boost {
 			    { "p2boost_trace", "Record frame times; p2boost_trace 0 writes p2boost_metrics.csv." },
 			    { "p2boost_update", "Update p2boost to the latest release. Optional 'force' reinstalls." },
 			    { "p2boost_flat_textures", "Optional visual mode with solid-color surfaces: 0|1." },
+			    { "p2boost_shadow_depth_views", "Print the flashlight depth views rendered recently (origin, angles, fov)." },
 			    { "r_intensity", "Scale final-frame RGB brightness (0.0 to 2.0, 1.0 neutral)." },
 			};
 
@@ -608,6 +618,19 @@ namespace p2boost {
 			return sdk::Stop;
 		}
 
+		// diagnostic for shadow_depth_fps: which lights the depth cache holds.
+		sdk::PluginResult shadow_depth_views_command( ) const {
+			for( const auto& view : m_shadow_depth_reuse.views( ) ) {
+				if( view.m_frame < 0 )
+					continue;
+				console_print( "[p2boost] depth view origin %.1f %.1f %.1f angles %.1f %.1f %.1f fov %.1f frame %d\n",
+				               view.m_origin[ 0 ], view.m_origin[ 1 ], view.m_origin[ 2 ],
+				               view.m_angles[ 0 ], view.m_angles[ 1 ], view.m_angles[ 2 ],
+				               view.m_fov, view.m_frame );
+			}
+			return sdk::Stop;
+		}
+
 		// parse one bounded integer.
 		static bool parse_bounded( const char* text, int minimum, int maximum, int& value ) noexcept {
 			char*      end{ };
@@ -642,8 +665,10 @@ namespace p2boost {
 			case fix_t::vgui_shadow_skip:
 				return m_vgui_screen_shadow_skip.installed( );
 			case fix_t::shadow_depth_reuse:
+			case fix_t::shadow_depth_fps:
 				return m_shadow_depth_reuse.installed( );
 			case fix_t::remote_view_fps:
+			case fix_t::split_view2_fps:
 				return m_remote_view.reuse_available( );
 			default:
 				return false;
@@ -746,8 +771,10 @@ namespace p2boost {
 			m_frame_limiter.set_enabled( on( fix_t::frame_limiter ) );
 			m_shadow_cache.set_enabled( on( fix_t::shadow_cache ) );
 			m_shadow_cache.set_exact_cull( on( fix_t::shadow_cull ) );
-			if( m_remote_view.reuse_available( ) )
+			if( m_remote_view.reuse_available( ) ) {
 				m_remote_view.set_max_fps( m_enabled ? fix( fix_t::remote_view_fps ) : 0 );
+				m_remote_view.set_local_slot1_fps( m_enabled ? fix( fix_t::split_view2_fps ) : 0 );
+			}
 			if( on( fix_t::multicore ) )
 				enforce_render_threading( );
 			else
@@ -757,6 +784,7 @@ namespace p2boost {
 			m_occlusion_skip.set_enabled( on( fix_t::occlusion_skip ) );
 			m_vgui_screen_shadow_skip.set_enabled( on( fix_t::vgui_shadow_skip ) );
 			m_shadow_depth_reuse.set_enabled( on( fix_t::shadow_depth_reuse ) );
+			m_shadow_depth_reuse.set_max_fps( on( fix_t::shadow_depth_reuse ) ? fix( fix_t::shadow_depth_fps ) : 0 );
 			m_shadow_cache.set_stable_depth_order( on( fix_t::shadow_depth_reuse ) && m_shadow_depth_reuse.installed( ) );
 			m_overlay.set_fixes_enabled( m_enabled );
 		}

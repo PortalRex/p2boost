@@ -81,6 +81,14 @@ current values.
 | `shadow_depth_reuse` | 1 | In split-screen, the second player reuses shadow maps the first view already rendered this frame. |
 | `shadow_cull` | 1 | Skips shadow maps for lights whose volume cannot touch your view. Set it to 0 if a shadow seen only through a portal ever disappears. |
 | `remote_view_fps` | 60 | Renders the co-op `+remote_view` partner picture at most this many times per second (0 = every frame). Your own view is unaffected. |
+| `shadow_depth_fps` | 0 | Off by default. When set, shadow maps are also kept across frames and refreshed at most this many times per second (120 is a good value). A light that moves re-renders at once; a moving object's shadow can lag by up to 1/N s. |
+| `split_view2_fps` | 0 | Off by default. In local split-screen, renders the second player's half at most this many times per second and redraws the last picture in between (120 is a good value). The first player's half always renders every frame. |
+
+The two opt-in caps are what reach 700 FPS in the split-screen lobby on a
+Ryzen 7 7800X3D / RTX 5090: stock 158 → defaults 450 →
+`p2boost_fix shadow_depth_fps 120` 485 → `p2boost_fix split_view2_fps 120`
+704. The automated A/B runs are in
+[benchmarks/plus-automated.md](benchmarks/plus-automated.md).
 
 Commands:
 
@@ -93,6 +101,7 @@ Commands:
 | `p2boost_trace 0\|1` | Records frame times; `p2boost_trace 0` writes them to `p2boost_metrics.csv` in the game folder. |
 | `p2boost_update [force]` | Downloads and verifies the latest release in the background; it loads on the next start. |
 | `p2boost_flat_textures 0\|1` | Optional visual mode (off by default): solid-color surfaces, with transparency and the UI kept intact. |
+| `p2boost_shadow_depth_views` | Diagnostic: lists the flashlight depth views the shadow-map cache currently holds. |
 | `r_intensity <0.0..2.0>` | Overall brightness multiplier (1.0 = unchanged). |
 
 p2boost also makes `mat_monitorgamma` and `mat_viewportscale` work under

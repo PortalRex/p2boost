@@ -17,10 +17,11 @@ namespace p2boost {
 	// a held +remote_view assigns the co-op partner to split-screen slot 1, and
 	// CViewRender::Render then runs a complete second RenderView for that slot
 	// every frame: visibility, render lists, portal recursion, shadow depth,
-	// and water for a picture only ss_pipscale of the screen wide. the opt-in
-	// p2boost_remote_view_fps N renders that remote slot at most N times per
-	// second and redraws the last picture in between. local split-screen
-	// players are never affected.
+	// and water for a picture only ss_pipscale of the screen wide. the
+	// remote_view_fps fix renders that remote slot at most N times per second
+	// and redraws the last picture in between. the primary local view is never
+	// affected; the opt-in split_view2_fps fix applies the same schedule to
+	// local split-screen slot 1 (the second player's half of the screen).
 	class RemoteView {
 	public:
 		~RemoteView( );
@@ -47,7 +48,14 @@ namespace p2boost {
 
 		void set_max_fps( int fps ) noexcept;
 		int  max_fps( ) const noexcept {
-            return m_max_fps.load( std::memory_order_relaxed );
+			return m_max_fps.load( std::memory_order_relaxed );
+		}
+
+		// local split-screen slot 1 (the second player) may also be capped; that
+		// player then sees the 3D scene at most N times per second.
+		void set_local_slot1_fps( int fps ) noexcept;
+		int  local_slot1_fps( ) const noexcept {
+			return m_local_slot1_fps.load( std::memory_order_relaxed );
 		}
 
 		// forget the last picture so the next remote frame renders for real.
@@ -72,7 +80,8 @@ namespace p2boost {
 		static void __fastcall RenderView( void* self, void*, const void* view, const void* hud_view, int clear_flags, int what_to_draw );
 		static void ResetListener( void* context );
 
-		int  remote_slot( const void* self, const void* view ) const noexcept;
+		int  view_slot( const void* self, const void* view ) const noexcept;
+		bool slot_is_remote( int slot ) const noexcept;
 		bool queue_device_call( bool save, const RECT& rect );
 		bool ensure_picture( IDirect3DDevice9* device, UINT width, UINT height, D3DFORMAT format );
 		bool draw_picture( IDirect3DDevice9* device, const RECT& rect );
@@ -90,6 +99,7 @@ namespace p2boost {
 		bool                  m_reuse_supported{ };
 
 		std::atomic_int m_max_fps{ };
+		std::atomic_int m_local_slot1_fps{ };
 
 		// main-thread picture schedule.
 		LARGE_INTEGER m_frequency{ };
