@@ -95,7 +95,7 @@ namespace p2boost {
 		static void __fastcall FrameStageNotify( void* self, void*, int stage );
 		static bool __fastcall ChangeInstance( void* self, void*, unsigned short handle, void* renderable );
 		state_iterator_t find_state( std::uint16_t handle ) noexcept;
-		int cull_depth_list( void* self, const void* view, int selected, std::uint16_t* output, int* high_priority_count );
+		int              cull_depth_list( void* self, const void* view, int selected, std::uint16_t* output, int* high_priority_count );
 
 		static ProjectedShadowCache* m_instance;
 

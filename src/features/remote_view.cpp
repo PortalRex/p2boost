@@ -69,7 +69,7 @@ namespace p2boost {
 			if( !module.contains( function, 7 ) )
 				return false;
 
-			const auto* bytes = function.as< const std::uint8_t* >( );
+			const auto* bytes     = function.as< const std::uint8_t* >( );
 			const bool  queued    = bytes[ 0 ] == 0x8d && bytes[ 1 ] == 0x81 && bytes[ 6 ] == 0xc3;
 			const bool  immediate = bytes[ 0 ] == 0x33 && bytes[ 1 ] == 0xc0 && bytes[ 2 ] == 0xc3;
 			return queued || immediate;
@@ -145,13 +145,13 @@ namespace p2boost {
 		if( m_display )
 			m_display->set_reset_listener( nullptr, nullptr );
 		release_device_resources( );
-		m_display          = nullptr;
-		m_device           = nullptr;
-		m_material_system  = nullptr;
-		m_local_slot_mask  = nullptr;
-		m_remote_players   = nullptr;
-		m_viewport_scale   = nullptr;
-		m_reuse_supported  = false;
+		m_display            = nullptr;
+		m_device             = nullptr;
+		m_material_system    = nullptr;
+		m_local_slot_mask    = nullptr;
+		m_remote_players     = nullptr;
+		m_viewport_scale     = nullptr;
+		m_reuse_supported    = false;
 		m_picture_rect_valid = false;
 		if( m_instance == this )
 			m_instance = nullptr;
@@ -219,8 +219,8 @@ namespace p2boost {
 		}
 
 		const Address setup{ const_cast< void* >( view ) };
-		const LONG    left   = setup.at< int >( game::active( )->view_x );
-		const LONG    top    = setup.at< int >( game::active( )->view_y );
+		const LONG    left = setup.at< int >( game::active( )->view_x );
+		const LONG    top  = setup.at< int >( game::active( )->view_y );
 		const RECT    rect{ left, top, left + setup.at< int >( game::active( )->view_width ), top + setup.at< int >( game::active( )->view_height ) };
 
 		// picture reuse copies whole back-buffer pixels, so it stays off while
@@ -265,10 +265,10 @@ namespace p2boost {
 		if( render_target )
 			render_target->Release( );
 
-		RECT rect{ std::max< LONG >( requested.left, 0 ),
-		           std::max< LONG >( requested.top, 0 ),
-		           std::min< LONG >( requested.right, static_cast< LONG >( description.Width ) ),
-		           std::min< LONG >( requested.bottom, static_cast< LONG >( description.Height ) ) };
+		RECT       rect{ std::max< LONG >( requested.left, 0 ),
+                   std::max< LONG >( requested.top, 0 ),
+                   std::min< LONG >( requested.right, static_cast< LONG >( description.Width ) ),
+                   std::min< LONG >( requested.bottom, static_cast< LONG >( description.Height ) ) };
 		const bool valid_rect = ready && rect.right > rect.left && rect.bottom > rect.top;
 		const UINT width      = valid_rect ? static_cast< UINT >( rect.right - rect.left ) : 0;
 		const UINT height     = valid_rect ? static_cast< UINT >( rect.bottom - rect.top ) : 0;

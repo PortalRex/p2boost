@@ -86,7 +86,7 @@ namespace p2boost {
 
 		// optional: the depth-slot count ComputeShadowDepthTextures searches. a
 		// mismatch only disables the stable depth order.
-		const Address capacity = modules.m_client.find( game::active( )->depth_slot_capacity );
+		const Address capacity  = modules.m_client.find( game::active( )->depth_slot_capacity );
 		m_depth_capacity_offset = capacity ? capacity.at< std::int32_t >( game::active( )->xref_depth_slot_capacity ) : 0;
 		if( m_depth_capacity_offset <= 0 || m_depth_capacity_offset > 0x1000 )
 			m_depth_capacity_offset = 0;

@@ -13,7 +13,7 @@ namespace p2boost::sdk {
 		// the stock depth selector passes (handle, null, 0) for every light it
 		// culls, so a culled light never samples a depth slot reused this frame.
 		void SetFlashlightDepthTexture( unsigned short handle, void* texture, unsigned char stencil_bit ) {
-			using function_t = void(__thiscall*)( void*, unsigned short, void*, unsigned char );
+			using function_t = void( __thiscall* )( void*, unsigned short, void*, unsigned char );
 			invoke< set_flashlight_depth_texture_slot, function_t >( handle, texture, stencil_bit );
 		}
 
@@ -28,7 +28,7 @@ namespace p2boost::sdk {
 		static constexpr std::size_t leafless_flashlight_mode_slot{ 29 };
 
 		bool LeaflessFlashlightMode( ) {
-			using function_t = bool(__thiscall*)( void* );
+			using function_t = bool( __thiscall* )( void* );
 			return invoke< leafless_flashlight_mode_slot, function_t >( );
 		}
 	};

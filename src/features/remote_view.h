@@ -47,7 +47,7 @@ namespace p2boost {
 
 		void set_max_fps( int fps ) noexcept;
 		int  max_fps( ) const noexcept {
-			return m_max_fps.load( std::memory_order_relaxed );
+            return m_max_fps.load( std::memory_order_relaxed );
 		}
 
 		// forget the last picture so the next remote frame renders for real.
@@ -70,7 +70,7 @@ namespace p2boost {
 		using render_view_fn_t = void( __thiscall* )( void*, const void*, const void*, int, int );
 
 		static void __fastcall RenderView( void* self, void*, const void* view, const void* hud_view, int clear_flags, int what_to_draw );
-		static void            ResetListener( void* context );
+		static void ResetListener( void* context );
 
 		int  remote_slot( const void* self, const void* view ) const noexcept;
 		bool queue_device_call( bool save, const RECT& rect );
