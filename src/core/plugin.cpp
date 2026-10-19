@@ -62,10 +62,6 @@ namespace p2boost {
 				return false;
 			}
 
-			// Portal 2 resolves mat_queue_mode to 0 on modern CPUs; force the
-			// multicore render path now and again at every level load.
-			enforce_render_threading( );
-
 			// Portal 2 shipped these public SDK rendering controls with FCVAR_CHEAT.
 			// removing only that flag makes the original engine path usable while
 			// preserving archive, client, bounds, and replication behavior.
@@ -152,6 +148,9 @@ namespace p2boost {
 		}
 
 		void Unload( ) override {
+			// the forced queue mode belongs to the plugin; hand it back first.
+			restore_render_threading( );
+
 			// remove feature callbacks before releasing their shared engine bindings.
 			// remote view registers a reset listener on the display hooks.
 			m_remote_view.remove( );
@@ -198,7 +197,7 @@ namespace p2boost {
 		// client-command path so the change callback always runs; the per-frame
 		// check re-asserts the mode after any map or device reset overrides it.
 		void enforce_render_threading( ) const noexcept {
-			if( !m_force_multicore )
+			if( !m_enabled || !m_force_multicore )
 				return;
 
 			if( !m_queue_mode )
@@ -208,6 +207,11 @@ namespace p2boost {
 
 			if( sdk::IVEngineClient* engine_client = m_interfaces.engine_client( ) ) {
 				const int before = m_queue_mode->value_integer( );
+				// remember the game's own setting once so disabling restores it.
+				if( !m_queue_mode_forced ) {
+					m_original_queue_mode = before;
+					m_queue_mode_forced   = true;
+				}
 				engine_client->ExecuteClientCmd( "mat_queue_mode 2" );
 				const int after = m_queue_mode->value_integer( );
 				if( after != 2 )
@@ -215,6 +219,21 @@ namespace p2boost {
 				else if( before != 2 && before != m_last_queue_mode )
 					console_print( "[p2boost] mat_queue_mode %d -> 2 (multicore rendering enabled)\n", before );
 				m_last_queue_mode = after;
+			}
+		}
+
+		// hand mat_queue_mode back to the value the game had before forcing.
+		void restore_render_threading( ) const noexcept {
+			if( !m_queue_mode_forced )
+				return;
+
+			if( sdk::IVEngineClient* engine_client = m_interfaces.engine_client( ) ) {
+				char command[ 32 ];
+				std::snprintf( command, sizeof( command ), "mat_queue_mode %d", m_original_queue_mode );
+				engine_client->ExecuteClientCmd( command );
+				m_queue_mode_forced = false;
+				m_last_queue_mode   = -1;
+				console_print( "[p2boost] mat_queue_mode restored to %d\n", m_original_queue_mode );
 			}
 		}
 
@@ -356,15 +375,15 @@ namespace p2boost {
 		bool register_commands( ) {
 			static constexpr command_descriptor_t descriptors[]{
 			    { "p2boost_status", "Print p2boost runtime state." },
-			    { "p2boost_enable", "Enable or disable verified fixes." },
+			    { "p2boost_enable", "Global switch for every p2boost performance change (A/B comparison)." },
 			    { "p2boost_flat_textures", "Enable or disable alpha-safe flat textures." },
 			    { "p2boost_trace", "Enable or disable frame tracing." },
 			    { "p2boost_overlay", "Select the full or FPS-only frame profiler." },
 			    { "p2boost_dump_metrics", "Write frame metrics to CSV." },
 			    { "p2boost_update", "Update p2boost to the latest release. Optional 'force' reinstalls." },
-			    { "p2boost_multicore", "Force mat_queue_mode 2 (multicore rendering). Re-enforced on every level load." },
-			    { "p2boost_shadow_cull", "Exact main-view projected-shadow depth culling (0 default, 1 experimental)." },
-			    { "p2boost_remote_view_fps", "Render the +remote_view partner picture at most N times per second (0 = every frame)." },
+			    { "p2boost_multicore", "Force mat_queue_mode 2 (multicore rendering, 1 default). Follows p2boost_enable." },
+			    { "p2boost_shadow_cull", "Exact main-view projected-shadow depth culling (1 default)." },
+			    { "p2boost_remote_view_fps", "Render the +remote_view partner picture at most N times per second (60 default, 0 = every frame)." },
 			    { "p2boost_flashlight_flush", "Flush projected-texture surface buckets in O(used) instead of O(capacity) (1 default)." },
 			    { "p2boost_xinput_throttle", "Re-probe absent XInput controller slots once per second instead of every frame (1 default)." },
 			    { "p2boost_occlusion_skip", "Skip the renderable occlusion pass on maps without occluders, where it never culls (1 default)." },
@@ -661,8 +680,7 @@ namespace p2boost {
 			}
 
 			m_force_multicore = enabled;
-			if( enabled )
-				enforce_render_threading( );
+			apply_enabled_state( );
 			console_print( "[p2boost] multicore rendering %s\n", enabled ? "enabled" : "disabled" );
 			return sdk::Stop;
 		}
@@ -673,7 +691,7 @@ namespace p2boost {
 		sdk::PluginResult shadow_cull_command( const sdk::CCommand& args ) {
 			bool enabled{ };
 			if( args.ArgC( ) == 1 ) {
-				console_print( "[p2boost] p2boost_shadow_cull = %d\n", m_shadow_cache.exact_cull( ) ? 1 : 0 );
+				console_print( "[p2boost] p2boost_shadow_cull = %d\n", m_shadow_cull_requested ? 1 : 0 );
 				return sdk::Stop;
 			}
 
@@ -682,7 +700,8 @@ namespace p2boost {
 				return sdk::Stop;
 			}
 
-			m_shadow_cache.set_exact_cull( enabled );
+			m_shadow_cull_requested = enabled;
+			apply_enabled_state( );
 			console_print( "[p2boost] exact shadow-depth culling %s\n", enabled ? "enabled" : "disabled" );
 			return sdk::Stop;
 		}
@@ -802,7 +821,7 @@ namespace p2boost {
 
 		sdk::PluginResult remote_view_fps_command( const sdk::CCommand& args ) {
 			if( args.ArgC( ) == 1 ) {
-				console_print( "[p2boost] p2boost_remote_view_fps = %d\n", m_remote_view.max_fps( ) );
+				console_print( "[p2boost] p2boost_remote_view_fps = %d\n", m_remote_view_fps_requested );
 				return sdk::Stop;
 			}
 
@@ -816,7 +835,8 @@ namespace p2boost {
 				return sdk::Stop;
 			}
 
-			m_remote_view.set_max_fps( fps );
+			m_remote_view_fps_requested = fps;
+			apply_enabled_state( );
 			if( fps > 0 )
 				console_print( "[p2boost] +remote_view partner picture limited to %d renders per second\n", fps );
 			else
@@ -831,10 +851,17 @@ namespace p2boost {
 		}
 
 		void apply_enabled_state( ) noexcept {
-			// the performance fixes share one reversible master switch; each newer
-			// fix also has its own toggle and stays on by default.
+			// p2boost_enable is the global A/B switch: every performance change
+			// follows it, and each also has its own toggle that defaults to on.
 			m_frame_limiter.set_enabled( m_enabled );
 			m_shadow_cache.set_enabled( m_enabled );
+			m_shadow_cache.set_exact_cull( m_enabled && m_shadow_cull_requested );
+			if( m_remote_view.reuse_available( ) )
+				m_remote_view.set_max_fps( m_enabled ? m_remote_view_fps_requested : 0 );
+			if( m_enabled && m_force_multicore )
+				enforce_render_threading( );
+			else
+				restore_render_threading( );
 			m_flashlight_buckets.set_enabled( m_enabled && m_flashlight_flush );
 			m_xinput_throttle.set_enabled( m_enabled && m_xinput_throttle_requested );
 			m_occlusion_skip.set_enabled( m_enabled && m_occlusion_skip_requested );
@@ -880,8 +907,12 @@ namespace p2boost {
 		bool                    m_occlusion_skip_requested{ true };
 		bool                    m_vgui_shadow_skip_requested{ true };
 		bool                    m_shadow_depth_reuse_requested{ true };
+		bool                    m_shadow_cull_requested{ true };
+		int                     m_remote_view_fps_requested{ 60 };
 		mutable con_var_t*      m_queue_mode{ };
 		mutable int             m_last_queue_mode{ -1 };
+		mutable int             m_original_queue_mode{ -1 };
+		mutable bool            m_queue_mode_forced{ };
 	};
 
 	Plugin* Plugin::m_instance{ };
