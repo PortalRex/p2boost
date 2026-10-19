@@ -36,6 +36,10 @@ namespace p2boost {
 			return reinterpret_cast< function_t >( m_previous );
 		}
 
+		void** method( ) const noexcept {
+			return m_method;
+		}
+
 		bool installed( ) const noexcept {
 			return m_installed;
 		}

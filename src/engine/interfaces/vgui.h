@@ -18,6 +18,8 @@ namespace p2boost::sdk {
 		static constexpr std::size_t paint_traverse_ex_slot{ 117 };
 		static constexpr std::size_t get_kerned_char_width_slot{ 147 };
 		static constexpr std::size_t draw_colored_text_slot{ 160 };
+		// IMatSystemSurface::DrawPanelIn3DSpace: how C_VGuiScreen::DrawModel paints.
+		static constexpr std::size_t draw_panel_in_3d_space_slot{ 164 };
 
 		int GetFontTall( unsigned long font ) {
 			using function_t = int( __thiscall* )( void*, unsigned long );
@@ -40,6 +42,14 @@ namespace p2boost::sdk {
 
 		Address PaintTraverseExAddress( ) const noexcept {
 			return method( paint_traverse_ex_slot );
+		}
+
+		Address DrawPanelIn3DSpaceAddress( ) const noexcept {
+			return method( draw_panel_in_3d_space_slot );
+		}
+
+		void** DrawPanelIn3DSpaceSlot( ) noexcept {
+			return method_slot( draw_panel_in_3d_space_slot );
 		}
 
 		Address DrawColoredTextAddress( ) const noexcept {

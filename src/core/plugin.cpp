@@ -11,6 +11,8 @@
 #include "game_window.h"
 #include "nvidia_profile.h"
 #include "occlusion_skip.h"
+#include "queued_frames.h"
+#include "vgui_screen_cache.h"
 #include "vgui_screen_shadow_skip.h"
 #include "shadow_depth_reuse.h"
 #include "profiler_overlay.h"
@@ -45,6 +47,8 @@ namespace p2boost {
 			shadow_cull,
 			partner_view_fps,
 			shadow_depth_fps,
+			vgui_screen_fps,
+			frame_queue_depth,
 			count
 		};
 
@@ -67,6 +71,8 @@ namespace p2boost {
 		    { "shadow_cull", 1, 1, "skip depth maps whose light volume misses the view" },
 		    { "partner_view_fps", 120, 1000, "co-op partner's view (+remote_view, or the split-screen player not in control) renders per second (0 = every frame)" },
 		    { "shadow_depth_fps", 120, 1000, "also reuse shadow-depth maps across frames, refreshed this often (0 = off)" },
+		    { "vgui_screen_fps", 0, 1000, "experimental: in-world VGUI screens repaint this often from a cached texture (0 = off)" },
+		    { "frame_queue_depth", 1, 2, "experimental: frames the render thread may run behind the game (1 = stock)" },
 		};
 
 		constexpr std::size_t fix_count{ static_cast< std::size_t >( fix_t::count ) };
@@ -145,6 +151,10 @@ namespace p2boost {
 				m_verification.m_errors.emplace_back( "vgui-screen shadow-skip signature mismatch" );
 			if( m_verification.m_supported && !m_shadow_depth_reuse.install( m_modules ) )
 				m_verification.m_errors.emplace_back( "optional shadow-depth reuse unavailable" );
+			if( m_verification.m_supported && !m_queued_frames.install( m_modules, m_interfaces ) )
+				m_verification.m_errors.emplace_back( "optional frame-queue ring unavailable" );
+			if( m_verification.m_supported && !m_vgui_screen_cache.install( m_modules, m_interfaces, m_vgui_screen_shadow_skip.draw_model_slot( ), m_verification.m_game_root ) )
+				m_verification.m_errors.emplace_back( "optional vgui-screen cache unavailable" );
 			if( m_verification.m_supported && !m_flat_textures.install( m_modules, m_interfaces, m_device ) )
 				m_verification.m_errors.emplace_back( "optional flat-texture hooks unavailable" );
 			if( m_verification.m_supported && !m_display_adjustments.install( m_commands, m_device, &m_metrics ) )
@@ -205,6 +215,8 @@ namespace p2boost {
 			m_flashlight_buckets.remove( );
 			m_xinput_throttle.remove( );
 			m_occlusion_skip.remove( );
+			m_vgui_screen_cache.remove( );
+			m_queued_frames.remove( );
 			m_vgui_screen_shadow_skip.remove( );
 			m_shadow_depth_reuse.remove( );
 			m_frame_limiter.remove( );
@@ -283,6 +295,7 @@ namespace p2boost {
 			m_demo_provenance.reset( );
 			m_shadow_cache.invalidate_all( );
 			m_shadow_depth_reuse.invalidate( );
+			m_vgui_screen_cache.invalidate( );
 			m_remote_view.invalidate( );
 			enforce_render_threading( );
 		}
@@ -310,6 +323,7 @@ namespace p2boost {
 				// and re-assert the render thread mode the engine may reset.
 				m_shadow_cache.invalidate_all( );
 				m_shadow_depth_reuse.invalidate( );
+				m_vgui_screen_cache.invalidate( );
 				m_remote_view.invalidate( );
 				enforce_render_threading( );
 				m_last_focused = focused;
@@ -374,6 +388,13 @@ namespace p2boost {
 				return flat_textures_command( args );
 			if( _stricmp( command, "p2boost_shadow_depth_views" ) == 0 )
 				return shadow_depth_views_command( );
+			if( _stricmp( command, "p2boost_x_ring" ) == 0 ) {
+				int value{ };
+				if( args.ArgC( ) == 2 && parse_bounded( args.Arg( 1 ), 0, 1, value ) )
+					g_x_ring_mode = value;
+				console_print( "[p2boost] x_ring %d\n", g_x_ring_mode );
+				return sdk::Stop;
+			}
 			if( _stricmp( command, "r_intensity" ) == 0 )
 				return intensity_command( args );
 
@@ -413,6 +434,7 @@ namespace p2boost {
 			    { "p2boost_update", "Update p2boost to the latest release. Optional 'force' reinstalls." },
 			    { "p2boost_flat_textures", "Optional visual mode with solid-color surfaces: 0|1." },
 			    { "p2boost_shadow_depth_views", "Print the flashlight depth views rendered recently (origin, angles, fov)." },
+			    { "p2boost_x_ring", "Research: 1 = frame ring with the engine's two contexts only." },
 			    { "r_intensity", "Scale final-frame RGB brightness (0.0 to 2.0, 1.0 neutral)." },
 			};
 
@@ -667,6 +689,10 @@ namespace p2boost {
 				return m_shadow_depth_reuse.installed( );
 			case fix_t::partner_view_fps:
 				return m_remote_view.reuse_available( );
+			case fix_t::vgui_screen_fps:
+				return m_vgui_screen_cache.installed( );
+			case fix_t::frame_queue_depth:
+				return m_queued_frames.installed( );
 			default:
 				return false;
 			}
@@ -676,7 +702,7 @@ namespace p2boost {
 		// what it has done so far.
 		void print_fix( fix_t which, bool counters ) const {
 			const fix_info_t& info = fix_table[ static_cast< std::size_t >( which ) ];
-			char              detail[ 96 ]{ };
+			char              detail[ 240 ]{ };
 			if( counters ) {
 				switch( which ) {
 				case fix_t::shadow_cache:
@@ -707,6 +733,22 @@ namespace p2boost {
 					std::snprintf( detail, sizeof( detail ), "%llu rendered, %llu reused",
 					               static_cast< unsigned long long >( m_remote_view.rendered_count( ) ),
 					               static_cast< unsigned long long >( m_remote_view.reused_count( ) ) );
+					break;
+				case fix_t::vgui_screen_fps:
+					std::snprintf( detail, sizeof( detail ), "%llu painted, %llu reused",
+					               static_cast< unsigned long long >( m_vgui_screen_cache.painted_count( ) ),
+					               static_cast< unsigned long long >( m_vgui_screen_cache.reused_count( ) ) );
+					break;
+				case fix_t::frame_queue_depth:
+					{
+						char extra[ 160 ]{ };
+						m_queued_frames.debug( extra, sizeof( extra ) );
+						std::snprintf( detail, sizeof( detail ), "%llu ring, %llu drains, %llu calls, reason %d, mode %d, %s",
+						               static_cast< unsigned long long >( m_queued_frames.ring_frames( ) ),
+						               static_cast< unsigned long long >( m_queued_frames.drained_count( ) ),
+						               static_cast< unsigned long long >( m_queued_frames.hook_calls( ) ),
+						               m_queued_frames.last_reason( ), m_queued_frames.last_mode( ), extra );
+					}
 					break;
 				default:
 					break;
@@ -780,6 +822,8 @@ namespace p2boost {
 			m_vgui_screen_shadow_skip.set_enabled( on( fix_t::vgui_shadow_skip ) );
 			m_shadow_depth_reuse.set_enabled( on( fix_t::shadow_depth_reuse ) );
 			m_shadow_depth_reuse.set_max_fps( on( fix_t::shadow_depth_reuse ) ? fix( fix_t::shadow_depth_fps ) : 0 );
+			m_vgui_screen_cache.set_max_fps( m_enabled ? fix( fix_t::vgui_screen_fps ) : 0 );
+			m_queued_frames.set_depth( m_enabled ? fix( fix_t::frame_queue_depth ) : 1 );
 			m_shadow_cache.set_stable_depth_order( on( fix_t::shadow_depth_reuse ) && m_shadow_depth_reuse.installed( ) );
 			m_overlay.set_fixes_enabled( m_enabled );
 		}
@@ -803,6 +847,8 @@ namespace p2boost {
 		XInputThrottle               m_xinput_throttle;
 		OcclusionSkip                m_occlusion_skip;
 		VguiScreenShadowSkip         m_vgui_screen_shadow_skip;
+		VguiScreenCache              m_vgui_screen_cache;
+		QueuedFrames                 m_queued_frames;
 		ShadowDepthReuse             m_shadow_depth_reuse;
 		DisplayAdjustments           m_display_adjustments;
 		RemoteView                   m_remote_view;

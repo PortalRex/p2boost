@@ -73,6 +73,39 @@ namespace p2boost::sdk {
 		static constexpr std::size_t reload_textures_slot{ 79 };
 		static constexpr std::size_t reload_materials_slot{ 80 };
 		static constexpr std::size_t get_render_context_slot{ 113 };
+		// FindMaterial( name, group, complain, filter ), FindTexture( name, group,
+		// complain, creation flags ) and CreateNamedRenderTargetTextureEx2( name,
+		// width, height, size mode, format, depth mode, texture flags, rt flags ).
+		static constexpr std::size_t find_material_slot{ 82 };
+		static constexpr std::size_t find_texture_slot{ 89 };
+		static constexpr std::size_t create_named_render_target_slot{ 97 };
+
+		void* FindMaterial( const char* name, const char* group, bool complain, const char* filter ) {
+			using function_t = void*( __thiscall* )( void*, const char*, const char*, bool, const char* );
+			return invoke< find_material_slot, function_t >( name, group, complain, filter );
+		}
+
+		void* CreateNamedRenderTargetTextureEx2( const char* name, int width, int height, int size_mode, int format, int depth, unsigned int texture_flags, unsigned int target_flags ) {
+			using function_t = void*( __thiscall* )( void*, const char*, int, int, int, int, int, unsigned int, unsigned int );
+			return invoke< create_named_render_target_slot, function_t >( name, width, height, size_mode, format, depth, texture_flags, target_flags );
+		}
+
+		Address FindMaterialAddress( ) const noexcept {
+			return method( find_material_slot );
+		}
+
+		Address CreateNamedRenderTargetAddress( ) const noexcept {
+			return method( create_named_render_target_slot );
+		}
+
+		void* FindTexture( const char* name, const char* group, bool complain, int flags ) {
+			using function_t = void*( __thiscall* )( void*, const char*, const char*, bool, int );
+			return invoke< find_texture_slot, function_t >( name, group, complain, flags );
+		}
+
+		Address FindTextureAddress( ) const noexcept {
+			return method( find_texture_slot );
+		}
 
 		void ReloadTextures( ) {
 			using function_t = void( __thiscall* )( void* );

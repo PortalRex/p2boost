@@ -140,6 +140,66 @@ namespace p2boost::game {
 
 		std::ptrdiff_t surface_start_drawing_operand{ 127 };
 		std::ptrdiff_t surface_finish_drawing_operand{ 603 };
+
+		// CMatSystemSurface::DrawPanelIn3DSpace (IMatSystemSurface slot 164) and
+		// the 3D StartDrawing it calls, which loads the panel-to-world matrix.
+		const char* surface_draw_panel_in_3d{ "55 8B EC 53 8B 5D 08 56 57 8B F9 8B 07 8B 90 64 01 00 00 6A 00 53 FF D2 8B 0D ? ? ? ? 8B 01 8B 90 C4 01 00 00 FF D2" };
+		const char* surface_start_drawing_3d{ "55 8B EC F3 0F 10 05 ? ? ? ? 8B 45 0C F3 0F 10 4D 18 81 EC 80 00 00 00 53 56 57 8B F9 8B 4D 10" };
+
+		// CMaterialSystem::EndFrame (IMaterialSystem slot found through its vtable
+		// entry); the queued-frame ring reads every address it needs from the
+		// function body.
+		// CMatQueuedRenderContext's constructor, run on the ring's third context.
+		const char* materials_queued_context_ctor{ "56 57 8B F1 E8 ? ? ? ? 8D 8E F0 01 00 00 C7 06 ? ? ? ? C7 46 04 ? ? ? ? E8 ? ? ? ? 0F 57 C0 33 FF F3 0F 11 86 50 02 00 00" };
+		// CMatRenderContextBase::LockRenderData: names the render-data stack
+		// index and the two static CMemoryStacks the engine flips each frame.
+		const char* materials_lock_render_data{ "55 8B EC 51 A1 ? ? ? ? 53 56 8D 34 80 8B 04 F5 ? ? ? ? 89 4D FC 8B 4D 08 8D 34 F5 ? ? ? ? 3B C8 0F 46 C8" };
+		// CMemoryStack::Init, FreeAll and Term, for the ring's third stack.
+		const char* materials_memory_stack_init{ "55 8B EC 8B 45 0C 83 EC 24 53 56 8B F1 8B 4D 18 83 C1 03 57 8B 7D 08 83 E1 FC C6 46 11 00 89 46 18 89 4E 1C" };
+		const char* materials_memory_stack_free_all{ "55 8B EC 8B 51 0C 85 D2 74 ? 3B 51 04 73 ? 56 8B 71 1C 4E 8B C6 F7 D0 23 C6 03 C2 3B C2" };
+		const char* materials_memory_stack_term{ "53 56 8B F1 8B 4E 0C 33 DB 3B CB 74 ? 3B 4E 04 73 ? 8B 56 1C 4A 8B C2 F7 D0 23 C2 03 C1 3B C1 72 ? 3B 06 77 ? 89 06 38 5E 11" };
+		// CMaterialSystem::BeginFrame: flips the render-data stacks (1 - index).
+		const char* materials_begin_frame{ "55 8B EC 83 EC 0C 57 8B F9 FF 15 ? ? ? ? 84 C0 0F 84 ? ? ? ? 8B 07 8B 90 00 02 00 00 8B CF FF D2 84 C0 0F 85" };
+		const char* materials_end_frame{ "55 8B EC 83 EC 0C 56 8B F1 FF 15 ? ? ? ? 84 C0 0F 84 ? ? ? ? 8B 06 8B 90 00 02 00 00 8B CE FF D2 84 C0 0F 84" };
+
+		// CMaterialSystem::m_bAllocatingRenderTargets: CreateNamedRenderTarget*
+		// refuses outside Begin/EndRenderTargetAllocation; DXVK needs neither the
+		// device release End performs nor the pool ordering the block exists for.
+		std::ptrdiff_t materials_allocating_render_targets{ 0x2bac };
+		// IMaterial reference counting.
+		std::ptrdiff_t vmt_material_add_ref{ 12 };
+
+		// CMatSystemSurface fields: the current draw color, the surface extents
+		// StartDrawing takes from the viewport, and the paint-mode flag byte
+		// whose bit 1 marks a DrawPanelIn3DSpace in progress.
+		std::ptrdiff_t surface_draw_color{ 0x2c };
+		std::ptrdiff_t surface_extents{ 0x1c };
+		std::ptrdiff_t surface_paint_flags{ 0x102dc };
+
+		// ISurface slots DrawPanelIn3DSpace and DrawFullScreenBuffer use.
+		std::ptrdiff_t vmt_surface_draw_set_color{ 14 };
+		std::ptrdiff_t vmt_surface_draw_set_texture{ 37 };
+		std::ptrdiff_t vmt_surface_create_texture_id{ 41 };
+		std::ptrdiff_t vmt_surface_solve_traverse{ 89 };
+		std::ptrdiff_t vmt_surface_draw_textured_sub_rect{ 103 };
+		std::ptrdiff_t vmt_surface_draw_set_texture_material{ 165 };
+
+		// the VPanel's Client() and IClientPanel's PaintTraverse and Repaint.
+		std::ptrdiff_t vmt_vpanel_client{ 39 };
+		std::ptrdiff_t vmt_client_panel_paint_traverse{ 3 };
+		std::ptrdiff_t vmt_client_panel_repaint{ 4 };
+
+		// IMatRenderContext slots: Release, BeginRender, EndRender, the depth
+		// override DrawPanelIn3DSpace sets for the panel, and the render-target
+		// and viewport push/pop. ITexture's actual width and height.
+		std::ptrdiff_t vmt_context_release{ 1 };
+		std::ptrdiff_t vmt_context_begin_render{ 2 };
+		std::ptrdiff_t vmt_context_end_render{ 3 };
+		std::ptrdiff_t vmt_context_override_depth{ 75 };
+		std::ptrdiff_t vmt_context_push_render_target{ 108 };
+		std::ptrdiff_t vmt_context_pop_render_target{ 111 };
+		std::ptrdiff_t vmt_texture_actual_width{ 3 };
+		std::ptrdiff_t vmt_texture_actual_height{ 4 };
 	};
 
 	// the base game; constructed from the default member initializers above.

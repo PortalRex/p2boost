@@ -30,10 +30,12 @@ namespace p2boost {
 			return false;
 
 		m_current_view_id = view.as< const int* >( );
+		m_draw_model_slot = slot;
 		m_instance        = this;
 		if( !m_draw_model.install( slot, reinterpret_cast< void* >( &DrawModel ) ) ) {
 			m_instance        = nullptr;
 			m_current_view_id = nullptr;
+			m_draw_model_slot = nullptr;
 			return false;
 		}
 		return true;
@@ -43,6 +45,7 @@ namespace p2boost {
 		m_draw_model.remove( );
 		m_enabled.store( false, std::memory_order_relaxed );
 		m_current_view_id = nullptr;
+		m_draw_model_slot = nullptr;
 
 		if( m_instance == this )
 			m_instance = nullptr;

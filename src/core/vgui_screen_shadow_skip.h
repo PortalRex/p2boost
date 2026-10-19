@@ -37,6 +37,11 @@ namespace p2boost {
 			return m_skipped.load( std::memory_order_relaxed );
 		}
 
+		// the hooked C_VGuiScreen::DrawModel slot, for a feature chained after it.
+		void** draw_model_slot( ) const noexcept {
+			return m_draw_model_slot;
+		}
+
 	private:
 		using draw_model_fn_t = int( __thiscall* )( void*, int, const void* );
 
@@ -45,6 +50,7 @@ namespace p2boost {
 		static VguiScreenShadowSkip* m_instance;
 
 		VmtHook                      m_draw_model;
+		void**                       m_draw_model_slot{ };
 		const int*                   m_current_view_id{ };
 		std::atomic_bool             m_enabled{ };
 		std::atomic< std::uint64_t > m_skipped{ };
