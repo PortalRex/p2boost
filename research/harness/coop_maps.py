@@ -36,7 +36,7 @@ def measure(seconds=8):
     begin = qpc()
     time.sleep(seconds)
     end = qpc()
-    g.run("p2boost_dump_metrics")
+    g.run("p2boost_trace 0")
     time.sleep(1)
     with open(os.path.join(GAME, "p2boost_metrics.csv")) as handle:
         rows = [r for r in csv.DictReader(handle) if begin <= int(r["qpc"]) <= end]

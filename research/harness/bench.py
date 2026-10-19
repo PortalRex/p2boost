@@ -62,7 +62,7 @@ def run_suite(out_dir, map_command, variants, rounds=2, seconds=10, extra_args=(
                 begin = qpc()
                 time.sleep(seconds)
                 end = qpc()
-                status = g.run("p2boost_dump_metrics", "p2boost_status")
+                status = g.run("p2boost_trace 0", "p2boost_status")
                 time.sleep(1)
                 with open(os.path.join(GAME, "p2boost_metrics.csv")) as handle:
                     rows = [r for r in csv.DictReader(handle) if begin <= int(r["qpc"]) <= end]

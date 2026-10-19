@@ -132,7 +132,7 @@ def main():
                 begin = qpc()
                 time.sleep(SECONDS)
                 end = qpc()
-                status = net.run(["p2boost_dump_metrics", "p2boost_status"], 30)
+                status = net.run(["p2boost_trace 0", "p2boost_status"], 30)
                 time.sleep(1)
                 target = os.path.join(OUT, f"seg{index:02d}.csv")
                 shutil.copyfile(os.path.join(GAME, "p2boost_metrics.csv"), target)

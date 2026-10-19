@@ -144,7 +144,7 @@ class Game:
         begin = qpc()
         time.sleep(seconds)
         end = qpc()
-        self.run("p2boost_dump_metrics")
+        self.run("p2boost_trace 0")
         time.sleep(1)
         with open(os.path.join(GAME, "p2boost_metrics.csv")) as handle:
             rows = [r for r in csv.DictReader(handle) if begin <= int(r["qpc"]) <= end]
