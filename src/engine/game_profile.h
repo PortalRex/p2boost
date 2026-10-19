@@ -58,8 +58,8 @@ namespace p2boost::game {
 
 		// C_VGuiScreen::DrawModel (renderable vtable slot 9, located through its
 		// one vtable entry) and the g_CurrentViewID store in SetupCurrentView.
-		const char* vgui_screen_draw_model{ "55 8B EC 51 53 56 8B F1 8D 8E ? ? 00 00 E8 ? ? ? ? 8B D8 85 DB 75 0A 5E 33 C0 5B 8B E5 5D C2 08 00 8A 8E ? ? 00 00 8B 03 8B 40 6C" };
-		const char* current_view_id_store{ "8B 40 68 8D 55 0C 52 89 3D ? ? ? ? FF D0 8B 0D ? ? ? ?" };
+		const char*    vgui_screen_draw_model{ "55 8B EC 51 53 56 8B F1 8D 8E ? ? 00 00 E8 ? ? ? ? 8B D8 85 DB 75 0A 5E 33 C0 5B 8B E5 5D C2 08 00 8A 8E ? ? 00 00 8B 03 8B 40 6C" };
+		const char*    current_view_id_store{ "8B 40 68 8D 55 0C 52 89 3D ? ? ? ? FF D0 8B 0D ? ? ? ?" };
 		std::ptrdiff_t xref_current_view_id{ 9 };
 
 		// ComputeShadowDepthTextures' slot search (cmp against the depth-slot
@@ -127,6 +127,16 @@ namespace p2boost::game {
 		std::ptrdiff_t view_y{ 0x08 };
 		std::ptrdiff_t view_width{ 0x10 };
 		std::ptrdiff_t view_height{ 0x18 };
+
+		// the remaining CViewSetup fields ComputeShadowDepthTextures writes for a
+		// light: m_bOrtho, the ortho rect, flags, the projection block from fov
+		// through the far planes, and the draw flags byte.
+		std::ptrdiff_t view_ortho{ 0x20 };
+		std::ptrdiff_t view_ortho_rect{ 0x24 };
+		std::ptrdiff_t view_ortho_rect_end{ 0x34 };
+		std::ptrdiff_t view_flags{ 0x34 };
+		std::ptrdiff_t view_projection_end{ 0xbc };
+		std::ptrdiff_t view_draw_flags{ 0x100 };
 
 		std::ptrdiff_t surface_start_drawing_operand{ 127 };
 		std::ptrdiff_t surface_finish_drawing_operand{ 603 };

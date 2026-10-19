@@ -10,41 +10,29 @@ namespace p2boost {
 
 	ShadowDepthReuse* ShadowDepthReuse::m_instance{ };
 
-	namespace {
-		// CViewSetup ranges ComputeShadowDepthTextures fills for one light. The
-		// struct lives on its stack without a constructor, so unwritten bytes
-		// are never compared.
-		constexpr std::ptrdiff_t view_width{ 0x10 };
-		constexpr std::ptrdiff_t view_height{ 0x18 };
-		constexpr std::ptrdiff_t view_ortho{ 0x20 };
-		constexpr std::ptrdiff_t view_ortho_rect{ 0x24 };
-		constexpr std::ptrdiff_t view_ortho_rect_end{ 0x34 };
-		constexpr std::ptrdiff_t view_flags{ 0x34 };
-		constexpr std::ptrdiff_t view_projection{ 0x68 };
-		constexpr std::ptrdiff_t view_projection_end{ 0xbc };
-		constexpr std::ptrdiff_t view_draw_flags{ 0x100 };
-	}
-
 	ShadowDepthReuse::key_t ShadowDepthReuse::make_key( const void* view ) noexcept {
-		key_t       key{ };
-		const auto* bytes  = static_cast< const std::uint8_t* >( view );
-		std::size_t cursor = 0;
-		auto        append = [ & ]( std::ptrdiff_t begin, std::ptrdiff_t end ) {
+		// the CViewSetup lives on ComputeShadowDepthTextures' stack without a
+		// constructor, so only the fields it writes are compared.
+		const game::profile_t* game  = game::active( );
+		const auto*            bytes = static_cast< const std::uint8_t* >( view );
+		key_t                  key{ };
+		std::size_t            cursor = 0;
+		auto                   append = [ & ]( std::ptrdiff_t begin, std::ptrdiff_t end ) {
             const auto length = static_cast< std::size_t >( end - begin );
             std::memcpy( key.data( ) + cursor, bytes + begin, length );
             cursor += length;
 		};
 
-		append( view_width, view_width + 4 );
-		append( view_height, view_height + 4 );
-		append( view_ortho, view_ortho + 1 );
-		if( bytes[ view_ortho ] )
-			append( view_ortho_rect, view_ortho_rect_end );
+		append( game->view_width, game->view_width + 4 );
+		append( game->view_height, game->view_height + 4 );
+		append( game->view_ortho, game->view_ortho + 1 );
+		if( bytes[ game->view_ortho ] )
+			append( game->view_ortho_rect, game->view_ortho_rect_end );
 		else
-			cursor += view_ortho_rect_end - view_ortho_rect;
-		append( view_flags, view_flags + 4 );
-		append( view_projection, view_projection_end );
-		append( view_draw_flags, view_draw_flags + 1 );
+			cursor += game->view_ortho_rect_end - game->view_ortho_rect;
+		append( game->view_flags, game->view_flags + 4 );
+		append( game->view_fov, game->view_projection_end );
+		append( game->view_draw_flags, game->view_draw_flags + 1 );
 		return key;
 	}
 
