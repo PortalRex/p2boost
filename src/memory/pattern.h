@@ -90,23 +90,4 @@ namespace p2boost::pattern {
 		return find( next, remaining, signature ) ? Address{ } : first;
 	}
 
-	// locate one relocated function pointer without relying on a VMT RVA.
-	inline Address find_pointer_unique( Address module, Address target ) noexcept {
-		const size_t length = image_size( module );
-		if( !module || !target || length < sizeof( std::uintptr_t ) )
-			return { };
-
-		Address match;
-		for( size_t offset = 0; offset + sizeof( std::uintptr_t ) <= length; ++offset ) {
-			const Address candidate = module.add( static_cast< std::ptrdiff_t >( offset ) );
-			if( candidate.at< std::uintptr_t >( ) != target.as< std::uintptr_t >( ) )
-				continue;
-			if( match )
-				return { };
-			match = candidate;
-		}
-
-		return match;
-	}
-
 }

@@ -2,6 +2,7 @@
 
 #include "address.h"
 #include "game_profile.h"
+#include "x86.h"
 
 #include <vector>
 
@@ -62,14 +63,10 @@ namespace p2boost {
 			return false;
 
 		// replace the function at its entry with a jump to ClearAll.
-		const std::uintptr_t              target = reinterpret_cast< std::uintptr_t >( &ClearAll );
-		const std::int32_t                jump   = static_cast< std::int32_t >( target - ( clear.as< std::uintptr_t >( ) + 5 ) );
 		const std::vector< std::uint8_t > expected{ 0x53, 0x8b, 0xd9, 0x80, 0xbb };
-		const std::vector< std::uint8_t > replacement{ 0xe9,
-		                                               static_cast< std::uint8_t >( jump ),
-		                                               static_cast< std::uint8_t >( jump >> 8 ),
-		                                               static_cast< std::uint8_t >( jump >> 16 ),
-		                                               static_cast< std::uint8_t >( jump >> 24 ) };
+		const std::vector< std::uint8_t > replacement = x86::relative_jump( clear, Address{ reinterpret_cast< void* >( &ClearAll ) } );
+		if( replacement.size( ) != expected.size( ) )
+			return false;
 
 		m_instance = this;
 		if( !m_entry.install( clear.as< void* >( ), expected, replacement ) ) {
