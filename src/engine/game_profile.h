@@ -203,8 +203,14 @@ namespace p2boost::game {
 		std::ptrdiff_t vmt_context_begin_render{ 2 };
 		std::ptrdiff_t vmt_context_end_render{ 3 };
 		std::ptrdiff_t vmt_context_override_depth{ 75 };
+		// IMatRenderContext: ClearBuffers( color, depth, stencil ), ClearColor4ub.
+		std::ptrdiff_t vmt_context_clear_buffers{ 12 };
+		std::ptrdiff_t vmt_context_clear_color{ 74 };
 		std::ptrdiff_t vmt_context_push_render_target{ 108 };
 		std::ptrdiff_t vmt_context_pop_render_target{ 111 };
+		// ITexture: IncrementReferenceCount, Download( rect, flags ).
+		std::ptrdiff_t vmt_texture_add_ref{ 10 };
+		std::ptrdiff_t vmt_texture_download{ 13 };
 		std::ptrdiff_t vmt_texture_actual_width{ 3 };
 		std::ptrdiff_t vmt_texture_actual_height{ 4 };
 	};

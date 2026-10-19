@@ -82,6 +82,7 @@ current values.
 | `shadow_cull` | 1 | Skips shadow maps for lights whose volume cannot touch your view. Set it to 0 if a shadow seen only through a portal ever disappears. |
 | `partner_view_fps` | 120 | Renders your co-op partner's view at most this many times per second and redraws the last picture in between (0 = every frame): the `+remote_view` picture, or in local split-screen the half of the player you are not controlling (`in_forceuser`). The view you control always renders every frame. Works with `mat_viewportscale`. |
 | `shadow_depth_fps` | 120 | Keeps shadow maps across frames and refreshes each at most this many times per second (0 = every frame). A light that moves re-renders at once; a moving object's shadow can lag by up to 1/N s. |
+| `vgui_screen_fps` | 0 | Opt-in: repaints in-world screens (lobby score boards, chamber signs) at most this many times per second and draws the last picture from a cached texture in between (0 = off). Opaque screens look the same; glowing or translucent screen art (the lobby boards' player figures) composites against the wall differently, which is why it is off by default. Try 60 for about +7%. |
 | `frame_queue_depth` | 2 | Lets the render thread run up to two frames behind the game instead of one (`mat_queue_mode 2` only), so a frame whose rendering takes longer than the next game frame no longer stalls it. Adds up to one frame of display latency; 1 = the engine's behaviour. |
 
 Per-fix contributions, measured on a second machine (Ryzen 7 7800X3D,

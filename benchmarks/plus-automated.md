@@ -34,6 +34,8 @@ Fixes are named as in `p2boost_fix <name> <value>`.
 | best + `partner_view_fps 120` | 703.5 | 2.54 | 315 |
 | best + partner 120 + `frame_queue_depth 1` (engine flip) | 679.0 | 2.69 | - |
 | best + partner 120 + `frame_queue_depth 2` | 755.5 | 2.60 | - |
+| best + partner 120 + ring 2 + `vgui_screen_fps 0` | 740-770 | 2.63 | - |
+| best + partner 120 + ring 2 + `vgui_screen_fps 60` (opt-in) | 800-825 | 2.44 | - |
 
 `p2boost_fix shadow_depth_fps`: 0 = 447.7, 120 = 498.0, 60 = 493.8 (3 x 10 s).
 

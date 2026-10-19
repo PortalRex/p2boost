@@ -342,6 +342,43 @@ The key now compares one byte.
 (moving casters only), and `p2boost_fix shadow_depth_fps 0` restores
 per-frame rendering.
 
+### Cached in-world screens (`vgui_screen_fps`, opt-in)
+
+**Problem.** Every in-world VGUI screen (`C_VGuiScreen`: the lobby's score
+boards and the chamber signs) is painted every frame, for every view, through
+`CMatSystemSurface::DrawPanelIn3DSpace`: the panel tree is laid out and
+painted straight into the world through a 3D transform (`StartDrawing3D`;
+`Begin3DPaint` is a no-op while that mode's flag is set). Not drawing the
+screens at all measured +13% in the split-screen lobby (both views), most of
+it the panel paint and its font-glyph cache lookups.
+
+**Change.** `DrawPanelIn3DSpace` is replaced for the calls that come from
+`C_VGuiScreen::DrawModel`. Each screen gets a rectangle in a private
+2048 × 2048 render target (`_rt_p2boost_vgui`, allocated at plugin load with
+the material system's allocation flag raised for that one call, downloaded
+at once, and without a depth buffer, because the engine's shared one is
+smaller than the atlas) and is repainted there at most N times per second:
+push the rectangle as the target, clear it, `Repaint` and `PaintTraverse`
+the panel, pop. Every frame the quad is drawn with a material over the
+atlas (`materials/p2boost/vgui_atlas.vmt`, written by the plugin), sampling
+the screen's rectangle with a half-texel inset, inside the same
+render-context sequence the engine uses (solve traverse, depth override).
+A rectangle stays with its panel while the panel's pixel size is unchanged;
+stale rectangles are evicted after a second when the atlas fills, and a
+level change forgets all of them.
+
+**Visual effect.** A screen's content updates at N FPS instead of your frame
+rate. Opaque screens (signs, text boards) are pixel-identical. Screen art
+that the panel draws additively or translucently is composited onto a black
+atlas and then drawn opaque, so it no longer blends with the wall behind:
+the lobby boards' glowing player figures come out yellow and cyan instead of
+orange and blue. A translucent atlas does not help, because the panel paint
+leaves no usable alpha behind. Until the blend states are captured too, the
+fix is opt-in: `p2boost_fix vgui_screen_fps 60`.
+
+**Result.** Split-screen lobby, 4 × 8 s alternating: 0 = 740–770, 60 =
+800–825 FPS.
+
 ### Two frames in flight on the render thread (`frame_queue_depth`)
 
 **Problem.** With `mat_queue_mode 2` the material system records each

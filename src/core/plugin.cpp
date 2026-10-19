@@ -71,7 +71,7 @@ namespace p2boost {
 		    { "shadow_cull", 1, 1, "skip depth maps whose light volume misses the view" },
 		    { "partner_view_fps", 120, 1000, "co-op partner's view (+remote_view, or the split-screen player not in control) renders per second (0 = every frame)" },
 		    { "shadow_depth_fps", 120, 1000, "also reuse shadow-depth maps across frames, refreshed this often (0 = off)" },
-		    { "vgui_screen_fps", 0, 1000, "experimental: in-world VGUI screens repaint this often from a cached texture (0 = off)" },
+		    { "vgui_screen_fps", 0, 1000, "opt-in: in-world screens (lobby boards, signs) repaint at most this often and are drawn from a cached texture in between (0 = off); glowing or translucent screen art composites differently" },
 		    { "frame_queue_depth", 2, 2, "frames the render thread may run behind the game (1 = the engine's one)" },
 		};
 

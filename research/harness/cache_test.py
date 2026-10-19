@@ -12,7 +12,7 @@ from run_all import state
 
 MAP = sys.argv[1] if len(sys.argv) > 1 else "ss_map mp_coop_lobby_3"
 OUT = os.path.join(RESULTS_ROOT, "M_vgui_cache")
-BEST = state(depth_fps=120, snd_async=1) + ["p2boost_fix split_view2_fps 120"]
+BEST = state(depth_fps=120, snd_async=1) + ["p2boost_fix partner_view_fps 120"]
 g = Game(OUT)
 try:
     g.launch()

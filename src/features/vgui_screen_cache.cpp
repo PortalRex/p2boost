@@ -22,6 +22,9 @@ namespace p2boost {
 		}
 
 		using void_fn_t          = void( __thiscall* )( void* );
+		using texture_download_fn_t = void( __thiscall* )( void*, void*, int );
+		using clear_color_fn_t   = void( __thiscall* )( void*, unsigned char, unsigned char, unsigned char, unsigned char );
+		using clear_buffers_fn_t = void( __thiscall* )( void*, bool, bool, bool );
 		using int_fn_t           = int( __thiscall* )( void* );
 		using panel_client_fn_t  = void*( __thiscall* )( void* );
 		using paint_traverse_fn_t = void( __thiscall* )( void*, bool, bool );
@@ -38,13 +41,13 @@ namespace p2boost {
 		// IMAGE_FORMAT_BGRA8888, MATERIAL_RT_DEPTH_SEPARATE, and the texture
 		// flags clamp S/T, no mipmaps, no LOD.
 		constexpr int          atlas_format{ 12 };
-		constexpr int          atlas_depth{ 1 };
+		constexpr int          atlas_depth{ 2 };
 		constexpr unsigned int atlas_texture_flags{ 0x4 | 0x8 | 0x100 | 0x200 };
 		constexpr const char*  atlas_texture_name{ "_rt_p2boost_vgui" };
-		constexpr const char*  atlas_material_name{ "p2boost/vgui_atlas_x" };
-		constexpr const char*  atlas_material_file{ "\\portal2\\materials\\p2boost\\vgui_atlas_x.vmt" };
+		constexpr const char*  atlas_material_name{ "p2boost/vgui_atlas" };
+		constexpr const char*  atlas_material_file{ "\\portal2\\materials\\p2boost\\vgui_atlas.vmt" };
 		constexpr const char*  atlas_material_text{
-			"\"UnlitGeneric\"\n{\n\t\"$basetexture\" \"_rt_FullScreen\"\n\t\"$nocull\" 1\n\t\"$nofog\" 1\n\t\"$ignorez\" 1\n\t\"$translucent\" 1\n}\n" };
+			"\"UnlitGeneric\"\n{\n\t\"$basetexture\" \"_rt_p2boost_vgui\"\n\t\"$nocull\" 1\n\t\"$nofog\" 1\n\t\"$ignorez\" 1\n}\n" };
 
 	}
 
@@ -159,10 +162,20 @@ namespace p2boost {
 				return false;
 		}
 
-		// RESEARCH: borrow an engine render target instead of creating one.
-		m_texture = materials->FindTexture( "_rt_FullScreen", "RenderTargets", true, 0 );
+		// the engine only lets render targets be created inside its own
+		// allocation block at start-up; the flag it checks is raised for this
+		// one call, and the texture is downloaded (its GPU surface created)
+		// right away, as the engine's restore path would.
+		int*      allocating = Address{ static_cast< void* >( materials ) }.add( game->materials_allocating_render_targets ).as< int* >( );
+		const int saved      = *allocating;
+		*allocating          = 1;
+		m_texture            = materials->CreateNamedRenderTargetTextureEx2( atlas_texture_name, atlas_size, atlas_size, 0, atlas_format, atlas_depth,
+		                                                                     atlas_texture_flags, 0 );
+		*allocating = saved;
 		if( !m_texture )
 			return false;
+		vfunc< void_fn_t >( m_texture, game->vmt_texture_add_ref )( m_texture );
+		vfunc< texture_download_fn_t >( m_texture, game->vmt_texture_download )( m_texture, nullptr, 0 );
 
 		m_material = materials->FindMaterial( atlas_material_name, "Other textures", true, nullptr );
 		if( !m_material ) {
@@ -285,6 +298,12 @@ namespace p2boost {
 			// extents, which StartDrawing takes from the viewport origin; the
 			// rectangle's paint runs from 0,0.
 			vfunc< push_target_fn_t >( context, game->vmt_context_push_render_target )( context, texture, entry->m_x, entry->m_y, pixel_width, pixel_height );
+			// the rectangle starts black: a panel's paint blends over whatever
+			// is there, and the atlas is drawn opaque (the paint leaves no
+			// usable alpha behind, so translucent or additive screen art ends
+			// up composited over black rather than over the wall).
+			vfunc< clear_color_fn_t >( context, game->vmt_context_clear_color )( context, 0, 0, 0, 0 );
+			vfunc< clear_buffers_fn_t >( context, game->vmt_context_clear_buffers )( context, true, false, false );
 			cache->m_start_drawing( self );
 			auto* extents = surface.add( game->surface_extents ).as< int* >( );
 			extents[ 0 ]  = 0;
