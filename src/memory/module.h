@@ -93,6 +93,34 @@ namespace p2boost {
 			return signature && *this ? pattern::find_unique( m_base, signature ) : Address{ };
 		}
 
+		// find the single pointer-aligned slot in this image that holds one
+		// function address, such as its entry in a class vtable.
+		void** unique_slot( Address function ) const noexcept {
+			if( !( *this ) || !function )
+				return nullptr;
+
+			constexpr std::size_t per_page = 0x1000 / sizeof( std::uintptr_t );
+			const auto            target   = function.as< std::uintptr_t >( );
+			auto*                 begin    = m_base.as< std::uintptr_t* >( );
+			const std::size_t     count    = m_size / sizeof( std::uintptr_t );
+			void**                found{ };
+			std::size_t           matches{ };
+			for( std::size_t index = 0; index < count; ++index ) {
+				MEMORY_BASIC_INFORMATION information{ };
+				if( index % per_page == 0 &&
+				    ( !VirtualQuery( begin + index, &information, sizeof( information ) ) || information.State != MEM_COMMIT ||
+				      ( information.Protect & ( PAGE_NOACCESS | PAGE_GUARD ) ) ) ) {
+					index += per_page - 1;
+					continue;
+				}
+				if( begin[ index ] == target ) {
+					found = reinterpret_cast< void** >( begin + index );
+					++matches;
+				}
+			}
+			return matches == 1 ? found : nullptr;
+		}
+
 		// resolve one exported symbol without repeating Win32 casts at call sites.
 		template < typename function_t >
 		function_t export_function( const char* name ) const noexcept {

@@ -74,32 +74,6 @@ namespace p2boost {
 			const bool  immediate = bytes[ 0 ] == 0x33 && bytes[ 1 ] == 0xc0 && bytes[ 2 ] == 0xc3;
 			return queued || immediate;
 		}
-
-		// find the single vtable slot in an image that holds one function address.
-		void** find_unique_slot( const Module& module, Address function ) noexcept {
-			if( !module || !function )
-				return nullptr;
-
-			const auto  target = function.as< std::uintptr_t >( );
-			auto*       begin  = module.base( ).as< std::uintptr_t* >( );
-			const auto  count  = module.size( ) / sizeof( std::uintptr_t );
-			void**      found{ };
-			std::size_t matches{ };
-			for( std::size_t index = 0; index < count; ++index ) {
-				MEMORY_BASIC_INFORMATION information{ };
-				if( index % ( 0x1000 / sizeof( std::uintptr_t ) ) == 0 &&
-				    ( !VirtualQuery( begin + index, &information, sizeof( information ) ) || information.State != MEM_COMMIT ||
-				      ( information.Protect & ( PAGE_NOACCESS | PAGE_GUARD ) ) ) ) {
-					index += 0x1000 / sizeof( std::uintptr_t ) - 1;
-					continue;
-				}
-				if( begin[ index ] == target ) {
-					found = reinterpret_cast< void** >( begin + index );
-					++matches;
-				}
-			}
-			return matches == 1 ? found : nullptr;
-		}
 	}
 
 	RemoteView::~RemoteView( ) {
@@ -116,7 +90,7 @@ namespace p2boost {
 
 		// CViewRender::Render is vtable slot 5; RenderView is the next slot.
 		const Address render = modules.m_client.find( game::active( )->view_render );
-		void**        render_slot{ find_unique_slot( modules.m_client, render ) };
+		void**        render_slot{ modules.m_client.unique_slot( render ) };
 		if( !render_slot )
 			return false;
 

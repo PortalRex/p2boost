@@ -56,6 +56,12 @@ namespace p2boost::game {
 		const char* occluded_renderables_call{ "8B 55 FC 52 56 50 8B CF E8 ? ? ? ? 8B 8D ? ? ? ? 8B 95" };
 		const char* occluded_renderables{ "55 8B EC 83 EC 08 F6 05 ? ? ? ? 01 75 16 83 0D ? ? ? ? 01 68 ? ? ? ? B9 ? ? ? ? E8 ? ? ? ? 8B 0D ? ? ? ? 33 C0 39 41 30 75 09 8B 45 08 8B E5 5D C2 0C 00" };
 
+		// C_VGuiScreen::DrawModel (renderable vtable slot 9, located through its
+		// one vtable entry) and the g_CurrentViewID store in SetupCurrentView.
+		const char* vgui_screen_draw_model{ "55 8B EC 51 53 56 8B F1 8D 8E ? ? 00 00 E8 ? ? ? ? 8B D8 85 DB 75 0A 5E 33 C0 5B 8B E5 5D C2 08 00 8A 8E ? ? 00 00 8B 03 8B 40 6C" };
+		const char* current_view_id_store{ "8B 40 68 8D 55 0C 52 89 3D ? ? ? ? FF D0 8B 0D ? ? ? ?" };
+		std::ptrdiff_t xref_current_view_id{ 9 };
+
 		std::ptrdiff_t xref_frame_complete{ 17 };
 		std::ptrdiff_t xref_world_brush_pointer{ 1 };
 		std::ptrdiff_t xref_occluded_renderables_call{ 8 };
@@ -139,6 +145,8 @@ namespace p2boost::game {
 	inline constexpr int frame_stage_net_update_start{ 1 };
 	inline constexpr int frame_stage_net_update_end{ 4 };
 	inline constexpr int paint_mode_ui_panels{ 1 << 0 };
+	// view_id_t VIEW_SHADOW_DEPTH_TEXTURE, set by CShadowDepthView::Draw.
+	inline constexpr int view_shadow_depth_texture{ 7 };
 
 	// identify the running game from the loaded client module and make it
 	// active. returns null when no profile matches.
