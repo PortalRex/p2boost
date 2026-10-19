@@ -39,6 +39,20 @@ it:
    so SAR or another plugin hooking later is never overwritten. SAR may load
    before or after p2boost.
 
+**Supported games.** Every signature and offset lives in one game profile
+(`src/engine/game_profile.h`); a mod overrides only the fields that differ.
+Portal Stories: Mel ships its own rebuild of every engine module, so its
+profile was audited against Portal 2 offline:
+`research/tools/check_signatures.py` confirms each signature matches the
+same way in both installs, and `compare_functions.py` compares each
+signature-located function instruction by instruction with addresses
+masked, which exposes any struct offset or vtable slot that moved. Two
+differ: the active-list sort workspace (`0x1198` vs `0x1188`) and
+`CMatSystemSurface`'s fields from the paint-mode flags on, 4 bytes lower
+(`surface_paint_flags` `0x102d8`). The surface vtable slots, the queued
+frame ring's `CMaterialSystem` fields, and the functions `EndFrame` calls
+are identical.
+
 `p2boost_enable 0|1` is the global switch: every performance change follows
 it, so one command compares stock and p2boost. Each change is also an entry
 in one table in `src/core/plugin.cpp`, controlled with

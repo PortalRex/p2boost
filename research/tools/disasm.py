@@ -55,7 +55,7 @@ def main():
 	for request in sys.argv[2:]:
 		address, _, length = request.partition(":")
 		address = int(address, 16)
-		length = int(length or "64")
+		length = int(length or "64", 0)
 		offset = va_to_offset(data, address)
 		for instruction in engine.disasm(data[offset:offset + length], address):
 			print(f"{instruction.address:08x}  {instruction.bytes.hex(' '):<24} {instruction.mnemonic} {instruction.op_str}")
