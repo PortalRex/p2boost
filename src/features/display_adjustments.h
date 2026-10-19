@@ -10,6 +10,7 @@
 #include <d3d9.h>
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cstdint>
 
@@ -82,29 +83,18 @@ namespace p2boost {
 			m_intensity.store( std::clamp( intensity, min_intensity, max_intensity ), std::memory_order_relaxed );
 		}
 
-		// render thread: the scaled split-screen slot whose expansion to its
-		// final rect is still pending, if any.
-		bool pending_scaled_view( viewport_scale_t& view ) const noexcept {
-			if( !m_scaled_view_pending )
-				return false;
-			view = m_scaled_view;
-			return true;
-		}
+		// render thread: finish the pending expansion of the scaled slot whose
+		// final rect is destination now, instead of at its next unscaled
+		// viewport. a feature that copies the slot's final picture calls this
+		// first, since a slot without HUD draws may not set that viewport.
+		void finish_scaled_view( IDirect3DDevice9* device, const RECT& destination );
 
-		// render thread: a picture another feature redrew into a scaled slot
-		// needs the same expansion the engine's own render of it would get.
-		void queue_scaled_view( const viewport_scale_t& view ) noexcept {
-			m_scaled_view         = view;
-			m_scaled_view_pending = true;
-		}
-
-		// another feature's default-pool resources must also be released before
-		// IDirect3DDevice9::Reset; this one hook already owns that boundary.
+		// other features' default-pool resources and render-target contents
+		// must also be dropped at IDirect3DDevice9::Reset; this one hook already
+		// owns that boundary. a context registers at most one listener.
 		using reset_listener_fn_t = void ( * )( void* context );
-		void set_reset_listener( reset_listener_fn_t listener, void* context ) noexcept {
-			m_reset_context = context;
-			m_reset_listener.store( listener, std::memory_order_release );
-		}
+		bool add_reset_listener( reset_listener_fn_t listener, void* context ) noexcept;
+		void remove_reset_listener( void* context ) noexcept;
 
 	private:
 		using present_fn_t      = HRESULT( __stdcall* )( IDirect3DDevice9*, const RECT*, const RECT*, HWND, const RGNDATA* );
@@ -130,33 +120,37 @@ namespace p2boost {
 		static HRESULT __stdcall Reset( IDirect3DDevice9* device, D3DPRESENT_PARAMETERS* parameters );
 		static HRESULT __stdcall SetViewport( IDirect3DDevice9* device, const D3DVIEWPORT9* viewport );
 
-		static DisplayAdjustments*         m_instance;
-		FrameMetrics*                      m_metrics{ };
-		con_var_t*                         m_monitor_gamma{ };
-		con_var_t*                         m_viewport_scale{ };
-		con_var_t*                         m_viewport_upscale{ };
-		IDirect3DDevice9*                  m_device{ };
-		IDirect3DTexture9*                 m_copy_texture{ };
-		IDirect3DTexture9*                 m_upscale_texture{ };
-		IDirect3DPixelShader9*             m_gamma_shader{ };
-		IDirect3DStateBlock9*              m_state_block{ };
-		unsigned int                       m_copy_width{ };
-		unsigned int                       m_copy_height{ };
-		unsigned int                       m_upscale_width{ };
-		unsigned int                       m_upscale_height{ };
-		D3DFORMAT                          m_copy_format{ D3DFMT_UNKNOWN };
-		viewport_scale_t                   m_scaled_view{ };
-		bool                               m_scaled_view_pending{ };
-		bool                               m_internal_viewport{ };
-		VmtHook                            m_present;
-		VmtHook                            m_reset;
-		VmtHook                            m_set_viewport;
-		BytePatch                          m_viewport_commit;
-		std::atomic< float >               m_intensity{ 1.0f };
-		std::atomic_uint64_t               m_gamma_passes{ };
-		std::atomic_uint64_t               m_viewport_passes{ };
-		std::atomic< reset_listener_fn_t > m_reset_listener{ };
-		void*                              m_reset_context{ };
+		static DisplayAdjustments* m_instance;
+		FrameMetrics*              m_metrics{ };
+		con_var_t*                 m_monitor_gamma{ };
+		con_var_t*                 m_viewport_scale{ };
+		con_var_t*                 m_viewport_upscale{ };
+		IDirect3DDevice9*          m_device{ };
+		IDirect3DTexture9*         m_copy_texture{ };
+		IDirect3DTexture9*         m_upscale_texture{ };
+		IDirect3DPixelShader9*     m_gamma_shader{ };
+		IDirect3DStateBlock9*      m_state_block{ };
+		unsigned int               m_copy_width{ };
+		unsigned int               m_copy_height{ };
+		unsigned int               m_upscale_width{ };
+		unsigned int               m_upscale_height{ };
+		D3DFORMAT                  m_copy_format{ D3DFMT_UNKNOWN };
+		viewport_scale_t           m_scaled_view{ };
+		bool                       m_scaled_view_pending{ };
+		bool                       m_internal_viewport{ };
+		VmtHook                    m_present;
+		VmtHook                    m_reset;
+		VmtHook                    m_set_viewport;
+		BytePatch                  m_viewport_commit;
+		std::atomic< float >       m_intensity{ 1.0f };
+		std::atomic_uint64_t       m_gamma_passes{ };
+		std::atomic_uint64_t       m_viewport_passes{ };
+
+		struct reset_listener_t {
+			std::atomic< reset_listener_fn_t > m_listener{ };
+			void*                              m_context{ };
+		};
+		std::array< reset_listener_t, 2 > m_reset_listeners{ };
 	};
 
 }

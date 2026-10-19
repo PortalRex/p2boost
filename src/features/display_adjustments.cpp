@@ -501,10 +501,37 @@ namespace p2boost {
 			instance->release_resources( );
 			instance->m_scaled_view         = { };
 			instance->m_scaled_view_pending = false;
-			if( const auto listener = instance->m_reset_listener.load( std::memory_order_acquire ) )
-				listener( instance->m_reset_context );
+			for( auto& slot : instance->m_reset_listeners )
+				if( const auto listener = slot.m_listener.load( std::memory_order_acquire ) )
+					listener( slot.m_context );
 		}
 		return next ? next( device, parameters ) : D3DERR_INVALIDCALL;
+	}
+
+	bool DisplayAdjustments::add_reset_listener( reset_listener_fn_t listener, void* context ) noexcept {
+		for( auto& slot : m_reset_listeners ) {
+			if( slot.m_listener.load( std::memory_order_acquire ) )
+				continue;
+			slot.m_context = context;
+			slot.m_listener.store( listener, std::memory_order_release );
+			return true;
+		}
+		return false;
+	}
+
+	void DisplayAdjustments::remove_reset_listener( void* context ) noexcept {
+		for( auto& slot : m_reset_listeners )
+			if( slot.m_context == context )
+				slot.m_listener.store( nullptr, std::memory_order_release );
+	}
+
+	void DisplayAdjustments::finish_scaled_view( IDirect3DDevice9* device, const RECT& destination ) {
+		if( !m_scaled_view_pending || !same_rect( destination, m_scaled_view.m_destination ) )
+			return;
+
+		if( apply_viewport_scale( device, m_scaled_view ) )
+			m_viewport_passes.fetch_add( 1, std::memory_order_relaxed );
+		m_scaled_view_pending = false;
 	}
 
 	HRESULT __stdcall DisplayAdjustments::SetViewport( IDirect3DDevice9* device, const D3DVIEWPORT9* viewport ) {
@@ -557,11 +584,7 @@ namespace p2boost {
 
 			// the next unscaled viewport marks the exact boundary between 3D and
 			// native-resolution HUD work for this split-screen slot.
-			if( instance->m_scaled_view_pending && same_rect( incoming, instance->m_scaled_view.m_destination ) ) {
-				if( instance->m_viewport_upscale->value_integer( ) && instance->apply_viewport_scale( device, instance->m_scaled_view ) )
-					instance->m_viewport_passes.fetch_add( 1, std::memory_order_relaxed );
-				instance->m_scaled_view_pending = false;
-			}
+			instance->finish_scaled_view( device, incoming );
 		}
 
 		return next ? next( device, viewport ) : D3DERR_INVALIDCALL;

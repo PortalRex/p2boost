@@ -21,9 +21,9 @@ namespace p2boost {
 	// partner_view_fps fix renders the partner's slot at most N times per
 	// second and redraws the last picture in between: the remote slot, or in
 	// local split-screen the player in_forceuser is not sending input to. the
-	// view being controlled always renders every frame. with mat_viewportscale
-	// below 1 the picture is the scaled render and DisplayAdjustments expands
-	// it as it would the engine's own.
+	// view being controlled always renders every frame. the picture is the
+	// slot's finished unscaled rect, HUD included, so mat_viewportscale only
+	// changes what the real renders cost.
 	class RemoteView {
 	public:
 		~RemoteView( );
@@ -50,7 +50,7 @@ namespace p2boost {
 
 		void set_max_fps( int fps ) noexcept;
 		int  max_fps( ) const noexcept {
-			return m_max_fps.load( std::memory_order_relaxed );
+            return m_max_fps.load( std::memory_order_relaxed );
 		}
 
 		// forget the last picture so the next remote frame renders for real.
@@ -89,7 +89,6 @@ namespace p2boost {
 		IDirect3DDevice9*     m_device{ };
 		DisplayAdjustments*   m_display{ };
 		sdk::IMaterialSystem* m_material_system{ };
-		con_var_t*            m_viewport_scale{ };
 		con_var_t*            m_force_user{ };
 		const std::uint32_t*  m_local_slot_mask{ };
 		const std::uint32_t*  m_remote_players{ };
@@ -102,12 +101,6 @@ namespace p2boost {
 		LONGLONG      m_last_render{ };
 		RECT          m_picture_rect{ };
 		bool          m_picture_rect_valid{ };
-
-		// render-thread picture placement: the rect the picture was copied
-		// from, which is the scaled render when mat_viewportscale is below 1.
-		RECT             m_source_rect{ };
-		bool             m_source_scaled{ };
-		viewport_scale_t m_source_view{ };
 
 		// render-thread resources; released before device Reset.
 		IDirect3DTexture9*    m_picture{ };

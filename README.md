@@ -94,12 +94,11 @@ Commands:
 |---|---|
 | `p2boost_status` | Build support, renderer, DXVK version, and every fix with its counters. |
 | `p2boost_enable 0\|1` | Global switch for all fixes. |
-| `p2boost_fix [name] [value]` | Lists the fixes, or shows or sets one. |
+| `p2boost_fix [name] [value]` | Lists the fixes, or shows or sets one. `p2boost_fix shadow_depth_fps` also lists the lights whose shadow maps are cached. |
 | `p2boost_overlay 0\|1\|2` | Frame-time overlay: off, full profiler, or large FPS counter (turns red during hitches). |
 | `p2boost_trace 0\|1` | Records frame times; `p2boost_trace 0` writes them to `p2boost_metrics.csv` in the game folder. |
 | `p2boost_update [force]` | Downloads and verifies the latest release in the background; it loads on the next start. |
 | `p2boost_flat_textures 0\|1` | Optional visual mode (off by default): solid-color surfaces, with transparency and the UI kept intact. |
-| `p2boost_shadow_depth_views` | Diagnostic: lists the flashlight depth views the shadow-map cache currently holds. |
 | `r_intensity <0.0..2.0>` | Overall brightness multiplier (1.0 = unchanged). |
 
 p2boost also makes `mat_monitorgamma` and `mat_viewportscale` work under

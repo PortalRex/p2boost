@@ -295,9 +295,15 @@ copies the slot from the back buffer, and the skipped frames redraw that
 copy. The partner's slot is the remote-view slot, or with two local players
 the one `in_forceuser` does not send input to, so switching the controlled
 player moves the cap to the other half. The controlled view always renders
-every frame. With `mat_viewportscale` below 1 the copy is the scaled render,
-taken while `DisplayAdjustments` still has its expansion pending, and the
-redraw queues the same expansion.
+every frame. The copy is the slot's finished picture: its unscaled rect
+(`CViewSetup::m_nUnscaled*`), HUD included. `RenderView` paints the slot's
+HUD itself, and the HUD's unscaled viewport is where `DisplayAdjustments`
+expands a `mat_viewportscale` render, so by the time the copy runs the
+scene is already full size; the copy finishes a still-pending expansion
+first, for a slot that drew no HUD. An earlier version copied only the
+scaled rect and redrew that, which left the rest of the slot to whatever
+the back buffer still held: correct on DXVK, which keeps the previous
+frame there, but undefined in D3D9.
 
 **Visual effect.** The partner's picture updates at N FPS instead of your
 frame rate. Set `p2boost_fix partner_view_fps 0` to render it every frame.
@@ -317,9 +323,9 @@ whose light `CViewSetup` key is unchanged is also reused across frames until
 it is older than 1/N s. A light whose position, angles, FOV, or projection
 changes still re-renders immediately, because its key changes; only the
 shadows of moving casters under a stationary light can lag, by under 1/N s.
-`LevelInit` and focus changes drop the cache, since those can leave a depth
-texture's contents undefined. `p2boost_shadow_depth_views` prints the cached
-views for diagnosis.
+`LevelInit`, focus changes, and device `Reset` drop the cache, since those
+can leave a depth texture's contents undefined. `p2boost_fix
+shadow_depth_fps` prints the cached light views for diagnosis.
 
 The earlier cross-frame experiment (see the rejected list) never matched
 across frames because the key copied four bytes at `CViewSetup+0x34`, where

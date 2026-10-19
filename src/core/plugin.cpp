@@ -156,6 +156,11 @@ namespace p2boost {
 			                            m_display_adjustments.available( ) ? &m_display_adjustments : nullptr ) )
 				m_verification.m_errors.emplace_back( "optional remote-view hooks unavailable" );
 
+			// a device Reset leaves every depth texture's contents undefined.
+			if( m_shadow_depth_reuse.installed( ) && m_display_adjustments.available( ) )
+				m_display_adjustments.add_reset_listener( []( void* context ) { static_cast< ShadowDepthReuse* >( context )->invalidate( ); },
+				                                          &m_shadow_depth_reuse );
+
 			// enable performance fixes only when the complete supported set is ready.
 			m_enabled = can_enable( );
 			apply_enabled_state( );
@@ -194,7 +199,8 @@ namespace p2boost {
 			restore_render_threading( );
 
 			// remove feature callbacks before releasing their shared engine bindings.
-			// remote view registers a reset listener on the display hooks.
+			// remote view and depth reuse register reset listeners on the display hooks.
+			m_display_adjustments.remove_reset_listener( &m_shadow_depth_reuse );
 			m_remote_view.remove( );
 			m_display_adjustments.remove( );
 			m_flat_textures.remove( );
@@ -372,8 +378,6 @@ namespace p2boost {
 				return update_command( args );
 			if( _stricmp( command, "p2boost_flat_textures" ) == 0 )
 				return flat_textures_command( args );
-			if( _stricmp( command, "p2boost_shadow_depth_views" ) == 0 )
-				return shadow_depth_views_command( );
 			if( _stricmp( command, "r_intensity" ) == 0 )
 				return intensity_command( args );
 
@@ -412,7 +416,6 @@ namespace p2boost {
 			    { "p2boost_trace", "Record frame times; p2boost_trace 0 writes p2boost_metrics.csv." },
 			    { "p2boost_update", "Update p2boost to the latest release. Optional 'force' reinstalls." },
 			    { "p2boost_flat_textures", "Optional visual mode with solid-color surfaces: 0|1." },
-			    { "p2boost_shadow_depth_views", "Print the flashlight depth views rendered recently (origin, angles, fov)." },
 			    { "r_intensity", "Scale final-frame RGB brightness (0.0 to 2.0, 1.0 neutral)." },
 			};
 
@@ -617,16 +620,15 @@ namespace p2boost {
 		}
 
 		// diagnostic for shadow_depth_fps: which lights the depth cache holds.
-		sdk::PluginResult shadow_depth_views_command( ) const {
+		void print_depth_views( ) const {
 			for( const auto& view : m_shadow_depth_reuse.views( ) ) {
 				if( view.m_frame < 0 )
 					continue;
-				console_print( "[p2boost] depth view origin %.1f %.1f %.1f angles %.1f %.1f %.1f fov %.1f frame %d\n",
+				console_print( "[p2boost]     light origin %.1f %.1f %.1f angles %.1f %.1f %.1f fov %.1f frame %d\n",
 				               view.m_origin[ 0 ], view.m_origin[ 1 ], view.m_origin[ 2 ],
 				               view.m_angles[ 0 ], view.m_angles[ 1 ], view.m_angles[ 2 ],
 				               view.m_fov, view.m_frame );
 			}
-			return sdk::Stop;
 		}
 
 		// parse one bounded integer.
@@ -703,6 +705,13 @@ namespace p2boost {
 					               static_cast< unsigned long long >( m_shadow_depth_reuse.rendered_count( ) ),
 					               static_cast< unsigned long long >( m_shadow_depth_reuse.reused_count( ) ) );
 					break;
+				case fix_t::shadow_depth_fps: {
+					int cached = 0;
+					for( const auto& view : m_shadow_depth_reuse.views( ) )
+						cached += view.m_frame >= 0;
+					std::snprintf( detail, sizeof( detail ), "%d lights cached", cached );
+					break;
+				}
 				case fix_t::partner_view_fps:
 					std::snprintf( detail, sizeof( detail ), "%llu rendered, %llu reused",
 					               static_cast< unsigned long long >( m_remote_view.rendered_count( ) ),
@@ -750,6 +759,8 @@ namespace p2boost {
 			}
 
 			print_fix( which, true );
+			if( which == fix_t::shadow_depth_fps && args.ArgC( ) == 2 )
+				print_depth_views( );
 			return sdk::Stop;
 		}
 

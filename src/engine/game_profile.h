@@ -128,6 +128,13 @@ namespace p2boost::game {
 		std::ptrdiff_t view_width{ 0x10 };
 		std::ptrdiff_t view_height{ 0x18 };
 
+		// each is followed by its m_nUnscaled* twin: the rect before
+		// mat_viewportscale, which the slot's finished picture covers.
+		std::ptrdiff_t view_unscaled_x{ 0x04 };
+		std::ptrdiff_t view_unscaled_y{ 0x0c };
+		std::ptrdiff_t view_unscaled_width{ 0x14 };
+		std::ptrdiff_t view_unscaled_height{ 0x1c };
+
 		// the remaining CViewSetup fields ComputeShadowDepthTextures writes for a
 		// light: m_bOrtho, the ortho rect, flags, the projection block from fov
 		// through the far planes, and the draw flags byte.

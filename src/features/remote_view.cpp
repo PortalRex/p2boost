@@ -6,7 +6,6 @@
 #include "sdk.h"
 
 #include <algorithm>
-#include <cmath>
 #include <cstring>
 #include <new>
 
@@ -107,13 +106,12 @@ namespace p2boost {
 
 		m_local_slot_mask = local_mask.as< const std::uint32_t* >( );
 		m_remote_players  = remote.as< const std::uint32_t* >( );
-		m_viewport_scale  = commands.find_variable( "mat_viewportscale" );
 		m_force_user      = commands.find_variable( "in_forceuser" );
 
 		// picture reuse records and redraws the remote rect on the device, in
 		// render-thread order, through the material system's call queue.
 		m_material_system = interfaces.material_system( );
-		if( m_material_system && device && display && m_viewport_scale ) {
+		if( m_material_system && device && display ) {
 			if( sdk::IMatRenderContext* context = m_material_system->GetRenderContext( ) ) {
 				m_reuse_supported = call_queue_getter_shape( modules.m_material_system, context->GetCallQueueAddress( ) );
 				context->Release( );
@@ -122,7 +120,7 @@ namespace p2boost {
 		if( m_reuse_supported ) {
 			m_device  = device;
 			m_display = display;
-			m_display->set_reset_listener( &ResetListener, this );
+			m_display->add_reset_listener( &ResetListener, this );
 		}
 
 		QueryPerformanceFrequency( &m_frequency );
@@ -144,14 +142,13 @@ namespace p2boost {
 			Sleep( 1 );
 
 		if( m_display )
-			m_display->set_reset_listener( nullptr, nullptr );
+			m_display->remove_reset_listener( this );
 		release_device_resources( );
 		m_display            = nullptr;
 		m_device             = nullptr;
 		m_material_system    = nullptr;
 		m_local_slot_mask    = nullptr;
 		m_remote_players     = nullptr;
-		m_viewport_scale     = nullptr;
 		m_force_user         = nullptr;
 		m_reuse_supported    = false;
 		m_picture_rect_valid = false;
@@ -240,15 +237,15 @@ namespace p2boost {
 			return;
 		}
 
-		const Address setup{ const_cast< void* >( view ) };
-		const LONG    left = setup.at< int >( game::active( )->view_x );
-		const LONG    top  = setup.at< int >( game::active( )->view_y );
-		const RECT    rect{ left, top, left + setup.at< int >( game::active( )->view_width ), top + setup.at< int >( game::active( )->view_height ) };
-
-		// the device calls copy and redraw the slot's rendered pixels; with
-		// mat_viewportscale below 1 that is the scaled rect DisplayAdjustments
-		// has yet to expand, and the redraw asks it for the same expansion.
-		const bool reusable = instance->reuse_available( ) && rect.right > rect.left && rect.bottom > rect.top;
+		// the device calls copy and redraw the slot's finished picture: the
+		// unscaled rect, which with mat_viewportscale below 1 holds the expanded
+		// scene under the HUD RenderView paints into it.
+		const game::profile_t* game = game::active( );
+		const Address          setup{ const_cast< void* >( view ) };
+		const LONG             left = setup.at< int >( game->view_unscaled_x );
+		const LONG             top  = setup.at< int >( game->view_unscaled_y );
+		const RECT             rect{ left, top, left + setup.at< int >( game->view_unscaled_width ), top + setup.at< int >( game->view_unscaled_height ) };
+		const bool             reusable = instance->reuse_available( ) && rect.right > rect.left && rect.bottom > rect.top;
 
 		LARGE_INTEGER now{ };
 		QueryPerformanceCounter( &now );
@@ -287,21 +284,10 @@ namespace p2boost {
 		if( render_target )
 			render_target->Release( );
 
-		RECT rect{ std::max< LONG >( requested.left, 0 ),
-		           std::max< LONG >( requested.top, 0 ),
-		           std::min< LONG >( requested.right, static_cast< LONG >( description.Width ) ),
-		           std::min< LONG >( requested.bottom, static_cast< LONG >( description.Height ) ) };
-
-		// a scaled slot's pixels sit in the scaled rect until DisplayAdjustments
-		// expands them at the slot's next unscaled viewport, which the engine
-		// sets after RenderView; a save therefore sees the expansion pending.
-		if( save ) {
-			viewport_scale_t view{ };
-			m_source_scaled = m_display && m_display->pending_scaled_view( view ) && std::memcmp( &view.m_destination, &rect, sizeof( rect ) ) == 0;
-			m_source_view   = m_source_scaled ? view : viewport_scale_t{ };
-			m_source_rect   = m_source_scaled ? view.m_source : rect;
-		}
-		rect                  = m_source_rect;
+		const RECT rect{ std::max< LONG >( requested.left, 0 ),
+		                 std::max< LONG >( requested.top, 0 ),
+		                 std::min< LONG >( requested.right, static_cast< LONG >( description.Width ) ),
+		                 std::min< LONG >( requested.bottom, static_cast< LONG >( description.Height ) ) };
 		const bool valid_rect = ready && rect.right > rect.left && rect.bottom > rect.top;
 		const UINT width      = valid_rect ? static_cast< UINT >( rect.right - rect.left ) : 0;
 		const UINT height     = valid_rect ? static_cast< UINT >( rect.bottom - rect.top ) : 0;
@@ -309,6 +295,10 @@ namespace p2boost {
 		if( save ) {
 			bool               saved = false;
 			IDirect3DSurface9* surface{ };
+			// the HUD normally sets the slot's unscaled viewport, which expands a
+			// scaled scene; a slot that drew no HUD still has it pending here.
+			if( valid_rect && m_display )
+				m_display->finish_scaled_view( device, rect );
 			if( valid_rect && ensure_picture( device, width, height, description.Format ) &&
 			    SUCCEEDED( m_picture->GetSurfaceLevel( 0, &surface ) ) && surface ) {
 				// a multisampled back buffer resolves into the single-sample copy.
@@ -320,8 +310,7 @@ namespace p2boost {
 		           m_picture_height == height ) {
 			// draw instead of StretchRect: copying into a multisampled back buffer
 			// is not portable D3D9.
-			if( draw_picture( device, rect ) && m_source_scaled && m_display )
-				m_display->queue_scaled_view( m_source_view );
+			draw_picture( device, rect );
 		}
 
 		if( back_buffer )
