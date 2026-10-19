@@ -37,14 +37,14 @@ try:
     time.sleep(2)
 
     for cap in (0, 1, 120):
-        g.run(f"p2boost_shadow_depth_fps {cap}")
+        g.run(f"p2boost_fix shadow_depth_fps {cap}")
         time.sleep(1)
         before = rendered()
         time.sleep(3)
         after = rendered()
         g.log(f"cap {cap}: rendered +{after[0] - before[0]}, reused +{after[1] - before[1]} over 3 s")
 
-    g.run("p2boost_shadow_depth_fps 0")
+    g.run("p2boost_fix shadow_depth_fps 0")
     shots = {}
     for depth in (1, 0):
         g.run(f"r_flashlightdepthtexture {depth}", 'ent_fire p2t_cube addoutput "origin 4241 4200 178"')

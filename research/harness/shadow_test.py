@@ -50,7 +50,7 @@ try:
 
     shots = []
     for index, cap in enumerate(CAPS):
-        step(f"p2boost_shadow_depth_fps {cap}", f'ent_fire p2t_cube addoutput "origin {CUBE_A}"', wait=1.5)
+        step(f"p2boost_fix shadow_depth_fps {cap}", f'ent_fire p2t_cube addoutput "origin {CUBE_A}"', wait=1.5)
         at_a = g.screenshot(f"r{index}_cap{cap}_A")
         step(f'ent_fire p2t_cube addoutput "origin {CUBE_B}"', wait=0.25)
         at_b = g.screenshot(f"r{index}_cap{cap}_B")

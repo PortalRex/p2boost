@@ -6,6 +6,8 @@ sliced by QPC, interleaved ABBA rounds, `fps_max 0`, spawn position. Hardware:
 RTX 5090, Ryzen 7 7800X3D, 2560x1440, DXVK 3.0.2 measured slower here so the
 shipped DXVK is active.
 
+Fixes are named as in `p2boost_fix <name> <value>`.
+
 ## Split-screen co-op lobby (`ss_map mp_coop_lobby_3`), 2 x 10 s per variant
 
 | Variant | Avg FPS | p99 ms | 1% low |
@@ -13,12 +15,12 @@ shipped DXVK is active.
 | Stock, `mat_queue_mode 0` | 158.3 | 8.28 | 114 |
 | Stock, `mat_queue_mode -1` (resolved to multicore at runtime) | 249.2 | 5.42 | 170 |
 | All fixes (defaults) | 450.4 | 3.33 | 247 |
-| minus `p2boost_flashlight_flush` | 315.8 | 4.35 | 210 |
-| minus `p2boost_xinput_throttle` | 429.7 | 3.48 | 242 |
-| minus `p2boost_occlusion_skip` | 446.3 | 3.35 | 245 |
-| minus `p2boost_vgui_shadow_skip` | 451.9 | 3.31 | 243 |
-| minus `p2boost_shadow_depth_reuse` | 410.2 | 3.63 | 229 |
-| All + `p2boost_shadow_depth_fps 120` | 485.2 | 3.13 | 256 |
+| minus `flashlight_flush` | 315.8 | 4.35 | 210 |
+| minus `xinput_throttle` | 429.7 | 3.48 | 242 |
+| minus `occlusion_skip` | 446.3 | 3.35 | 245 |
+| minus `vgui_shadow_skip` | 451.9 | 3.31 | 243 |
+| minus `shadow_depth_reuse` | 410.2 | 3.63 | 229 |
+| All + `shadow_depth_fps 120` | 485.2 | 3.13 | 256 |
 | All + depth 120 + `snd_mix_async 1` (best) | 490-498 | 3.04-3.11 | 247-263 |
 | best + `cl_threaded_bone_setup 1` | 492.5 | 3.00 | 265 |
 | best + `net_graph 0` | 493.6 | 3.02 | 265 |
@@ -27,11 +29,11 @@ shipped DXVK is active.
 | best, launched `+threadpool_affinity 0` | 486.6 | 3.21 | 258 |
 | best, no in-world VGUI screens (measurement only) | 554.0 | 2.71 | 282 |
 | best, view 2 not rendered (measurement only) | 805.1 | 2.12 | 357 |
-| best + `p2boost_split_view2_fps 240` | 605.4 | 2.71 | 294 |
-| best + `p2boost_split_view2_fps 144` | 681.5 | 2.66 | 295 |
-| best + `p2boost_split_view2_fps 120` | 703.5 | 2.54 | 315 |
+| best + `split_view2_fps 240` | 605.4 | 2.71 | 294 |
+| best + `split_view2_fps 144` | 681.5 | 2.66 | 295 |
+| best + `split_view2_fps 120` | 703.5 | 2.54 | 315 |
 
-`p2boost_shadow_depth_fps`: 0 = 447.7, 120 = 498.0, 60 = 493.8 (3 x 10 s).
+`p2boost_fix shadow_depth_fps`: 0 = 447.7, 120 = 498.0, 60 = 493.8 (3 x 10 s).
 
 ## One view (`map sp_a2_laser_relays`), 2 x 10 s per variant
 

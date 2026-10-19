@@ -55,13 +55,13 @@ def main():
 
         # 1. static: same spot, cap off vs on (twice each, interleaved)
         for label, cap in (("static_cap0_a", 0), ("static_cap120_a", 120), ("static_cap0_b", 0), ("static_cap120_b", 120)):
-            net.run([f"p2boost_shadow_depth_fps {cap}"], 10)
+            net.run([f"p2boost_fix shadow_depth_fps {cap}"], 10)
             time.sleep(2)
             shot(net, label)
 
         # 2. motion: player 2 walks forward and turns; shots mid-motion
         for cap in (0, 120):
-            net.run([f"p2boost_shadow_depth_fps {cap}"], 10)
+            net.run([f"p2boost_fix shadow_depth_fps {cap}"], 10)
             time.sleep(1)
             net.run(["cmd2 +forward", "cmd2 +left"], 10)
             for index in range(3):
@@ -71,12 +71,12 @@ def main():
             time.sleep(2)
 
         # 3. reload the lobby with the cap on; shadows must come back
-        net.run(["p2boost_shadow_depth_fps 120", "ss_map mp_coop_lobby_3"], 10)
+        net.run(["p2boost_fix shadow_depth_fps 120", "ss_map mp_coop_lobby_3"], 10)
         time.sleep(45)
         net.run(["fps_max 0"], 10)
         time.sleep(5)
         shot(net, "reload_cap120")
-        net.run(["p2boost_shadow_depth_fps 0"], 10)
+        net.run(["p2boost_fix shadow_depth_fps 0"], 10)
         time.sleep(2)
         shot(net, "reload_cap0")
         D.log(net.run(["p2boost_status"], 30)[-1500:])

@@ -17,12 +17,17 @@ MAPS = [
     ("mp_coop_tbeam_redirect", "Course 4: Excursion Funnels, Funnel Redirect"),
     ("mp_coop_catapult_catch", "Course 6: Art Therapy, Catapult Catch"),
 ]
-VANILLA = state(enable=0, multicore=0) + ["p2boost_split_view2_fps 0"]
+VANILLA = state(enable=0, multicore=0) + ["p2boost_fix split_view2_fps 0"]
 VANILLA[VANILLA.index("mat_queue_mode -1")] = "mat_queue_mode 0"
-OPT = state(depth_fps=120, snd_async=1) + ["p2boost_split_view2_fps 120"]
+OPT = state(depth_fps=120, snd_async=1) + ["p2boost_fix split_view2_fps 120"]
 OUT = os.path.join(RESULTS_ROOT, "I_coop_maps")
+# optional map names on the command line re-run only those and merge into scenes.json
+if sys.argv[1:]:
+    MAPS = [m for m in MAPS if m[0] in sys.argv[1:]]
 g = Game(OUT)
 results = {}
+if os.path.exists(os.path.join(OUT, "scenes.json")):
+    results = json.load(open(os.path.join(OUT, "scenes.json")))
 
 
 def measure(seconds=8):
@@ -44,6 +49,10 @@ def measure(seconds=8):
 try:
     g.launch()
     for map_name, title in MAPS:
+        # ss_map issued inside a running co-op map shuts the server down and
+        # drops the client; it only works from the menu.
+        g.run("disconnect")
+        time.sleep(6)
         g.run("sv_lan 1", f"ss_map {map_name}")
         time.sleep(50)
         g.run("fps_max 0", "p2boost_overlay 0", "jpeg_quality 92")
@@ -52,6 +61,12 @@ try:
         g.run("cmd1 +forward", "cmd2 +forward")
         time.sleep(4)
         g.run("cmd1 -forward", "cmd2 -forward")
+        time.sleep(1)
+        # player 1 ends up against the wall it walked into; turn it around
+        # (cl_yawspeed 210 deg/s) so its half shows the room
+        g.run("cmd1 +left")
+        time.sleep(180 / 210)
+        g.run("cmd1 -left")
         time.sleep(3)
         runs = {"vanilla": [], "optimized": []}
         for label, commands in (("vanilla", VANILLA), ("optimized", OPT), ("optimized", OPT), ("vanilla", VANILLA)):

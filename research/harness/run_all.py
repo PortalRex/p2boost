@@ -11,21 +11,21 @@ ROOT = os.path.join(RESULTS_ROOT)
 os.makedirs(ROOT, exist_ok=True)
 
 FIXES = {
-    "flashlight_flush": "p2boost_flashlight_flush",
-    "xinput_throttle": "p2boost_xinput_throttle",
-    "occlusion_skip": "p2boost_occlusion_skip",
-    "vgui_shadow_skip": "p2boost_vgui_shadow_skip",
-    "depth_reuse": "p2boost_shadow_depth_reuse",
+    "flashlight_flush": "p2boost_fix flashlight_flush",
+    "xinput_throttle": "p2boost_fix xinput_throttle",
+    "occlusion_skip": "p2boost_fix occlusion_skip",
+    "vgui_shadow_skip": "p2boost_fix vgui_shadow_skip",
+    "depth_reuse": "p2boost_fix shadow_depth_reuse",
 }
 
 
 def state(enable=1, multicore=1, depth_fps=0, snd_async=0, bones=0, net_graph=1, off=()):
-    commands = [f"p2boost_enable {enable}", f"p2boost_multicore {multicore}"]
+    commands = [f"p2boost_enable {enable}", f"p2boost_fix multicore {multicore}"]
     if not multicore:
         commands.append("mat_queue_mode -1")
     for key, cvar in FIXES.items():
         commands.append(f"{cvar} {0 if key in off else 1}")
-    commands += [f"p2boost_shadow_depth_fps {depth_fps}", f"snd_mix_async {snd_async}",
+    commands += [f"p2boost_fix shadow_depth_fps {depth_fps}", f"snd_mix_async {snd_async}",
                  f"cl_threaded_bone_setup {bones}", f"net_graph {net_graph}"]
     return commands
 
