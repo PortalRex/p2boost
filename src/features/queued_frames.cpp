@@ -483,12 +483,10 @@ namespace p2boost {
 		// the next frame's render data lives in the stack numbered like its
 		// context, so the stacks rotate with the contexts and a stack is
 		// reused only after the job that read it was waited for above. The
-		// engine's BeginFrame flips the index as 1 - index and frees that
-		// stack: leave the index so the flip lands on the next stack, or for
-		// the third stack on one of its own (nothing allocates until
-		// BeginFrame, where the hook below moves it on).
+		// index itself moves in the BeginFrame hook: until then it stays on
+		// the stack just recorded, as the engine leaves it, so the engine's
+		// single current-alloc-point still belongs to the indexed stack.
 		m_render_data_target = static_cast< int >( next );
-		*m_render_data_index = next < 2 ? 1 - static_cast< int >( next ) : 0;
 		if( next < 2 )
 			materials.add( current_context_index ).as< int* >( )[ 0 ] = static_cast< int >( next );
 
@@ -552,18 +550,50 @@ namespace p2boost {
 		m_active = false;
 	}
 
-	// after the engine's flip, move the render data to the stack of the
-	// context recording this frame when that is the third one.
+	// the engine's flip (MarkRenderDataUnused) sets index = 1 - index, frees
+	// that stack, and BeginFrame records into it. steer it onto the stack of
+	// the context recording this frame, whose job was waited for, so the
+	// flip never resets a stack a job in flight still reads: resetting one
+	// let the next allocations overwrite a frame not yet replayed (Portal
+	// Stories: Mel crashed in studiorender within seconds of a load).
 	void __fastcall QueuedFrames::BeginFrame( void* self, void*, float frame_time ) {
 		QueuedFrames* ring     = m_instance;
 		const auto    original = ring ? ring->m_begin_frame.previous< begin_frame_fn_t >( ) : nullptr;
 		if( !original )
 			return;
-		original( self, frame_time );
-		if( ring->m_active && ring->m_render_data_target >= 0 && *ring->m_render_data_index != ring->m_render_data_target ) {
-			*ring->m_render_data_index = ring->m_render_data_target;
-			ring->m_stack_free_all( ring->render_data_stack( ring->m_render_data_target ), false );
+
+		const int target = ring->m_render_data_target;
+		int&      index  = *ring->m_render_data_index;
+		if( !ring->m_active || target < 0 ) {
+			original( self, frame_time );
+			return;
 		}
+
+		const int recorded = index;
+		if( target < 2 ) {
+			index = 1 - target;
+			original( self, frame_time );
+			// BeginFrame returns early outside the main thread or mid-frame.
+			if( index != target )
+				index = recorded;
+			return;
+		}
+
+		// the third stack: both engine stacks may belong to jobs in flight, so
+		// park it in the slot the flip lands on for the call; the flip frees
+		// and BeginFrame allocates from the third stack only.
+		const int     from    = recorded == 1 ? 1 : 0;
+		std::uint8_t* landing = static_cast< std::uint8_t* >( ring->render_data_stack( 1 - from ) );
+		std::uint8_t* third   = static_cast< std::uint8_t* >( ring->render_data_stack( 2 ) );
+		std::uint8_t  engine_stack[ render_data_stack_size ];
+		std::memcpy( engine_stack, landing, render_data_stack_size );
+		std::memcpy( landing, third, render_data_stack_size );
+		index = from;
+		original( self, frame_time );
+		const bool flipped = index == 1 - from;
+		std::memcpy( third, landing, render_data_stack_size );
+		std::memcpy( landing, engine_stack, render_data_stack_size );
+		index = flipped ? 2 : recorded;
 	}
 
 	void __fastcall QueuedFrames::EndFrame( void* self, void* ) {

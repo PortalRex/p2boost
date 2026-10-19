@@ -418,9 +418,25 @@ model data, `LockRenderData`) lives in two static `CMemoryStack`s,
 stack. With three frames in flight the frame being recorded would reuse
 the stack of the frame still replaying, so a third stack is initialised in
 the unused path buffer that follows the two (only written while the first
-render context initialises) and a `BeginFrame` hook moves the index on to
-the stack of the context that records the next frame, right after the
-engine's flip. Any other state (another thread mode, a pending mode switch,
+render context initialises) and a `BeginFrame` hook steers the engine's
+flip onto the stack of the context that records the next frame, whose job
+was waited for. For the two engine stacks it sets the index to the other
+one just before the flip. For the third, where both engine stacks may still
+belong to jobs in flight, it parks the third stack's `CMemoryStack` in the
+slot the flip lands on for the call and swaps it back after, so the flip
+frees, and `BeginFrame` allocates from, the third stack only. Until then
+the index stays on the stack just recorded, as the engine leaves it, so its
+single current-alloc-point always belongs to the indexed stack.
+
+The first version moved the index on after the engine's flip, which had
+already reset `sm_RenderData[1]` while a job could still read it.
+Allocations that followed overwrote a frame not yet replayed: Portal
+Stories: Mel crashed in `studiorender` within seconds of loading
+`sp_a2_firestorm` (3 of 5 loads; none with `frame_queue_depth 1`). A crash
+dump showed `sm_nRenderStack` = 2, both engine stacks reset to their base,
+and the replaying job reading overwritten instance data inside stack 1.
+
+Any other state (another thread mode, a pending mode switch,
 VProf active, a focus loss) drains the ring: every job is waited for, a
 frame recorded into the third context is replayed inline as mode 1 does,
 and the engine's `EndFrame` runs unchanged.
