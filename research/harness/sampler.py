@@ -1,8 +1,9 @@
 """User-mode sampling profiler for a running portal2.exe: no ETW, no UAC.
 
-Suspends a thread, reads its WOW64 context (EIP, EBP, ESP), resumes it, and
-maps EIP (and the EBP return chain, where frames exist) onto the function
-tables exported from the Ghidra project (artifacts/etw/functions/<mod>.csv).
+Suspends a thread, reads its WOW64 context (EIP, EBP, ESP), resumes it at
+once, and only then walks the EBP return chain from a copy of the stack. Each
+sample also records QueryPerformanceCounter, so samples can be joined to the
+per-frame QPC stamps of a p2boost_trace CSV and split by frame duration.
 
 sampler.py [seconds] [hz]      profile the main thread of the running game
 """
@@ -25,6 +26,7 @@ THREAD_RIGHTS = 0x0002 | 0x0008 | 0x0040  # suspend/resume, get context, query i
 PROCESS_RIGHTS = 0x0010 | 0x0400  # vm read, query information
 WOW64_CONTEXT_CONTROL = 0x00010001
 WOW64_CONTEXT_INTEGER = 0x00010002
+STACK_BYTES = 1024
 
 
 class THREADENTRY32(ctypes.Structure):
@@ -62,6 +64,12 @@ class FILETIME(ctypes.Structure):
         return (self.high << 32) | self.low
 
 
+def qpc():
+    value = ctypes.c_longlong()
+    kernel32.QueryPerformanceCounter(ctypes.byref(value))
+    return value.value
+
+
 def find_process(name="portal2.exe"):
     import subprocess
     out = subprocess.run(["tasklist", "/FI", f"IMAGENAME eq {name}", "/FO", "CSV", "/NH"], capture_output=True, text=True).stdout
@@ -85,6 +93,7 @@ class Modules:
                     break
         kernel32.CloseHandle(snap)
         self.ranges.sort()
+        self.bases = [r[0] for r in self.ranges]
         self.functions = {}
         for base, end, name in self.ranges:
             path = os.path.join(FUNCTIONS, name + ".csv")
@@ -97,21 +106,29 @@ class Modules:
                         names.append((int(parts[1], 16), parts[3]))
                 self.functions[name] = (starts, names)
 
+    def module(self, address):
+        index = bisect.bisect_right(self.bases, address) - 1
+        if index >= 0:
+            base, end, name = self.ranges[index]
+            if address < end:
+                return base, name
+        return None, None
+
     def locate(self, address):
-        for base, end, name in self.ranges:
-            if base <= address < end:
-                rva = address - base
-                table = self.functions.get(name)
-                if table:
-                    starts, names = table
-                    index = bisect.bisect_right(starts, rva) - 1
-                    if index >= 0 and rva < names[index][0]:
-                        return name, names[index][1]
-                return name, f"+0x{rva:x}"
-        return "?", f"0x{address:x}"
+        base, name = self.module(address)
+        if name is None:
+            return "?", f"0x{address:x}"
+        rva = address - base
+        table = self.functions.get(name)
+        if table:
+            starts, names = table
+            index = bisect.bisect_right(starts, rva) - 1
+            if index >= 0 and rva < names[index][0]:
+                return name, names[index][1]
+        return name, f"+0x{rva:x}"
 
     def in_code(self, address):
-        return any(base <= address < end for base, end, _ in self.ranges)
+        return self.module(address)[1] is not None
 
 
 def threads_of(pid):
@@ -145,6 +162,8 @@ class Sampler:
             handle = kernel32.OpenThread(THREAD_RIGHTS, False, tid)
             if handle:
                 self.threads[tid] = handle
+        self.stack = (ctypes.c_ubyte * STACK_BYTES)()
+        self.context = WOW64_CONTEXT()
 
     def main_thread(self):
         return min(self.threads, key=lambda tid: thread_times(self.threads[tid])[0])
@@ -153,60 +172,70 @@ class Sampler:
         ranked = sorted(self.threads, key=lambda tid: -thread_times(self.threads[tid])[1])
         return ranked[:count]
 
-    def read_dword(self, address):
-        value = wt.DWORD()
-        read = ctypes.c_size_t()
-        if kernel32.ReadProcessMemory(self.process, ctypes.c_void_p(address), ctypes.byref(value), 4, ctypes.byref(read)) and read.value == 4:
-            return value.value
-        return None
-
-    def sample(self, tid, depth=12):
+    def sample(self, tid, depth=16):
+        """(qpc, [eip, caller, caller's caller...]); the thread is suspended only
+        for the context read."""
         handle = self.threads[tid]
-        context = WOW64_CONTEXT()
+        context = self.context
         context.ContextFlags = WOW64_CONTEXT_CONTROL | WOW64_CONTEXT_INTEGER
         if kernel32.SuspendThread(handle) == 0xFFFFFFFF:
             return None
+        stamp = qpc()
         ok = kernel32.Wow64GetThreadContext(handle, ctypes.byref(context))
         kernel32.ResumeThread(handle)
         if not ok:
             return None
         frames = [context.Eip]
-        ebp = context.Ebp
-        for _ in range(depth):
-            if not ebp or ebp & 3:
-                break
-            ret = self.read_dword(ebp + 4)
-            nxt = self.read_dword(ebp)
-            if ret is None or not self.modules.in_code(ret) or nxt is None or nxt <= ebp:
-                break
-            frames.append(ret)
-            ebp = nxt
-        return frames
+        ebp, esp = context.Ebp, context.Esp
+        # copy the top of the stack after resuming: frames above the current
+        # one rarely move within the microseconds this takes
+        read = ctypes.c_size_t()
+        base = esp & ~0xF
+        if ebp >= base and ebp - base < STACK_BYTES - 8 and kernel32.ReadProcessMemory(
+                self.process, ctypes.c_void_p(base), self.stack, STACK_BYTES, ctypes.byref(read)):
+            words = (wt.DWORD * (read.value // 4)).from_buffer(self.stack)
+            for _ in range(depth):
+                index = (ebp - base) // 4
+                if index + 1 >= len(words):
+                    break
+                nxt, ret = words[index], words[index + 1]
+                if not self.modules.in_code(ret) or nxt <= ebp or nxt - base >= read.value:
+                    break
+                frames.append(ret)
+                ebp = nxt
+        return stamp, frames
 
     def run(self, tids, seconds, hz):
+        """returns {tid: [(qpc, frames), ...]}"""
         interval = 1.0 / hz
-        counts = {tid: collections.Counter() for tid in tids}
-        inclusive = {tid: collections.Counter() for tid in tids}
-        totals = {tid: 0 for tid in tids}
+        samples = {tid: [] for tid in tids}
         deadline = time.perf_counter() + seconds
         next_time = time.perf_counter()
         while time.perf_counter() < deadline:
             for tid in tids:
-                frames = self.sample(tid)
-                if not frames:
-                    continue
-                totals[tid] += 1
-                counts[tid][self.modules.locate(frames[0])] += 1
-                for symbol in set(self.modules.locate(f) for f in frames):
-                    inclusive[tid][symbol] += 1
+                result = self.sample(tid)
+                if result:
+                    samples[tid].append(result)
             next_time += interval
             delay = next_time - time.perf_counter()
             if delay > 0:
                 time.sleep(delay)
-        return counts, inclusive, totals
+        return samples
+
+
+def summarize(modules, samples):
+    """self and inclusive counters over a list of (qpc, frames)."""
+    counts, inclusive = collections.Counter(), collections.Counter()
+    for _, frames in samples:
+        counts[modules.locate(frames[0])] += 1
+        for symbol in set(modules.locate(f) for f in frames):
+            inclusive[symbol] += 1
+    return counts, inclusive, len(samples)
 
 
 def report(counts, inclusive, total, top=40):
+    if not total:
+        return "no samples"
     lines = [f"samples {total}"]
     by_module = collections.Counter()
     for (module, _), n in counts.items():
@@ -229,5 +258,5 @@ if __name__ == "__main__":
         sys.exit("portal2.exe not running")
     sampler = Sampler(pid)
     main = sampler.main_thread()
-    counts, inclusive, totals = sampler.run([main], seconds, hz)
-    print(report(counts[main], inclusive[main], totals[main]))
+    samples = sampler.run([main], seconds, hz)
+    print(report(*summarize(sampler.modules, samples[main])))

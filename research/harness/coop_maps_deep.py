@@ -108,7 +108,11 @@ try:
         g.run(f"cmd1 setpos {p1[0]:.0f} {p1[1]:.0f} {p1[2]:.0f}", f"cmd1 setang {pitch:.1f} {yaw:.1f} 0",
               f"cmd2 setpos {p2[0]:.0f} {p2[1]:.0f} {p2[2]:.0f}", f"cmd2 setang {pitch:.1f} {yaw:.1f} 0")
         time.sleep(4)
-        # the positions stay; this removes the "cheats are enabled" banner
+        # god mode keeps turrets (red_racer) from sending the players back to
+        # the start; the flag survives sv_cheats 0, which removes the
+        # "cheats are enabled" banner. the positions stay.
+        g.run("cmd1 god", "cmd2 god")
+        time.sleep(0.5)
         g.run("sv_cheats 0")
         time.sleep(1)
         g.log("positions: " + " | ".join(line for line in g.run("cmd1 getpos", "cmd2 getpos").splitlines() if "setpos" in line))
