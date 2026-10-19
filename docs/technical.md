@@ -332,6 +332,45 @@ The key now compares one byte.
 (moving casters only), and `p2boost_fix shadow_depth_fps 0` restores
 per-frame rendering.
 
+### Two frames in flight on the render thread (`frame_queue_depth`)
+
+**Problem.** With `mat_queue_mode 2` the material system records each
+frame into one of two `CMatQueuedRenderContext`s and hands it to a
+thread-pool job at `CMaterialSystem::EndFrame`, which first waits for the
+job still replaying the other context. Any frame whose replay takes longer
+than the next game frame (the second split-screen view, a shadow refresh)
+stalls the main thread: in the split-screen lobby 11% of the main thread
+sat in that wait, 16% inside the slow frames.
+
+**Change.** `EndFrame` is replaced by the same flip over a ring of three
+contexts: the engine's two embedded ones and a third constructed with the
+engine's own `CMatQueuedRenderContext` constructor and `Init`. Two jobs can
+be in flight; each job waits on the completion event of the one before it
+on the worker, so device calls stay serialized and the engine's
+`m_pActiveAsyncJob` stays meaningful. `EndFrame`'s inputs (TLS slot, cvars,
+job and queue helpers, the functor markers) are read from its own body.
+
+The render data the queued calls point into (bone matrices, decal and brush
+model data, `LockRenderData`) lives in two static `CMemoryStack`s,
+`CMatRenderContextBase::sm_RenderData[2]`, indexed by a static int that
+`CMaterialSystem::BeginFrame` flips as `1 - index` before freeing the new
+stack. With three frames in flight the frame being recorded would reuse
+the stack of the frame still replaying, so a third stack is initialised in
+the unused path buffer that follows the two (only written while the first
+render context initialises) and a `BeginFrame` hook moves the index on to
+the stack of the context that records the next frame, right after the
+engine's flip. Any other state (another thread mode, a pending mode switch,
+VProf active, a focus loss) drains the ring: every job is waited for, a
+frame recorded into the third context is replayed inline as mode 1 does,
+and the engine's `EndFrame` runs unchanged.
+
+**Visual effect.** None; the display can lag the simulation by up to one
+extra frame (about 1.3 ms at 750 FPS). `p2boost_fix frame_queue_depth 1`
+restores the engine's two-context flip.
+
+**Result.** Split-screen lobby, 2 × 8 s each, alternating: 1 = 679, 2 = 754
+and 757 FPS. The map change and menu drains ran without a hitch.
+
 ### Flat-texture hook overhead
 
 The optional flat-texture mode hooks `IMaterial::Bind` on the material-system
@@ -439,6 +478,10 @@ Measured in the split-screen lobby with every change above on (about
 | Projected-texture shadow depth maps (`r_flashlightdepthtexture 0`) | +13.6% ± 2.4 |
 | The whole client shadow manager (`r_shadows 0`, includes the above) | +15.8% ± 2.6 |
 | All 2D VGUI (`r_drawvgui 0`) | +0.8% ± 1.0 |
+
+The render-thread wait that `frame_queue_depth` removes was measured by
+sampling the main thread's stacks: 11% of its time in `EndFrame` waiting for
+the previous frame's job (16% in frames above the median).
 
 Before same-frame depth reuse, the depth maps cost +26.9%. A profile diff of
 the remaining depth cost (about 230 µs of main-thread time per frame) shows:

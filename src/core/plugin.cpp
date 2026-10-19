@@ -72,7 +72,7 @@ namespace p2boost {
 		    { "partner_view_fps", 120, 1000, "co-op partner's view (+remote_view, or the split-screen player not in control) renders per second (0 = every frame)" },
 		    { "shadow_depth_fps", 120, 1000, "also reuse shadow-depth maps across frames, refreshed this often (0 = off)" },
 		    { "vgui_screen_fps", 0, 1000, "experimental: in-world VGUI screens repaint this often from a cached texture (0 = off)" },
-		    { "frame_queue_depth", 1, 2, "experimental: frames the render thread may run behind the game (1 = stock)" },
+		    { "frame_queue_depth", 2, 2, "frames the render thread may run behind the game (1 = the engine's one)" },
 		};
 
 		constexpr std::size_t fix_count{ static_cast< std::size_t >( fix_t::count ) };
@@ -388,13 +388,6 @@ namespace p2boost {
 				return flat_textures_command( args );
 			if( _stricmp( command, "p2boost_shadow_depth_views" ) == 0 )
 				return shadow_depth_views_command( );
-			if( _stricmp( command, "p2boost_x_ring" ) == 0 ) {
-				int value{ };
-				if( args.ArgC( ) == 2 && parse_bounded( args.Arg( 1 ), 0, 1, value ) )
-					g_x_ring_mode = value;
-				console_print( "[p2boost] x_ring %d\n", g_x_ring_mode );
-				return sdk::Stop;
-			}
 			if( _stricmp( command, "r_intensity" ) == 0 )
 				return intensity_command( args );
 
@@ -434,7 +427,6 @@ namespace p2boost {
 			    { "p2boost_update", "Update p2boost to the latest release. Optional 'force' reinstalls." },
 			    { "p2boost_flat_textures", "Optional visual mode with solid-color surfaces: 0|1." },
 			    { "p2boost_shadow_depth_views", "Print the flashlight depth views rendered recently (origin, angles, fov)." },
-			    { "p2boost_x_ring", "Research: 1 = frame ring with the engine's two contexts only." },
 			    { "r_intensity", "Scale final-frame RGB brightness (0.0 to 2.0, 1.0 neutral)." },
 			};
 
@@ -740,15 +732,9 @@ namespace p2boost {
 					               static_cast< unsigned long long >( m_vgui_screen_cache.reused_count( ) ) );
 					break;
 				case fix_t::frame_queue_depth:
-					{
-						char extra[ 160 ]{ };
-						m_queued_frames.debug( extra, sizeof( extra ) );
-						std::snprintf( detail, sizeof( detail ), "%llu ring, %llu drains, %llu calls, reason %d, mode %d, %s",
-						               static_cast< unsigned long long >( m_queued_frames.ring_frames( ) ),
-						               static_cast< unsigned long long >( m_queued_frames.drained_count( ) ),
-						               static_cast< unsigned long long >( m_queued_frames.hook_calls( ) ),
-						               m_queued_frames.last_reason( ), m_queued_frames.last_mode( ), extra );
-					}
+					std::snprintf( detail, sizeof( detail ), "%llu ring frames, %llu drains",
+					               static_cast< unsigned long long >( m_queued_frames.ring_frames( ) ),
+					               static_cast< unsigned long long >( m_queued_frames.drained_count( ) ) );
 					break;
 				default:
 					break;

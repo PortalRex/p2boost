@@ -6,7 +6,6 @@
 
 #include <Windows.h>
 
-#include <cstdio>
 #include <cstring>
 #include <malloc.h>
 
@@ -46,9 +45,6 @@ namespace p2boost {
 		constexpr std::ptrdiff_t lock_render_data_index{ 0x05 };
 		constexpr std::ptrdiff_t lock_render_data_stacks{ 0x1e };
 		constexpr std::ptrdiff_t render_data_buffer_size{ 0x104 };
-
-		// context fields CMatQueuedRenderContext::Init fills, and the two
-		// CUtlVectors the copy must not share with the engine's context.
 
 		// virtual slots: IMaterialSystem's frame gate and per-frame hook, the
 		// queued context's end-frame hook and call-queue getter, the shader
@@ -157,65 +153,6 @@ namespace p2boost {
 		}
 	}
 
-	// RESEARCH: first-chance crash log with the faulting module and a stack sample.
-	volatile int g_ring_step{ };
-	// RESEARCH: 1 = two engine contexts only (the stock flip, reimplemented).
-	int          g_x_ring_mode{ };
-	void*        g_replay_context{ };
-	void*        g_record_context{ };
-	DWORD        g_main_thread{ };
-	int*         g_render_data_index{ };
-	std::uint8_t* g_render_data_stacks{ };
-	int          g_third_stack_state{ };
-	namespace {
-		LONG CALLBACK crash_log( EXCEPTION_POINTERS* info ) {
-			if( !info || !info->ExceptionRecord )
-				return EXCEPTION_CONTINUE_SEARCH;
-			const DWORD code = info->ExceptionRecord->ExceptionCode;
-			if( code == 0x406D1388 || code == 0xE06D7363 || code == 0x40010006 || code == 0x4001000A )
-				return EXCEPTION_CONTINUE_SEARCH;
-			static bool once = false;
-			if( once )
-				return EXCEPTION_CONTINUE_SEARCH;
-			once = true;
-			HANDLE file = CreateFileA( "C:/Users/Rex/Documents/GitHub/p2boost/artifacts/p2boost_crash.txt", GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr );
-			if( file == INVALID_HANDLE_VALUE )
-				return EXCEPTION_CONTINUE_SEARCH;
-			char  text[ 4096 ];
-			int   length = 0;
-			auto  line   = [ & ]( const void* address ) {
-                HMODULE module{ };
-                char    name[ 260 ]{ };
-                GetModuleHandleExA( GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, static_cast< const char* >( address ), &module );
-                if( module )
-                    GetModuleFileNameA( module, name, sizeof( name ) );
-                length += std::snprintf( text + length, sizeof( text ) - length, "%p %s+0x%x\n", address, name, module ? static_cast< unsigned >( reinterpret_cast< std::uintptr_t >( address ) - reinterpret_cast< std::uintptr_t >( module ) ) : 0u );
-			};
-			length += std::snprintf( text, sizeof( text ), "exception %08lx thread %lu (main %lu) ring step %d mode %d replay %p record %p at eip, then stack words:\n", code, GetCurrentThreadId( ), g_main_thread, g_ring_step, g_x_ring_mode, g_replay_context, g_record_context );
-			line( reinterpret_cast< const void* >( info->ContextRecord->Eip ) );
-			if( g_render_data_index && g_render_data_stacks ) {
-				length += std::snprintf( text + length, sizeof( text ) - length, "render data index %d third %d\n", *g_render_data_index, g_third_stack_state );
-				for( int which = 0; which < 3 && length < 3000; ++which ) {
-					const auto* words = reinterpret_cast< const std::uint32_t* >( g_render_data_stacks + which * 0x28 );
-					length += std::snprintf( text + length, sizeof( text ) - length, "stack %d:", which );
-					for( int word = 0; word < 10; ++word )
-						length += std::snprintf( text + length, sizeof( text ) - length, " %08x", words[ word ] );
-					length += std::snprintf( text + length, sizeof( text ) - length, "\n" );
-				}
-			}
-			const auto* stack = reinterpret_cast< const void* const* >( info->ContextRecord->Esp );
-			for( int index = 0; index < 48 && length < 3800; ++index ) {
-				if( IsBadReadPtr( stack + index, sizeof( void* ) ) )
-					break;
-				line( stack[ index ] );
-			}
-			DWORD written{ };
-			WriteFile( file, text, static_cast< DWORD >( length ), &written, nullptr );
-			CloseHandle( file );
-			return EXCEPTION_CONTINUE_SEARCH;
-		}
-	}
-
 	QueuedFrames::~QueuedFrames( ) {
 		remove( );
 	}
@@ -296,8 +233,6 @@ namespace p2boost {
 		m_stack_init         = stack_init.as< stack_init_fn_t >( );
 		m_stack_free_all     = stack_free.as< stack_free_fn_t >( );
 		m_stack_term         = stack_term.as< stack_term_fn_t >( );
-		g_render_data_index  = m_render_data_index;
-		g_render_data_stacks = m_render_data_stacks;
 		m_materials        = materials;
 
 		// every code target must be material-system code and the TLS slot must
@@ -312,8 +247,6 @@ namespace p2boost {
 			if( !module.contains( Address{ const_cast< void* >( target ) } ) )
 				return false;
 		}
-		AddVectoredExceptionHandler( 1, &crash_log );
-		g_main_thread = GetCurrentThreadId( );
 		m_contexts = { Address{ materials }.add( queued_contexts ).as< void* >( ),
 		               Address{ materials }.add( queued_contexts + queued_context_size ).as< void* >( ), nullptr };
 		const void* current = TlsGetValue( m_tls_index );
@@ -378,41 +311,21 @@ namespace p2boost {
 	// engine would process at all.
 	bool QueuedFrames::fast_path_allowed( void* self ) const noexcept {
 		const Address materials{ self };
-		m_last_mode.store( materials.at< int >( thread_mode ), std::memory_order_relaxed );
-		if( depth( ) < 2 ) {
-			m_last_reason.store( 1, std::memory_order_relaxed );
+		if( depth( ) < 2 || !m_in_main_thread( ) || materials.at< int >( thread_mode ) != 2 )
 			return false;
-		}
-		if( !m_in_main_thread( ) ) {
-			m_last_reason.store( 2, std::memory_order_relaxed );
+		if( !vfunc< bool_fn_t >( self, vmt_materials_can_end_frame )( self ) )
 			return false;
-		}
-		if( materials.at< int >( thread_mode ) != 2 ) {
-			m_last_reason.store( 3, std::memory_order_relaxed );
+		if( *m_vprof && Address{ *m_vprof }.at< int >( vprof_enabled ) != 0 )
 			return false;
-		}
-		if( !vfunc< bool_fn_t >( self, vmt_materials_can_end_frame )( self ) ) {
-			m_last_reason.store( 4, std::memory_order_relaxed );
-			return false;
-		}
-		if( *m_vprof && Address{ *m_vprof }.at< int >( vprof_enabled ) != 0 ) {
-			m_last_reason.store( 5, std::memory_order_relaxed );
-			return false;
-		}
 
 		int desired = Address{ *m_queue_mode_cvar }.at< int >( cvar_value );
 		if( desired < 0 )
 			desired = materials.at< int >( default_thread_mode );
 		void* shader_api = *m_shader_api;
-		if( !shader_api || !vfunc< bool_fn_t >( shader_api, vmt_shader_threading_ok )( shader_api ) || !materials.at< std::uint8_t >( threading_allowed ) ) {
-			m_last_reason.store( 6, std::memory_order_relaxed );
+		if( !shader_api || !vfunc< bool_fn_t >( shader_api, vmt_shader_threading_ok )( shader_api ) || !materials.at< std::uint8_t >( threading_allowed ) )
 			return false;
-		}
-		if( materials.at< std::uint8_t >( force_single_threaded ) || materials.at< int >( pending_deletions ) != 0 ) {
-			m_last_reason.store( 7, std::memory_order_relaxed );
+		if( materials.at< std::uint8_t >( force_single_threaded ) || materials.at< int >( pending_deletions ) != 0 )
 			return false;
-		}
-		m_last_reason.store( desired == 2 ? 0 : 8, std::memory_order_relaxed );
 		return desired == 2;
 	}
 
@@ -423,16 +336,13 @@ namespace p2boost {
 			return true;
 		if( !ensure_third_stack( ) )
 			return false;
-		g_ring_step = 1;
 
 		void* context = _aligned_malloc( queued_context_size, 16 );
 		if( !context )
 			return false;
 		std::memset( context, 0, queued_context_size );
 		m_context_construct( context );
-		g_ring_step = 2;
 		m_context_init( context, self, Address{ self }.add( hardware_context ).as< void* >( ) );
-		g_ring_step = 3;
 		m_private      = context;
 		m_contexts[ 2 ] = context;
 		return true;
@@ -449,13 +359,9 @@ namespace p2boost {
 		const Address engine_stack{ render_data_stack( 0 ) };
 		void*         stack = render_data_stack( 2 );
 		std::memset( stack, 0, render_data_stack_size );
-		g_third_stack_state = 1;
 		if( !m_stack_init( stack, nullptr, engine_stack.at< int >( stack_max_size ), engine_stack.at< int >( stack_commit_size ), 0,
-		                   engine_stack.at< int >( stack_alignment ) ) ) {
-			g_third_stack_state = 2;
+		                   engine_stack.at< int >( stack_alignment ) ) )
 			return false;
-		}
-		g_third_stack_state = 3;
 		m_third_stack = true;
 		return true;
 	}
@@ -489,7 +395,6 @@ namespace p2boost {
 
 	// worker thread: finish the frame before this one, then replay this one.
 	void QueuedFrames::execute_job( void* context, void* previous_job ) {
-		g_ring_step = 40;
 		if( previous_job ) {
 			// a plain wait on the job's completion event: the pool's YieldWait
 			// would run other queued jobs on this worker meanwhile.
@@ -502,17 +407,13 @@ namespace p2boost {
 			}
 			release( previous_job );
 		}
-		g_ring_step = 41;
-		g_replay_context = context;
 		m_thread_execute( m_materials, context );
-		g_ring_step = 42;
 	}
 
 	// one queued-mode frame flip with three contexts: hand the recorded
 	// context to a job, record the next frame into the context whose job is
 	// the oldest, after waiting for that one only.
 	void QueuedFrames::run_ring( void* self ) {
-		g_ring_step = 10;
 		const Address materials{ self };
 		void*         recording = recording_context( self );
 		if( !recording ) {
@@ -542,11 +443,8 @@ namespace p2boost {
 			++recording_index;
 
 		// EndFrame's own per-frame hooks on the recording context and the system.
-		g_ring_step = 11;
 		vfunc< void_fn_t >( recording, vmt_context_end_frame_hook )( recording );
-		g_ring_step = 12;
 		vfunc< set_fn_t >( self, vmt_materials_frame_hook )( self, 0 );
-		g_ring_step = 13;
 
 		// the next recording context: the one whose job is oldest (or none).
 		std::size_t next = recording_index;
@@ -560,13 +458,11 @@ namespace p2boost {
 				next = index;
 			}
 		}
-		g_ring_step = 14;
 		if( m_jobs[ next ] ) {
 			if( !m_job_finished( m_jobs[ next ] ) )
 				m_job_wait( m_jobs[ next ], 0xffffffff );
 			release_job( m_jobs[ next ] );
 		}
-		g_ring_step = 15;
 
 		// the newest job is the one this frame's job must follow.
 		void* newest       = nullptr;
@@ -579,15 +475,10 @@ namespace p2boost {
 
 		void* shader_api = *m_shader_api;
 		void* queue      = vfunc< ptr_fn_t >( recording, vmt_context_call_queue )( recording );
-		g_ring_step = 16;
 		m_queue_functor( queue, shader_api, m_end_marker );
-		g_ring_step = 17;
 		m_begin_queue( m_contexts[ next ], recording );
-		g_ring_step = 18;
 		queue = vfunc< ptr_fn_t >( m_contexts[ next ], vmt_context_call_queue )( m_contexts[ next ] );
 		m_queue_functor( queue, shader_api, m_begin_marker );
-		g_ring_step = 19;
-		g_record_context = m_contexts[ next ];
 		set_recording_context( m_contexts[ next ] );
 		// the next frame's render data lives in the stack numbered like its
 		// context, so the stacks rotate with the contexts and a stack is
@@ -601,9 +492,7 @@ namespace p2boost {
 		if( next < 2 )
 			materials.add( current_context_index ).as< int* >( )[ 0 ] = static_cast< int >( next );
 
-		g_ring_step = 20;
 		void* job = create_job( self, recording, newest );
-		g_ring_step = 21;
 		if( job ) {
 			m_jobs[ recording_index ]      = job;
 			m_job_order[ recording_index ] = ++m_order;
@@ -612,13 +501,10 @@ namespace p2boost {
 			if( engine_job )
 				release( engine_job );
 			engine_job = job;
-			g_ring_step = 22;
 			vfunc< add_fn_t >( *m_thread_pool, vmt_pool_add_job )( *m_thread_pool, job );
 		}
-		g_ring_step = 23;
 		materials.add( in_end_frame ).as< std::uint8_t* >( )[ 0 ] = 0;
 		m_ring_frames.fetch_add( 1, std::memory_order_relaxed );
-		g_ring_step = 24;
 	}
 
 	// back to the engine's two-context state: every job finished, and the
@@ -626,7 +512,6 @@ namespace p2boost {
 	void QueuedFrames::drain( void* self ) {
 		if( !m_active )
 			return;
-		g_ring_step = 30;
 		m_drained.fetch_add( 1, std::memory_order_relaxed );
 
 		const Address materials{ self };
@@ -652,10 +537,8 @@ namespace p2boost {
 		if( *m_render_data_index > 1 )
 			*m_render_data_index = 0;
 
-		g_ring_step = 31;
 		void* recording = recording_context( self );
 		if( recording == m_private && m_private ) {
-			g_ring_step = 32;
 			const int   index   = materials.at< int >( current_context_index ) & 1;
 			void*       engine  = m_contexts[ index ];
 			m_begin_queue( engine, m_private );
@@ -663,18 +546,10 @@ namespace p2boost {
 			m_end_queue( m_private, true );
 			set_recording_context( engine );
 			materials.add( current_context_index ).as< int* >( )[ 0 ] = index;
-			g_ring_step = 33;
 		} else if( recording == m_contexts[ 0 ] || recording == m_contexts[ 1 ] ) {
 			materials.add( current_context_index ).as< int* >( )[ 0 ] = recording == m_contexts[ 1 ] ? 1 : 0;
 		}
 		m_active = false;
-	}
-
-	void QueuedFrames::debug( char* buffer, std::size_t size ) const noexcept {
-		void** live = m_materials ? *static_cast< void*** >( m_materials ) : nullptr;
-		std::snprintf( buffer, size, "slot %p=%p hook %p live[42] %p (%p)", static_cast< const void* >( m_end_frame.method( ) ),
-		               m_end_frame.method( ) ? *m_end_frame.method( ) : nullptr, reinterpret_cast< const void* >( &EndFrame ),
-		               live ? live[ 42 ] : nullptr, static_cast< const void* >( live ) );
 	}
 
 	// after the engine's flip, move the render data to the stack of the
@@ -697,8 +572,7 @@ namespace p2boost {
 		if( !original )
 			return;
 
-		ring->m_hook_calls.fetch_add( 1, std::memory_order_relaxed );
-		if( ring->fast_path_allowed( self ) && ( g_x_ring_mode == 1 || ring->m_private || ring->ensure_private_context( self ) ) ) {
+		if( ring->fast_path_allowed( self ) && ( ring->m_private || ring->ensure_private_context( self ) ) ) {
 			ring->run_ring( self );
 			return;
 		}

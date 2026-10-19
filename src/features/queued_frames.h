@@ -22,8 +22,6 @@ namespace p2boost {
 	// engine's own m_pActiveAsyncJob meaningful. Any other state (another
 	// thread mode, a pending mode switch, VProf) drains the ring and lets the
 	// engine's EndFrame run unchanged.
-	extern int g_x_ring_mode;
-
 	class QueuedFrames {
 	public:
 		~QueuedFrames( );
@@ -55,22 +53,6 @@ namespace p2boost {
 		std::uint64_t drained_count( ) const noexcept {
 			return m_drained.load( std::memory_order_relaxed );
 		}
-
-		// research: how many EndFrame calls the hook saw and why the last
-		// one took the stock path (0 none, 1 depth, 2 thread, 3 mode, 4 gate,
-		// 5 vprof, 6 cvar/shader, 7 flags).
-		std::uint64_t hook_calls( ) const noexcept {
-			return m_hook_calls.load( std::memory_order_relaxed );
-		}
-		int last_reason( ) const noexcept {
-			return m_last_reason.load( std::memory_order_relaxed );
-		}
-		int last_mode( ) const noexcept {
-			return m_last_mode.load( std::memory_order_relaxed );
-		}
-		// research: the hooked slot, its current value, our hook, and the live
-		// object's slot 42.
-		void debug( char* buffer, std::size_t size ) const noexcept;
 
 		// called by a frame job on the worker thread.
 		void execute_job( void* context, void* previous_job );
@@ -161,10 +143,7 @@ namespace p2boost {
 		int                    m_order{ };
 		bool                   m_active{ };
 
-		std::atomic_int              m_depth{ 1 };
-		std::atomic< std::uint64_t > m_hook_calls{ };
-		mutable std::atomic_int      m_last_reason{ };
-		mutable std::atomic_int      m_last_mode{ };
+		std::atomic_int              m_depth{ 2 };
 		std::atomic< std::uint64_t > m_ring_frames{ };
 		std::atomic< std::uint64_t > m_drained{ };
 	};
