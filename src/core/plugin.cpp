@@ -12,6 +12,7 @@
 #include "nvidia_profile.h"
 #include "occlusion_skip.h"
 #include "vgui_screen_shadow_skip.h"
+#include "shadow_depth_reuse.h"
 #include "profiler_overlay.h"
 #include "projected_shadow_cache.h"
 #include "portal2_context.h"
@@ -93,6 +94,8 @@ namespace p2boost {
 				m_verification.m_errors.emplace_back( "occlusion-pass signature mismatch" );
 			if( m_verification.m_supported && !m_vgui_screen_shadow_skip.install( m_modules ) )
 				m_verification.m_errors.emplace_back( "vgui-screen shadow-skip signature mismatch" );
+			if( m_verification.m_supported && !m_shadow_depth_reuse.install( m_modules ) )
+				m_verification.m_errors.emplace_back( "optional shadow-depth reuse unavailable" );
 			if( m_verification.m_supported && !m_flat_textures.install( m_modules, m_interfaces, m_device ) )
 				m_verification.m_errors.emplace_back( "optional flat-texture hooks unavailable" );
 			if( m_verification.m_supported && !m_display_adjustments.install( m_commands, m_device, &m_metrics ) )
@@ -162,6 +165,7 @@ namespace p2boost {
 			m_xinput_throttle.remove( );
 			m_occlusion_skip.remove( );
 			m_vgui_screen_shadow_skip.remove( );
+			m_shadow_depth_reuse.remove( );
 			m_frame_limiter.remove( );
 			m_commands.disconnect( );
 			m_interfaces.disconnect( );
@@ -318,6 +322,8 @@ namespace p2boost {
 				return occlusion_skip_command( args );
 			if( _stricmp( command, "p2boost_vgui_shadow_skip" ) == 0 )
 				return vgui_shadow_skip_command( args );
+			if( _stricmp( command, "p2boost_shadow_depth_reuse" ) == 0 )
+				return shadow_depth_reuse_command( args );
 			if( _stricmp( command, "r_intensity" ) == 0 )
 				return intensity_command( args );
 
@@ -363,6 +369,7 @@ namespace p2boost {
 			    { "p2boost_xinput_throttle", "Re-probe absent XInput controller slots once per second instead of every frame (1 default)." },
 			    { "p2boost_occlusion_skip", "Skip the renderable occlusion pass on maps without occluders, where it never culls (1 default)." },
 			    { "p2boost_vgui_shadow_skip", "Skip painting in-world VGUI screens into flashlight shadow-depth maps (1 default)." },
+			    { "p2boost_shadow_depth_reuse", "Reuse a flashlight depth map rendered earlier in the same frame by another view (0 default, experimental)." },
 			    { "r_intensity", "Scale final-frame RGB brightness (0.0 to 2.0, 1.0 neutral)." },
 			};
 
@@ -498,6 +505,11 @@ namespace p2boost {
 			console_print( "[p2boost]   vgui shadow skip %s (%llu screen draws skipped)\n",
 			               m_vgui_screen_shadow_skip.installed( ) ? ( m_vgui_screen_shadow_skip.enabled( ) ? "on" : "off" ) : "OFF",
 			               static_cast< unsigned long long >( m_vgui_screen_shadow_skip.skipped_count( ) ) );
+			console_print( "[p2boost]   depth reuse   %s (%llu rendered, %llu reused%s)\n",
+			               m_shadow_depth_reuse.installed( ) ? ( m_shadow_depth_reuse.enabled( ) ? "on" : "off" ) : "OFF",
+			               static_cast< unsigned long long >( m_shadow_depth_reuse.rendered_count( ) ),
+			               static_cast< unsigned long long >( m_shadow_depth_reuse.reused_count( ) ),
+			               m_shadow_cache.stable_depth_order_available( ) ? "" : ", no stable order" );
 			console_print( "[p2boost]   flat textures %s (%zu of %zu ready%s)\n",
 			               m_flat_textures.available( ) ? ( m_flat_textures.enabled( ) ? "on" : "off" ) : "OFF",
 			               m_flat_textures.ready_texture_count( ),
@@ -732,6 +744,29 @@ namespace p2boost {
 			return sdk::Stop;
 		}
 
+		// reuse same-frame flashlight depth maps across split-screen views.
+		sdk::PluginResult shadow_depth_reuse_command( const sdk::CCommand& args ) {
+			bool enabled{ };
+			if( args.ArgC( ) == 1 ) {
+				console_print( "[p2boost] p2boost_shadow_depth_reuse = %d\n", m_shadow_depth_reuse_requested ? 1 : 0 );
+				return sdk::Stop;
+			}
+
+			if( !parse_toggle( args, enabled ) ) {
+				console_print( "usage: p2boost_shadow_depth_reuse 0|1\n" );
+				return sdk::Stop;
+			}
+			if( enabled && !m_shadow_depth_reuse.installed( ) ) {
+				console_print( "[p2boost] shadow-depth reuse is unavailable on this build\n" );
+				return sdk::Stop;
+			}
+
+			m_shadow_depth_reuse_requested = enabled;
+			apply_enabled_state( );
+			console_print( "[p2boost] same-frame shadow-depth reuse %s\n", enabled ? "enabled (experimental)" : "disabled" );
+			return sdk::Stop;
+		}
+
 		// skip in-world VGUI screen painting inside shadow-depth views.
 		sdk::PluginResult vgui_shadow_skip_command( const sdk::CCommand& args ) {
 			bool enabled{ };
@@ -804,6 +839,8 @@ namespace p2boost {
 			m_xinput_throttle.set_enabled( m_enabled && m_xinput_throttle_requested );
 			m_occlusion_skip.set_enabled( m_enabled && m_occlusion_skip_requested );
 			m_vgui_screen_shadow_skip.set_enabled( m_enabled && m_vgui_shadow_skip_requested );
+			m_shadow_depth_reuse.set_enabled( m_enabled && m_shadow_depth_reuse_requested );
+			m_shadow_cache.set_stable_depth_order( m_enabled && m_shadow_depth_reuse_requested && m_shadow_depth_reuse.installed( ) );
 			m_overlay.set_fixes_enabled( m_enabled );
 		}
 
@@ -826,6 +863,7 @@ namespace p2boost {
 		XInputThrottle          m_xinput_throttle;
 		OcclusionSkip           m_occlusion_skip;
 		VguiScreenShadowSkip    m_vgui_screen_shadow_skip;
+		ShadowDepthReuse        m_shadow_depth_reuse;
 		DisplayAdjustments      m_display_adjustments;
 		RemoteView              m_remote_view;
 		AutoUpdate              m_auto_update;
@@ -841,6 +879,7 @@ namespace p2boost {
 		bool                    m_xinput_throttle_requested{ true };
 		bool                    m_occlusion_skip_requested{ true };
 		bool                    m_vgui_shadow_skip_requested{ true };
+		bool                    m_shadow_depth_reuse_requested{ };
 		mutable con_var_t*      m_queue_mode{ };
 		mutable int             m_last_queue_mode{ -1 };
 	};

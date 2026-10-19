@@ -62,6 +62,14 @@ namespace p2boost::game {
 		const char* current_view_id_store{ "8B 40 68 8D 55 0C 52 89 3D ? ? ? ? FF D0 8B 0D ? ? ? ?" };
 		std::ptrdiff_t xref_current_view_id{ 9 };
 
+		// ComputeShadowDepthTextures' slot search (cmp against the depth-slot
+		// count) and CViewRender's per-view prologue reading gpGlobals->framecount.
+		const char*    depth_slot_capacity{ "23 75 D8 8B 81 ? ? 00 00 3B F0 7D 21 8B 91 ? ? 00 00 80 3C 32 00 75 10 8B 91 ? ? 00 00" };
+		std::ptrdiff_t xref_depth_slot_capacity{ 5 };
+		const char*    globals_frame{ "55 8B EC 51 A1 ? ? ? ? 53 56 57 8B F9 8B 48 04 49 89 0D ? ? ? ? 8B 0D ? ? ? ? 8B 11" };
+		std::ptrdiff_t xref_globals_pointer{ 5 };
+		std::ptrdiff_t globals_framecount{ 4 };
+
 		std::ptrdiff_t xref_frame_complete{ 17 };
 		std::ptrdiff_t xref_world_brush_pointer{ 1 };
 		std::ptrdiff_t xref_occluded_renderables_call{ 8 };
@@ -109,6 +117,7 @@ namespace p2boost::game {
 		std::ptrdiff_t vmt_update_projected{ 24 };
 		std::ptrdiff_t vmt_view_render{ 5 };
 		std::ptrdiff_t vmt_render_view{ 6 };
+		std::ptrdiff_t vmt_update_shadow_depth{ 29 };
 
 		// CViewRender keeps one CViewSetup per split-screen slot at this+4 with a
 		// 0x104 stride; x, y, width, and height are its first four even ints.

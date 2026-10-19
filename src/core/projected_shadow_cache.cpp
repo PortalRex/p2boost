@@ -84,6 +84,13 @@ namespace p2boost {
 		    !m_shadow_manager_parent || !*m_shadow_manager_parent )
 			return false;
 
+		// optional: the depth-slot count ComputeShadowDepthTextures searches. a
+		// mismatch only disables the stable depth order.
+		const Address capacity = modules.m_client.find( game::active( )->depth_slot_capacity );
+		m_depth_capacity_offset = capacity ? capacity.at< std::int32_t >( game::active( )->xref_depth_slot_capacity ) : 0;
+		if( m_depth_capacity_offset <= 0 || m_depth_capacity_offset > 0x1000 )
+			m_depth_capacity_offset = 0;
+
 		m_original_build_active_depth = active_target.as< build_active_depth_fn_t >( );
 		std::vector< std::uint8_t > active_call_bytes( 5 );
 		std::memcpy( active_call_bytes.data( ), active_call.as< const void* >( ), active_call_bytes.size( ) );
@@ -211,12 +218,31 @@ namespace p2boost {
 
 		// preserve Portal 2's complete stock selection before removing only
 		// projected volumes proven disjoint from this exact rendered view.
-		const int selected = cache->m_original_build_active_depth( self, view, maximum, output, high_priority_count );
-		if( !cache->m_enabled.load( std::memory_order_relaxed ) || !cache->m_exact_cull.load( std::memory_order_relaxed ) ||
-		    selected <= 0 || !output || !high_priority_count )
+		int selected = cache->m_original_build_active_depth( self, view, maximum, output, high_priority_count );
+		if( !cache->m_enabled.load( std::memory_order_relaxed ) || selected <= 0 || !output || !high_priority_count )
 			return selected;
 
-		const client_view_t client_view{ view };
+		if( cache->m_exact_cull.load( std::memory_order_relaxed ) )
+			selected = cache->cull_depth_list( self, view, selected, output, high_priority_count );
+
+		// ComputeShadowDepthTextures hands each light the first free depth slot
+		// in list order, and the stock list is sorted by facing, which differs
+		// per view. When every light gets a slot anyway and none needs the
+		// high-resolution range, a handle order is equivalent and gives each
+		// light the same slot in every view of the frame, so a later view can
+		// reuse the earlier depth map (see ShadowDepthReuse).
+		if( cache->m_stable_depth_order.load( std::memory_order_relaxed ) && selected > 1 && *high_priority_count == 0 &&
+		    cache->m_depth_capacity_offset > 0 &&
+		    selected <= Address{ self }.at< int >( cache->m_depth_capacity_offset ) )
+			std::sort( output, output + selected );
+
+		return selected;
+	}
+
+	int ProjectedShadowCache::cull_depth_list(
+	    void* self, const void* view, int selected, std::uint16_t* output, int* high_priority_count ) {
+		ProjectedShadowCache* cache = this;
+		const client_view_t   client_view{ view };
 		if( !client_view )
 			return selected;
 

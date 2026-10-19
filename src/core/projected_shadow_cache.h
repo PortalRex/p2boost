@@ -47,6 +47,16 @@ namespace p2boost {
 			return m_exact_cull.load( std::memory_order_relaxed );
 		}
 
+		// hand selected lights to ComputeShadowDepthTextures in handle order
+		// when that cannot change which lights receive depth slots.
+		void set_stable_depth_order( bool enabled ) noexcept {
+			m_stable_depth_order.store( enabled, std::memory_order_relaxed );
+		}
+
+		bool stable_depth_order_available( ) const noexcept {
+			return m_depth_capacity_offset > 0;
+		}
+
 		bool installed( ) const noexcept {
 			return m_update_projected.installed( ) && m_build_active_depth.installed( ) && m_frame_stage.installed( ) &&
 			       m_change_instance.installed( ) && m_destroy_shadow.installed( );
@@ -85,6 +95,7 @@ namespace p2boost {
 		static void __fastcall FrameStageNotify( void* self, void*, int stage );
 		static bool __fastcall ChangeInstance( void* self, void*, unsigned short handle, void* renderable );
 		state_iterator_t find_state( std::uint16_t handle ) noexcept;
+		int cull_depth_list( void* self, const void* view, int selected, std::uint16_t* output, int* high_priority_count );
 
 		static ProjectedShadowCache* m_instance;
 
@@ -104,6 +115,8 @@ namespace p2boost {
 		sdk::IShadowMgr**             m_shadow_manager_parent{ };
 		std::atomic_bool              m_enabled{ };
 		std::atomic_bool              m_exact_cull{ };
+		std::atomic_bool              m_stable_depth_order{ };
+		std::ptrdiff_t                m_depth_capacity_offset{ };
 		std::atomic_uint              m_hits{ };
 		std::atomic_uint              m_depth_culls{ };
 	};

@@ -60,6 +60,7 @@ add_library(p2boost_core STATIC
   src/core/frame_limiter.cpp
   src/core/occlusion_skip.cpp
   src/core/vgui_screen_shadow_skip.cpp
+  src/core/shadow_depth_reuse.cpp
   src/core/frame_metrics.cpp
   src/core/projected_shadow_cache.cpp
   src/core/profiler_overlay.cpp
