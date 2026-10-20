@@ -20,6 +20,13 @@ namespace p2boost {
 		// running version already matches the latest release.
 		void update( bool force );
 
+		// start a background check that only prints a notice when a newer
+		// tagged release exists. run once at load.
+		void check( );
+
+		// join the background worker; called before the plugin unloads.
+		void wait( );
+
 		bool busy( ) const noexcept {
 			return m_busy.load( std::memory_order_relaxed );
 		}

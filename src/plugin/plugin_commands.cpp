@@ -310,7 +310,7 @@ namespace p2boost {
 		}
 
 		if( m_auto_update.busy( ) ) {
-			console_print( "[p2boost] an update is already in progress\n" );
+			console_print( "[p2boost] an update or update check is already running\n" );
 			return sdk::Stop;
 		}
 

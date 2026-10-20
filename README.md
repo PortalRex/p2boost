@@ -172,7 +172,7 @@ RTX 5090), are in [benchmarks/results.md](benchmarks/results.md).
 | `p2boost_fix [name] [value]` | Lists the fixes, or shows or sets one. `p2boost_fix shadow_depth_fps` also lists the lights whose shadow maps are cached. |
 | `p2boost_overlay 0\|1\|2` | Frame-time overlay: off, full profiler, or large FPS counter. Colors follow your display's refresh rate: yellow when the frame rate slips below it or a frame misses a refresh, red for a visible stutter. |
 | `p2boost_trace 0\|1` | Records frame times; `p2boost_trace 0` writes them to `p2boost_metrics.csv` in the game folder. |
-| `p2boost_update [force]` | Downloads and verifies the latest release in the background; it loads on the next start. |
+| `p2boost_update [force]` | Downloads and verifies the latest release in the background; it loads on the next start. p2boost also checks for a newer release at load and prints a notice; it never installs on its own. |
 | `p2boost_flat_textures 0\|1` | Optional visual mode (off by default): solid-color surfaces, with transparency and the UI kept intact. |
 | `r_intensity <0.0..2.0>` | Overall brightness multiplier (1.0 = unchanged). |
 

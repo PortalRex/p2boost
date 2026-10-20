@@ -54,6 +54,9 @@ namespace p2boost {
 		m_last_focused = game_is_foreground( );
 		m_metrics.set_focused( m_last_focused );
 		report_load( );
+
+		// a notice only; p2boost_update installs.
+		m_auto_update.check( );
 		return true;
 	}
 
@@ -131,6 +134,9 @@ namespace p2boost {
 	void Plugin::Unload( ) {
 		// the forced queue mode belongs to the plugin; hand it back first.
 		restore_render_threading( );
+
+		// a check still running at unload would outlive the plugin code.
+		m_auto_update.wait( );
 
 		// remove feature callbacks before releasing their shared engine bindings.
 		// the partner view and depth reuse register reset listeners on the display hooks.

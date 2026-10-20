@@ -84,14 +84,20 @@ namespace p2boost {
 		// read one HTTP response into memory with WinHTTP. follows redirects manually
 		// because WinHTTP drops the Authorization header when redirecting across
 		// hosts, and GitHub moves release downloads to objects.githubusercontent.com.
-		bool http_get( const char* url, std::string& body, bool binary ) {
+		// quiet keeps failures off the console, for the check at every load.
+		bool http_get( const char* url, std::string& body, bool binary, bool quiet = false ) {
+			auto report = [ quiet ]( const char* format, unsigned long value ) {
+				if( !quiet )
+					console_print( format, value );
+			};
+
 			const HINTERNET session = WinHttpOpen( L"p2boost-updater",
 			                                       WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
 			                                       WINHTTP_NO_PROXY_NAME,
 			                                       WINHTTP_NO_PROXY_BYPASS,
 			                                       0 );
 			if( !session ) {
-				console_print( "[p2boost] WinHttpOpen failed (%lu)\n", GetLastError( ) );
+				report( "[p2boost] WinHttpOpen failed (%lu)\n", GetLastError( ) );
 				return false;
 			}
 
@@ -123,7 +129,7 @@ namespace p2boost {
 
 				const HINTERNET connect = WinHttpConnect( session, host.c_str( ), INTERNET_DEFAULT_HTTPS_PORT, 0 );
 				if( !connect ) {
-					console_print( "[p2boost] WinHttpConnect failed (%lu)\n", GetLastError( ) );
+					report( "[p2boost] WinHttpConnect failed (%lu)\n", GetLastError( ) );
 					break;
 				}
 
@@ -135,14 +141,14 @@ namespace p2boost {
 				                                              WINHTTP_DEFAULT_ACCEPT_TYPES,
 				                                              WINHTTP_FLAG_SECURE | WINHTTP_FLAG_REFRESH );
 				if( !request ) {
-					console_print( "[p2boost] WinHttpOpenRequest failed (%lu)\n", GetLastError( ) );
+					report( "[p2boost] WinHttpOpenRequest failed (%lu)\n", GetLastError( ) );
 					WinHttpCloseHandle( connect );
 					break;
 				}
 
 				if( !WinHttpSendRequest( request, headers.c_str( ), (DWORD)-1L, WINHTTP_NO_REQUEST_DATA, 0, 0, 0 ) ||
 				    !WinHttpReceiveResponse( request, nullptr ) ) {
-					console_print( "[p2boost] WinHttpSendRequest failed (%lu)\n", GetLastError( ) );
+					report( "[p2boost] WinHttpSendRequest failed (%lu)\n", GetLastError( ) );
 					WinHttpCloseHandle( request );
 					WinHttpCloseHandle( connect );
 					break;
@@ -193,9 +199,9 @@ namespace p2boost {
 					}
 					success = true;
 				} else if( status_code == 404 ) {
-					console_print( "[p2boost] the p2boost repository or its releases are not publicly reachable\n" );
+					report( "[p2boost] the p2boost repository or its releases are not publicly reachable (%lu)\n", status_code );
 				} else {
-					console_print( "[p2boost] update request returned status %lu\n", status_code );
+					report( "[p2boost] update request returned status %lu\n", status_code );
 				}
 
 				WinHttpCloseHandle( request );
@@ -280,6 +286,49 @@ namespace p2boost {
 			return version_newer( candidate, current_version );
 		}
 
+		struct release_t {
+			std::string m_tag;
+			std::string m_dll_url;
+			std::string m_sha_url;
+		};
+
+		// the newest release that carries both raw assets; releases published
+		// before the workflow attached them are skipped. tagged_only also skips
+		// the rolling nightly, which carries no version to compare.
+		bool latest_release( bool tagged_only, bool quiet, release_t& latest ) {
+			std::string remaining;
+			if( !http_get( repo_releases, remaining, false, quiet ) )
+				return false;
+
+			while( !remaining.empty( ) ) {
+				const std::string release = first_release_object( remaining );
+				if( release.empty( ) )
+					return false;
+
+				const std::string tag_marker  = "\"tag_name\":\"";
+				const size_t      tag_start   = release.find( tag_marker );
+				const size_t      tag_content = tag_start == std::string::npos ? std::string::npos : tag_start + tag_marker.size( );
+				const size_t      tag_end     = tag_content == std::string::npos ? std::string::npos : release.find( '"', tag_content );
+
+				release_t candidate;
+				if( tag_end != std::string::npos )
+					candidate.m_tag = release.substr( tag_content, tag_end - tag_content );
+				asset_url( release, dll_asset_name, candidate.m_dll_url );
+				asset_url( release, sha_asset_name, candidate.m_sha_url );
+
+				if( !candidate.m_tag.empty( ) && !candidate.m_dll_url.empty( ) && !candidate.m_sha_url.empty( ) &&
+				    !( tagged_only && candidate.m_tag == "nightly" ) ) {
+					latest = candidate;
+					return true;
+				}
+
+				// advance past this object to the next one in the array.
+				const size_t next = remaining.find( release ) + release.size( );
+				remaining         = next <= remaining.size( ) ? remaining.substr( next ) : std::string{ };
+			}
+			return false;
+		}
+
 		// find the installed p2boost.dll next to the game executable. the game
 		// root is derived from engine.dll the same way runtime verification does.
 		std::wstring installed_dll_path( ) {
@@ -305,68 +354,46 @@ namespace p2boost {
 		if( m_busy.exchange( true ) )
 			return;
 
+		wait( );
+		m_worker = std::thread( AutoUpdateDispatch, this, force );
+	}
+
+	void AutoUpdate::check( ) {
+		if( m_busy.exchange( true ) )
+			return;
+
+		wait( );
+		m_worker = std::thread( [ this ] {
+			// tell the player about a newer tagged release; never download here.
+			// failures stay silent so an offline game loads without noise.
+			release_t latest;
+			if( latest_release( true, true, latest ) && release_newer( latest.m_tag, P2BOOST_VERSION ) )
+				console_print_color( console_color::yellow,
+				                     "[p2boost] p2boost %s is available (running %s). run p2boost_update to install it.\n",
+				                     latest.m_tag.c_str( ),
+				                     P2BOOST_VERSION );
+			m_busy.store( false, std::memory_order_relaxed );
+		} );
+	}
+
+	void AutoUpdate::wait( ) {
 		if( m_worker.joinable( ) )
 			m_worker.join( );
-		m_worker = std::thread( AutoUpdateDispatch, this, force );
 	}
 
 	void AutoUpdateDispatch( AutoUpdate* updater, bool force ) {
 		console_print( "[p2boost] checking for updates...\n" );
 
-		std::string release_json;
-		if( !http_get( repo_releases, release_json, false ) ) {
-			console_print( "[p2boost] failed to reach the GitHub releases API\n" );
+		release_t latest;
+		if( !latest_release( false, false, latest ) ) {
+			console_print( "[p2boost] no reachable release exposes the raw p2boost.dll asset\n" );
 			updater->m_busy.store( false, std::memory_order_relaxed );
 			return;
 		}
 
-		// pick the newest release that carries both raw assets. older releases
-		// published before the workflow attached them are skipped.
-		std::string latest_tag;
-		std::string dll_url;
-		std::string sha_url;
-		{
-			std::string remaining = release_json;
-			while( !remaining.empty( ) ) {
-				const std::string release = first_release_object( remaining );
-				if( release.empty( ) )
-					break;
+		console_print( "[p2boost] latest version is %s (running %s)\n", latest.m_tag.c_str( ), P2BOOST_VERSION );
 
-				const std::string tag_marker  = "\"tag_name\":\"";
-				const size_t      tag_start   = release.find( tag_marker );
-				const size_t      tag_content = tag_start == std::string::npos ? std::string::npos : tag_start + tag_marker.size( );
-				const size_t      tag_end     = tag_content == std::string::npos ? std::string::npos : release.find( '"', tag_content );
-
-				std::string tag;
-				std::string candidate_dll;
-				std::string candidate_sha;
-				if( tag_end != std::string::npos )
-					tag = release.substr( tag_content, tag_end - tag_content );
-				asset_url( release, dll_asset_name, candidate_dll );
-				asset_url( release, sha_asset_name, candidate_sha );
-
-				if( !tag.empty( ) && !candidate_dll.empty( ) && !candidate_sha.empty( ) ) {
-					latest_tag = tag;
-					dll_url    = candidate_dll;
-					sha_url    = candidate_sha;
-					break;
-				}
-
-				// advance past this object to the next one in the array.
-				const size_t next = remaining.find( release ) + release.size( );
-				remaining         = next <= remaining.size( ) ? remaining.substr( next ) : std::string{ };
-			}
-		}
-
-		if( latest_tag.empty( ) || dll_url.empty( ) || sha_url.empty( ) ) {
-			console_print( "[p2boost] no release exposes the raw p2boost.dll asset\n" );
-			updater->m_busy.store( false, std::memory_order_relaxed );
-			return;
-		}
-
-		console_print( "[p2boost] latest version is %s (running %s)\n", latest_tag.c_str( ), P2BOOST_VERSION );
-
-		if( !force && !release_newer( latest_tag, P2BOOST_VERSION ) ) {
+		if( !force && !release_newer( latest.m_tag, P2BOOST_VERSION ) ) {
 			console_print_color( console_color::green, "[p2boost] already up to date\n" );
 			updater->m_busy.store( false, std::memory_order_relaxed );
 			return;
@@ -385,16 +412,16 @@ namespace p2boost {
 		const std::wstring dll_temp  = directory + L"\\p2boost.dll.download";
 		const std::wstring sha_temp  = directory + L"\\p2boost.dll.sha256.download";
 
-		console_print( "[p2boost] downloading %s...\n", dll_url.c_str( ) );
+		console_print( "[p2boost] downloading %s...\n", latest.m_dll_url.c_str( ) );
 		std::string dll_data;
-		if( !http_get( dll_url.c_str( ), dll_data, true ) || dll_data.empty( ) ) {
+		if( !http_get( latest.m_dll_url.c_str( ), dll_data, true ) || dll_data.empty( ) ) {
 			console_print( "[p2boost] failed to download the new p2boost.dll\n" );
 			updater->m_busy.store( false, std::memory_order_relaxed );
 			return;
 		}
 
 		std::string expected_sha;
-		if( !http_get( sha_url.c_str( ), expected_sha, true ) ) {
+		if( !http_get( latest.m_sha_url.c_str( ), expected_sha, true ) ) {
 			console_print( "[p2boost] failed to download the release checksum\n" );
 			updater->m_busy.store( false, std::memory_order_relaxed );
 			return;
@@ -460,7 +487,7 @@ namespace p2boost {
 			return;
 		}
 
-		console_print_color( console_color::green, "[p2boost] installed %s. restart the game to load it.\n", latest_tag.c_str( ) );
+		console_print_color( console_color::green, "[p2boost] installed %s. restart the game to load it.\n", latest.m_tag.c_str( ) );
 		std::filesystem::remove( sha_temp );
 
 		updater->m_busy.store( false, std::memory_order_relaxed );
