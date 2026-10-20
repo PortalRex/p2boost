@@ -23,29 +23,26 @@ namespace p2boost {
 		if( m_instance || !engine_client || !fixes_enabled || !flat_textures )
 			return false;
 
-		// follow ClientCmd's verified calls instead of storing RVAs: Cbuf_AddText
-		// queues the marker, and GetClientState leads to the demo recorder the
-		// way SAR finds it, through the global CClientState::Disconnect reads.
-		const game::profile_t* game             = game::active( );
-		const Address          client_cmd       = engine_client->ClientCmdAddress( );
-		const Address          cbuf_add_text    = client_cmd.add( game->xref_engine_client_cmd_cbuf_add_text_operand - 1 ).call_target( );
-		const Address          get_client_state = client_cmd.add( game->xref_engine_client_cmd_get_client_state_operand - 1 ).call_target( );
-		if( !modules.m_engine.contains( cbuf_add_text ) || !modules.m_engine.contains( get_client_state ) )
+		// follow ClientCmd's verified call to Cbuf_AddText, which queues the
+		// marker, instead of storing its RVA.
+		const game::profile_t* game          = game::active( );
+		const Address          cbuf_add_text = engine_client->ClientCmdAddress( ).add( game->xref_engine_client_cmd_cbuf_add_text_operand - 1 ).call_target( );
+		if( !modules.m_engine.contains( cbuf_add_text ) )
 			return false;
 
-		void* client_state = get_client_state.as< get_client_state_fn_t >( )( );
-		if( !client_state )
+		// the demo recorder, read the way SAR reads it: the operand of
+		// `mov ecx, [g_pClientDemoRecorder]` inside CClientState::Disconnect.
+		const Address recorder_load = modules.m_engine.find( game->client_state_disconnect ).add( game->xref_client_state_disconnect_demo_recorder - 2 );
+		if( recorder_load.at< std::uint16_t >( ) != 0x0d8b )
 			return false;
 
-		// the operand of `mov ecx, [g_pClientDemoRecorder]` inside Disconnect.
-		const Address client_disconnect{ vmt_of( client_state )[ game->client_state_disconnect_slot ] };
-		const Address recorder_load = client_disconnect.add( game->xref_client_state_disconnect_demo_recorder - 2 );
-		if( !modules.m_engine.contains( client_disconnect ) || recorder_load.at< std::uint16_t >( ) != 0x0d8b )
-			return false;
-
-		void* recorder = recorder_load.add( 2 ).to< Address >( ).to< void* >( );
-		if( !recorder || !modules.m_engine.contains( Address{ vmt_of( recorder )[ game->demo_recorder_set_signon_state_slot ] } ) ||
-		    !modules.m_engine.contains( Address{ vmt_of( recorder )[ game->demo_recorder_start_recording_slot ] } ) )
+		// SAR swaps the recorder's vtable for a copy, so its slots may point into
+		// sar.dll. the copy keeps the RTTI locator in front of slot 0, which
+		// still identifies the engine's class.
+		void*  recorder = recorder_load.add( 2 ).to< Address >( ).to< void* >( );
+		void** methods  = vmt_of( recorder );
+		if( !methods || !modules.m_engine.contains( Address{ methods[ -1 ] } ) || !methods[ game->demo_recorder_set_signon_state_slot ] ||
+		    !methods[ game->demo_recorder_start_recording_slot ] )
 			return false;
 
 		m_engine_client = engine_client;

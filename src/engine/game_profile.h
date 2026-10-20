@@ -35,6 +35,7 @@ namespace p2boost::game {
 		const char* flashlight_models{ "6A 00 68 ? ? ? ? FF 15 ? ? ? ? 8B 0D ? ? ? ? 83 79 30 00 8D 86 A0 00 00 00" };
 		const char* active_shadow_depth_call{ "8D 4D EC 51 8D 95 88 F6 FF FF 52 68 00 04 00 00 50 8B CE C7 45 EC 00 00 00 00 E8 ? ? ? ? 8B 15" };
 		const char* active_shadow_depth_list{ "53 8B DC 83 EC 08 83 E4 F0 83 C4 04 55 8B 6B 04 89 6C 24 04 8B EC B8 88 11 00 00" };
+		const char* client_state_disconnect{ "55 8B EC 53 8B 5D 08 56 53 8B F1 E8 ? ? ? ? 80 7E 14 00 0F 85 ? ? ? ? F6 05 ? ? ? ? 01 75 ? 83 0D ? ? ? ? 01 68 ? ? ? ? B9 ? ? ? ? E8 ? ? ? ? 8B 0D ? ? ? ? 8B 01 8B 50 04 6A 00 FF D2 8B 0D ? ? ? ? 8B 01 8B 50 40 FF D2 8B 0D ? ? ? ? 8B 01 8B 50 1C FF D2" };
 		const char* active_shadow_manager{ "0F B7 3A 8B 0D ? ? ? ? 69 FF 14 01 00 00 03 7E 2C" };
 		// CViewRender::Render; its address is vtable slot 5 and RenderView follows.
 		const char* view_render{ "55 8B EC 81 EC 70 01 00 00 53 56 57 8B F9 8B 0D ? ? ? ? 89 7D F4 FF 15 ? ? ? ? 33 F6 88 45 FB 84 C0 74 1A 8B 0D ? ? ? ? 6A 04 56 68 ? ? ? ? 56 68" };
@@ -83,11 +84,10 @@ namespace p2boost::game {
 		std::ptrdiff_t xref_active_shadow_depth_call{ 26 };
 		std::ptrdiff_t xref_active_shadow_manager_global{ 5 };
 		std::ptrdiff_t xref_engine_client_cmd_cbuf_add_text_operand{ 46 };
-		// SAR's demo-recorder lookup: ClientCmd calls GetClientState, the client
-		// state's Disconnect loads g_pClientDemoRecorder, and the recorder's
-		// StartRecording and SetSignonState slots time the demo marker.
-		std::ptrdiff_t xref_engine_client_cmd_get_client_state_operand{ 4 };
-		std::size_t    client_state_disconnect_slot{ 16 };
+		// SAR's demo-recorder lookup: CClientState::Disconnect loads
+		// g_pClientDemoRecorder, and the recorder's StartRecording and
+		// SetSignonState slots time the demo marker. Disconnect is found by
+		// signature because SAR replaces the client state's vtable.
 		std::ptrdiff_t xref_client_state_disconnect_demo_recorder{ 87 };
 		std::size_t    demo_recorder_start_recording_slot{ 2 };
 		std::size_t    demo_recorder_set_signon_state_slot{ 3 };

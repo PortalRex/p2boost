@@ -25,7 +25,6 @@ namespace p2boost {
 
 	private:
 		using cbuf_add_text_fn_t    = void( __cdecl* )( int, const char*, int );
-		using get_client_state_fn_t = void*(__cdecl*)( );
 		using set_signon_state_fn_t = int( __thiscall* )( void*, int );
 		using start_recording_fn_t  = int( __thiscall* )( void*, const char*, bool );
 
