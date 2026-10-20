@@ -1,7 +1,10 @@
 #include "shadow_depth_reuse.h"
 
 #include "address.h"
+#include "client_view.h"
 #include "game_profile.h"
+#include "projected_frustum.h"
+#include "sdk.h"
 
 #include <Windows.h>
 
@@ -11,6 +14,14 @@
 namespace p2boost {
 
 	ShadowDepthReuse* ShadowDepthReuse::m_instance{ };
+
+	namespace {
+		// a player's body and held gun around the eye: the hull is 32 units
+		// wide and the eye 64 above the feet (28 crouched); generous on every
+		// side, since a miss only costs a re-render.
+		constexpr vec3_t body_below{ 48.0f, 48.0f, 80.0f };
+		constexpr vec3_t body_above{ 48.0f, 48.0f, 24.0f };
+	}
 
 	ShadowDepthReuse::key_t ShadowDepthReuse::make_key( const void* view ) noexcept {
 		// the CViewSetup lives on ComputeShadowDepthTextures' stack without a
@@ -45,7 +56,7 @@ namespace p2boost {
 		remove( );
 	}
 
-	bool ShadowDepthReuse::install( const portal2_modules_t& modules ) {
+	bool ShadowDepthReuse::install( const portal2_modules_t& modules, const Portal2Interfaces& interfaces ) {
 		if( m_instance || m_update_depth.installed( ) || !modules.m_client )
 			return false;
 
@@ -69,6 +80,7 @@ namespace p2boost {
 		QueryPerformanceFrequency( &frequency );
 		m_frequency = frequency.QuadPart;
 		m_globals   = globals.as< void* const* >( );
+		m_materials = interfaces.material_system( );
 		m_entries   = { };
 		m_instance  = this;
 		if( !m_update_depth.install( update_slot, reinterpret_cast< void* >( &UpdateShadowDepthTexture ) ) ) {
@@ -82,11 +94,50 @@ namespace p2boost {
 	void ShadowDepthReuse::remove( ) {
 		m_update_depth.remove( );
 		m_enabled.store( false, std::memory_order_relaxed );
-		m_globals = nullptr;
-		m_entries = { };
+		m_globals   = nullptr;
+		m_materials = nullptr;
+		m_viewer    = nullptr;
+		m_entries   = { };
 
 		if( m_instance == this )
 			m_instance = nullptr;
+	}
+
+	void ShadowDepthReuse::begin_view( const void* view ) noexcept {
+		m_viewer     = view;
+		m_viewer_eye = view ? client_view_t{ view }.origin( ) : vec3_t{ };
+	}
+
+	// a map rendered for another view holds the same pixels only when neither
+	// view's player could be drawn into it.
+	bool ShadowDepthReuse::shareable( const void* light_view, const entry_t& entry ) const noexcept {
+		if( entry.m_viewer == m_viewer )
+			return true;
+		if( !entry.m_viewer || !m_viewer )
+			return false;
+
+		const client_view_t          light{ light_view };
+		const frustum::camera_view_t camera{ light.origin( ), light.angles( ), light.near_z( ), light.far_z( ), light.fov( ), light.aspect_ratio( ) };
+		frustum::frustum_t           volume{ };
+		if( !frustum::camera_frustum( camera, volume ) )
+			return false;
+		for( const vec3_t& eye : { entry.m_viewer_eye, m_viewer_eye } )
+			if( frustum::frusta_intersect( volume, frustum::box( eye - body_below, eye + body_above ) ) )
+				return false;
+		return true;
+	}
+
+	// CShadowDepthView::Draw sets ClearColor3ub( 255, 255, 255 ) and nothing
+	// else that outlives its Push3DView/PopView; the main view clears with
+	// that color when its camera is in solid space (out of bounds).
+	void ShadowDepthReuse::repeat_draw_state( ) const noexcept {
+		sdk::IMatRenderContext* context = m_materials ? m_materials->GetRenderContext( ) : nullptr;
+		if( !context )
+			return;
+		using clear_color_fn_t = void( __thiscall* )( void*, unsigned char, unsigned char, unsigned char );
+		const auto clear_color = ( *reinterpret_cast< clear_color_fn_t* const* >( context ) )[ game::active( )->vmt_context_clear_color3 ];
+		clear_color( context, 255, 255, 255 );
+		context->Release( );
 	}
 
 	bool __fastcall ShadowDepthReuse::UpdateShadowDepthTexture( void* self, void*, void* color, void* depth, const void* view ) {
@@ -120,7 +171,8 @@ namespace p2boost {
 		if( entry != reuse->m_entries.end( ) && reuse->enabled( ) && entry->m_frame >= 0 && entry->m_key == key ) {
 			const int  fps   = reuse->m_max_fps.load( std::memory_order_relaxed );
 			const bool fresh = fps > 0 && now.QuadPart - entry->m_time < reuse->m_frequency / fps;
-			if( entry->m_frame == frame || fresh ) {
+			if( ( entry->m_frame == frame || fresh ) && reuse->shareable( view, *entry ) ) {
+				reuse->repeat_draw_state( );
 				reuse->m_reused.fetch_add( 1, std::memory_order_relaxed );
 				return true;
 			}
@@ -136,10 +188,12 @@ namespace p2boost {
 				return left.m_time < right.m_time;
 			} );
 		}
-		entry->m_texture = depth;
-		entry->m_frame   = rendered ? frame : -1;
-		entry->m_time    = now.QuadPart;
-		entry->m_key     = key;
+		entry->m_texture    = depth;
+		entry->m_frame      = rendered ? frame : -1;
+		entry->m_time       = now.QuadPart;
+		entry->m_key        = key;
+		entry->m_viewer     = reuse->m_viewer;
+		entry->m_viewer_eye = reuse->m_viewer_eye;
 
 		const Address setup{ const_cast< void* >( view ) };
 		for( int axis = 0; axis < 3; ++axis ) {

@@ -264,8 +264,8 @@ projected light, and this is not visible in shipped maps.
 **Problem.** Each split-screen view, and a held `+remote_view`, runs
 `ComputeShadowDepthTextures` and re-renders the depth map of every selected
 flashlight, 19.5% of the main thread in the split-screen lobby. A depth map
-is rendered from the light's point of view, so the second view renders the
-same image again.
+is rendered from the light's point of view, so the second view usually
+renders the same image again.
 
 **Change.** `CViewRender::UpdateShadowDepthTexture` (VMT slot 29) records,
 per depth texture, the frame number and the written fields of the light's
@@ -274,8 +274,31 @@ in the same texture in every view, `ProjectedShadowCache` hands the selected
 lights over in handle order when all of them fit in the depth slots and none
 needs the high-resolution range. Which lights receive shadows never changes.
 
-**Result.** Split-screen lobby: 430 → 470 FPS, with shadows identical in both
-views when each player stands in a spotlight. Single-view online co-op does
+Two things make a depth render more than a function of the light, and both
+showed up as flicker in co-op:
+
+- `C_Portal_Player::DrawModel` (Portal 2 `client.dll` `0x1027ae70`) skips
+  the viewpoint player, `GetSplitScreenViewPlayer` of the active slot, in
+  every view; `ShouldSkipRenderingViewpointPlayerForThisView`
+  (`0x1027ad50`) has no view-id test, so depth views skip it too. A map
+  rendered for player 1's view lacks player 1's body and has player 2's.
+  Shared with player 2's view it showed player 2's own shadow and lost
+  player 1's, and with the cross-frame cache whichever view refreshed the
+  map decided which, so player shadows flickered. `ProjectedShadowCache`
+  now reports each view's `CViewSetup` (the slot, and the player's eye as
+  its origin) as its depth maps begin, each map remembers its view, and
+  another view reuses it only when a box around neither player's eye
+  (±48 units across, 80 below, 24 above) intersects the light's frustum.
+- `CShadowDepthView::Draw` (`0x101f0e50`) calls
+  `ClearColor3ub( 255, 255, 255 )` on the render context, and that state
+  outlives the view. With the camera in solid space (out of bounds) the
+  main view clears with the current clear color, so the void was white on
+  frames that rendered a depth map and black on frames that reused every
+  one. A skipped render now makes the same call. Measured above the lobby
+  ceiling: the void alternated between brightness 44 and 214 before, and
+  stays at 204 after, the same as with `shadow_depth_reuse 0`.
+
+**Result.** Split-screen lobby: 430 → 470 FPS. Single-view online co-op does
 not render a second view, so it gains only with `+remote_view` held.
 
 ### Exact shadow-depth culling (`shadow_cull`)

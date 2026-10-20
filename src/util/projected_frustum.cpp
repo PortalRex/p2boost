@@ -199,6 +199,16 @@ namespace p2boost::frustum {
 
 	// SAT is exact for convex polyhedra when testing both face normals and
 	// every cross-product of their edges. Degenerate axes are retained.
+	// corner index bits select x (1), y (2), and z (4), matching the edge and
+	// face tables above.
+	frustum_t box( const vec3_t& minimum, const vec3_t& maximum ) noexcept {
+		frustum_t output{ };
+		for( size_t corner = 0; corner < output.size( ); ++corner )
+			output[ corner ] = { ( corner & 1 ) ? maximum.x : minimum.x, ( corner & 2 ) ? maximum.y : minimum.y,
+			                     ( corner & 4 ) ? maximum.z : minimum.z };
+		return output;
+	}
+
 	bool frusta_intersect( const frustum_t& left, const frustum_t& right ) noexcept {
 		for( const auto& face : frustum_faces ) {
 			const vec3_t normal = ( left[ face[ 1 ] ] - left[ face[ 0 ] ] ).cross( left[ face[ 2 ] ] - left[ face[ 0 ] ] );

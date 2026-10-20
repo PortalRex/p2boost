@@ -1,6 +1,7 @@
 #pragma once
 
 #include "hook.h"
+#include "math_types.h"
 #include "portal2_context.h"
 
 #include <array>
@@ -18,16 +19,25 @@ namespace p2boost {
 	// that case. With the stable depth order (ProjectedShadowCache) every view
 	// gives a light the same slot when all lights fit.
 	//
-	// per-split-slot renderable visibility could in principle make a local
-	// player's model differ between the two depth passes; an in-game check
-	// with each split-screen player standing in a spotlight showed identical
-	// shadows in both views (lobby 430 -> 470 FPS).
+	// a depth map is not purely a function of the light: C_Portal_Player
+	// skips drawing the viewpoint player (the active split-screen slot's) in
+	// every view, depth views included, so a map rendered for one player's
+	// view lacks that player's body and has the other's. A map therefore
+	// passes to another view only when neither player's body can be in the
+	// light's frustum; ProjectedShadowCache reports each view as its depth
+	// maps begin. A skipped render also repeats the one render-context
+	// change CShadowDepthView::Draw leaves behind, the white clear color the
+	// main view uses to clear when its camera is in solid space.
 	class ShadowDepthReuse {
 	public:
 		~ShadowDepthReuse( );
 
-		bool install( const portal2_modules_t& modules );
+		bool install( const portal2_modules_t& modules, const Portal2Interfaces& interfaces );
 		void remove( );
+
+		// main thread: the view whose depth maps render next (its CViewSetup
+		// in CViewRender, one per split-screen slot; its origin is the eye).
+		void begin_view( const void* view ) noexcept;
 
 		void set_enabled( bool enabled ) noexcept {
 			m_enabled.store( enabled, std::memory_order_relaxed );
@@ -90,7 +100,12 @@ namespace p2boost {
 			long long    m_time{ };
 			key_t        m_key{ };
 			light_view_t m_view{ };
+			const void*  m_viewer{ };
+			vec3_t       m_viewer_eye{ };
 		};
+
+		bool shareable( const void* light_view, const entry_t& entry ) const noexcept;
+		void repeat_draw_state( ) const noexcept;
 
 		using update_depth_fn_t = bool( __thiscall* )( void*, void*, void*, const void* );
 
@@ -100,6 +115,9 @@ namespace p2boost {
 
 		VmtHook                      m_update_depth;
 		void* const*                 m_globals{ };
+		sdk::IMaterialSystem*        m_materials{ };
+		const void*                  m_viewer{ };
+		vec3_t                       m_viewer_eye{ };
 		std::array< entry_t, 32 >    m_entries{ };
 		std::atomic_bool             m_enabled{ };
 		std::atomic_bool             m_invalidate{ };

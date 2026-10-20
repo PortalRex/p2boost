@@ -24,6 +24,10 @@ namespace p2boost::frustum {
 	// reconstruct one decoded camera as a convex world-space volume.
 	bool camera_frustum( const camera_view_t& view, frustum_t& output ) noexcept;
 
+	// an axis-aligned box in the same corner order, so it can be tested
+	// against a frustum with frusta_intersect.
+	frustum_t box( const vec3_t& minimum, const vec3_t& maximum ) noexcept;
+
 	// test two convex frusta without weakening Source's visibility rules.
 	bool frusta_intersect( const frustum_t& left, const frustum_t& right ) noexcept;
 

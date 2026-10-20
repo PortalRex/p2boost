@@ -216,6 +216,9 @@ namespace p2boost {
 		if( !cache || !cache->m_original_build_active_depth )
 			return 0;
 
+		if( const auto listener = cache->m_view_listener.load( std::memory_order_acquire ) )
+			listener( cache->m_view_context, view );
+
 		// preserve Portal 2's complete stock selection before removing only
 		// projected volumes proven disjoint from this exact rendered view.
 		int selected = cache->m_original_build_active_depth( self, view, maximum, output, high_priority_count );

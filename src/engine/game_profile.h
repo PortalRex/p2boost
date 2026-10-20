@@ -206,6 +206,8 @@ namespace p2boost::game {
 		// IMatRenderContext: ClearBuffers( color, depth, stencil ), ClearColor4ub.
 		std::ptrdiff_t vmt_context_clear_buffers{ 12 };
 		std::ptrdiff_t vmt_context_clear_color{ 74 };
+		// ClearColor3ub, which CShadowDepthView::Draw sets to white.
+		std::ptrdiff_t vmt_context_clear_color3{ 73 };
 		std::ptrdiff_t vmt_context_push_render_target{ 108 };
 		std::ptrdiff_t vmt_context_pop_render_target{ 111 };
 		// ITexture: IncrementReferenceCount, Download( rect, flags ).

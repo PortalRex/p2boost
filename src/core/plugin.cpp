@@ -149,7 +149,7 @@ namespace p2boost {
 				m_verification.m_errors.emplace_back( "occlusion-pass signature mismatch" );
 			if( m_verification.m_supported && !m_vgui_screen_shadow_skip.install( m_modules ) )
 				m_verification.m_errors.emplace_back( "vgui-screen shadow-skip signature mismatch" );
-			if( m_verification.m_supported && !m_shadow_depth_reuse.install( m_modules ) )
+			if( m_verification.m_supported && !m_shadow_depth_reuse.install( m_modules, m_interfaces ) )
 				m_verification.m_errors.emplace_back( "optional shadow-depth reuse unavailable" );
 			if( m_verification.m_supported && !m_queued_frames.install( m_modules, m_interfaces ) )
 				m_verification.m_errors.emplace_back( "optional frame-queue ring unavailable" );
@@ -170,6 +170,11 @@ namespace p2boost {
 			if( m_shadow_depth_reuse.installed( ) && m_display_adjustments.available( ) )
 				m_display_adjustments.add_reset_listener( []( void* context ) { static_cast< ShadowDepthReuse* >( context )->invalidate( ); },
 				                                          &m_shadow_depth_reuse );
+
+			// depth reuse needs to know whose view each depth map renders for.
+			if( m_shadow_depth_reuse.installed( ) && m_shadow_cache.installed( ) )
+				m_shadow_cache.set_view_listener( []( void* context, const void* view ) { static_cast< ShadowDepthReuse* >( context )->begin_view( view ); },
+				                                  &m_shadow_depth_reuse );
 
 			// enable performance fixes only when the complete supported set is ready.
 			m_enabled = can_enable( );
@@ -211,6 +216,7 @@ namespace p2boost {
 			// remove feature callbacks before releasing their shared engine bindings.
 			// remote view and depth reuse register reset listeners on the display hooks.
 			m_display_adjustments.remove_reset_listener( &m_shadow_depth_reuse );
+			m_shadow_cache.set_view_listener( nullptr, nullptr );
 			m_remote_view.remove( );
 			m_display_adjustments.remove( );
 			m_flat_textures.remove( );

@@ -78,7 +78,7 @@ current values.
 | `xinput_throttle` | 1 | Checks empty controller slots once per second instead of every frame. A newly plugged controller is detected within a second. |
 | `occlusion_skip` | 1 | Skips an occlusion pass that cannot hide anything on maps without occluders (all official maps). |
 | `vgui_shadow_skip` | 1 | Stops in-world wall screens from being redrawn into every light's shadow map. |
-| `shadow_depth_reuse` | 1 | In split-screen, the second player reuses shadow maps the first view already rendered this frame. |
+| `shadow_depth_reuse` | 1 | In split-screen, the second player reuses shadow maps the first view already rendered this frame, unless a player is standing in that light. |
 | `shadow_cull` | 1 | Skips shadow maps for lights whose volume cannot touch your view. Set it to 0 if a shadow seen only through a portal ever disappears. |
 | `partner_view_fps` | 120 | Renders your co-op partner's view at most this many times per second and redraws the last picture in between (0 = every frame): the `+remote_view` picture, or in local split-screen the half of the player you are not controlling (`in_forceuser`). The view you control always renders every frame. Works with `mat_viewportscale`. |
 | `shadow_depth_fps` | 120 | Keeps shadow maps across frames and refreshes each at most this many times per second (0 = every frame). A light that moves re-renders at once; a moving object's shadow can lag by up to 1/N s. |

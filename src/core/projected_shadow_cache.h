@@ -53,6 +53,14 @@ namespace p2boost {
 			m_stable_depth_order.store( enabled, std::memory_order_relaxed );
 		}
 
+		// told the main view (one per split-screen slot) at the start of each
+		// ComputeShadowDepthTextures, before any of its depth maps render.
+		using view_listener_fn_t = void ( * )( void* context, const void* view );
+		void set_view_listener( view_listener_fn_t listener, void* context ) noexcept {
+			m_view_context = context;
+			m_view_listener.store( listener, std::memory_order_release );
+		}
+
 		bool stable_depth_order_available( ) const noexcept {
 			return m_depth_capacity_offset > 0;
 		}
@@ -99,26 +107,28 @@ namespace p2boost {
 
 		static ProjectedShadowCache* m_instance;
 
-		VmtHook                       m_update_projected;
-		CallSitePatch                 m_build_active_depth;
-		VmtHook                       m_frame_stage;
-		VmtHook                       m_change_instance;
-		VmtHook                       m_destroy_shadow;
-		FrameMetrics*                 m_metrics{ };
-		std::vector< cached_state_t > m_states;
-		std::mutex                    m_state_mutex;
-		std::uint64_t                 m_generation{ };
-		std::uint64_t                 m_epoch{ };
-		int**                         m_flashlight_models_cvar_parent{ };
-		remove_dirty_fn_t             m_remove_dirty{ };
-		build_active_depth_fn_t       m_original_build_active_depth{ };
-		sdk::IShadowMgr**             m_shadow_manager_parent{ };
-		std::atomic_bool              m_enabled{ };
-		std::atomic_bool              m_exact_cull{ };
-		std::atomic_bool              m_stable_depth_order{ };
-		std::ptrdiff_t                m_depth_capacity_offset{ };
-		std::atomic_uint              m_hits{ };
-		std::atomic_uint              m_depth_culls{ };
+		VmtHook                           m_update_projected;
+		CallSitePatch                     m_build_active_depth;
+		VmtHook                           m_frame_stage;
+		VmtHook                           m_change_instance;
+		VmtHook                           m_destroy_shadow;
+		FrameMetrics*                     m_metrics{ };
+		std::vector< cached_state_t >     m_states;
+		std::mutex                        m_state_mutex;
+		std::uint64_t                     m_generation{ };
+		std::uint64_t                     m_epoch{ };
+		int**                             m_flashlight_models_cvar_parent{ };
+		remove_dirty_fn_t                 m_remove_dirty{ };
+		build_active_depth_fn_t           m_original_build_active_depth{ };
+		sdk::IShadowMgr**                 m_shadow_manager_parent{ };
+		std::atomic_bool                  m_enabled{ };
+		std::atomic_bool                  m_exact_cull{ };
+		std::atomic_bool                  m_stable_depth_order{ };
+		std::atomic< view_listener_fn_t > m_view_listener{ };
+		void*                             m_view_context{ };
+		std::ptrdiff_t                    m_depth_capacity_offset{ };
+		std::atomic_uint                  m_hits{ };
+		std::atomic_uint                  m_depth_culls{ };
 	};
 
 }

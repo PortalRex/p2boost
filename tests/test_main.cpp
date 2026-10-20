@@ -474,7 +474,17 @@ namespace {
 		p2boost::frustum::frustum_t distant = camera;
 		for( p2boost::vec3_t& corner : distant )
 			corner = corner + p2boost::vec3_t{ 1000.0f, 0.0f, 0.0f };
-		return !p2boost::frustum::frusta_intersect( camera, distant );
+		if( p2boost::frustum::frusta_intersect( camera, distant ) )
+			return false;
+
+		// the camera looks down +x: a box ahead is inside, one behind or far to
+		// the side is not.
+		const auto box = []( float x0, float y0, float x1, float y1 ) {
+			return p2boost::frustum::box( { x0, y0, -1.0f }, { x1, y1, 1.0f } );
+		};
+		return p2boost::frustum::frusta_intersect( camera, box( 4.0f, -1.0f, 6.0f, 1.0f ) ) &&
+		       !p2boost::frustum::frusta_intersect( camera, box( -6.0f, -1.0f, -4.0f, 1.0f ) ) &&
+		       !p2boost::frustum::frusta_intersect( camera, box( 4.0f, 40.0f, 6.0f, 42.0f ) );
 	}
 
 	// reference tier1 CUtlLinkedList and CMaterialsBuckets behavior, transcribed
