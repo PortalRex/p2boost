@@ -37,6 +37,7 @@ New-Item -ItemType Directory -Force (Join-Path $stage 'bin') | Out-Null
 Copy-Item -LiteralPath (Join-Path $BuildDirectory 'p2boost.dll') -Destination $stage -Force
 Copy-Item -LiteralPath (Join-Path $repo 'README.md') -Destination $stage -Force
 Copy-Item -LiteralPath (Join-Path $repo 'THIRD_PARTY_NOTICES.md') -Destination $stage -Force
+Copy-Item -LiteralPath (Join-Path $repo 'LICENSE') -Destination (Join-Path $stage 'LICENSE.txt') -Force
 
 $archive = Join-Path $temporary "dxvk-$DxvkVersion.tar.gz"
 $uri = "https://github.com/doitsujin/dxvk/releases/download/v$DxvkVersion/dxvk-$DxvkVersion.tar.gz"
@@ -73,4 +74,4 @@ Compress-Archive -LiteralPath $stageItems -DestinationPath $Output -Force
 $hash = (Get-FileHash -LiteralPath $Output -Algorithm SHA256).Hash.ToLowerInvariant()
 "$hash  $(Split-Path -Leaf $Output)" | Set-Content -LiteralPath "$Output.sha256" -Encoding ascii
 Write-Host "Packaged $Output"
-Write-Host "Layout: p2boost.dll, bin\dxvk_d3d9.dll, README.md, THIRD_PARTY_NOTICES.md, LICENSE.dxvk.txt"
+Write-Host "Layout: p2boost.dll, bin\dxvk_d3d9.dll, README.md, LICENSE.txt, THIRD_PARTY_NOTICES.md, LICENSE.dxvk.txt"
