@@ -84,9 +84,8 @@ namespace p2boost {
 		const Address          ctor        = module.find( game->materials_queued_context_ctor );
 		const Address          lock_data   = module.find( game->materials_lock_render_data );
 		const Address          stack_init  = module.find( game->materials_memory_stack_init );
-		const Address          stack_free  = module.find( game->materials_memory_stack_free_all );
 		const Address          stack_term  = module.find( game->materials_memory_stack_term );
-		if( !end_frame || !begin_frame || !ctor || !lock_data || !stack_init || !stack_free || !stack_term )
+		if( !end_frame || !begin_frame || !ctor || !lock_data || !stack_init || !stack_term )
 			return false;
 
 		const Address render_data_index  = lock_data.add( lock_render_data_index ).at< Address >( );
@@ -145,7 +144,6 @@ namespace p2boost {
 		m_render_data_index  = render_data_index.as< int* >( );
 		m_render_data_stacks = render_data_stacks.as< std::uint8_t* >( );
 		m_stack_init         = stack_init.as< stack_init_fn_t >( );
-		m_stack_free_all     = stack_free.as< stack_free_fn_t >( );
 		m_stack_term         = stack_term.as< stack_term_fn_t >( );
 		m_materials          = materials;
 

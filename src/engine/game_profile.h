@@ -161,9 +161,8 @@ namespace p2boost::game {
 		// CMatRenderContextBase::LockRenderData: names the render-data stack
 		// index and the two static CMemoryStacks the engine flips each frame.
 		const char* materials_lock_render_data{ "55 8B EC 51 A1 ? ? ? ? 53 56 8D 34 80 8B 04 F5 ? ? ? ? 89 4D FC 8B 4D 08 8D 34 F5 ? ? ? ? 3B C8 0F 46 C8" };
-		// CMemoryStack::Init, FreeAll and Term, for the ring's third stack.
+		// CMemoryStack::Init and Term, for the ring's third stack.
 		const char* materials_memory_stack_init{ "55 8B EC 8B 45 0C 83 EC 24 53 56 8B F1 8B 4D 18 83 C1 03 57 8B 7D 08 83 E1 FC C6 46 11 00 89 46 18 89 4E 1C" };
-		const char* materials_memory_stack_free_all{ "55 8B EC 8B 51 0C 85 D2 74 ? 3B 51 04 73 ? 56 8B 71 1C 4E 8B C6 F7 D0 23 C6 03 C2 3B C2" };
 		const char* materials_memory_stack_term{ "53 56 8B F1 8B 4E 0C 33 DB 3B CB 74 ? 3B 4E 04 73 ? 8B 56 1C 4A 8B C2 F7 D0 23 C2 03 C1 3B C1 72 ? 3B 06 77 ? 89 06 38 5E 11" };
 		// CMaterialSystem::BeginFrame: flips the render-data stacks (1 - index).
 		const char* materials_begin_frame{ "55 8B EC 83 EC 0C 57 8B F9 FF 15 ? ? ? ? 84 C0 0F 84 ? ? ? ? 8B 07 8B 90 00 02 00 00 8B CF FF D2 84 C0 0F 85" };

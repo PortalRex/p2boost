@@ -72,7 +72,6 @@ namespace p2boost {
 		using context_shut_fn_t   = void( __fastcall* )( void* );
 		using context_ctor_fn_t   = void*(__fastcall*)( void* );
 		using stack_init_fn_t     = bool( __thiscall* )( void*, const char*, int, int, int, int );
-		using stack_free_fn_t     = void( __thiscall* )( void*, bool );
 		using stack_term_fn_t     = void( __thiscall* )( void* );
 		using allocate_fn_t       = void*(__cdecl*)( std::size_t );
 		using job_construct_fn_t  = void*(__thiscall*)( void*, void*, const char* );
@@ -128,7 +127,6 @@ namespace p2boost {
 		int*            m_render_data_index{ };
 		std::uint8_t*   m_render_data_stacks{ };
 		stack_init_fn_t m_stack_init{ };
-		stack_free_fn_t m_stack_free_all{ };
 		stack_term_fn_t m_stack_term{ };
 		bool            m_third_stack{ };
 		// the stack the frame after the next BeginFrame records into, or -1
