@@ -1,11 +1,20 @@
-"""Compare vtable slots of RTTI-named classes between two builds of a module."""
+"""Compare vtable slots of RTTI-named classes between two builds of a module.
+
+Usage: python compare_vtables.py <a.dll> <b.dll> <Class>:<slot>,<slot> [...]
+
+Finds each class's primary vtable through its RTTI name and compares the
+functions in the given slots with addresses and stack offsets masked. A
+differing slot is either the same method compiled differently or a shifted
+table; read both bodies to tell which.
+"""
+
 import re
 import struct
 import sys
 
-sys.path.insert(0, r"E:\p2boost\research\tools")
-from disasm import offset_to_va, va_to_offset
 import capstone
+
+from disasm import offset_to_va, va_to_offset
 
 ADDRESS = re.compile(r"0x[0-9a-f]{6,8}")
 STACK = re.compile(r"(ebp|esp) - 0x[0-9a-f]+")
