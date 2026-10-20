@@ -528,7 +528,13 @@ These do not change performance and do not follow `p2boost_enable`.
   stopping it writes `p2boost_metrics.csv`).** Frames are timed at the verified `CEngine::Frame`
   completion, not the 60 Hz `GameFrame` callback. The overlay is drawn in each
   local client's final VGUI paint, which also works for Orange on a remote
-  co-op connection.
+  co-op connection. Colors and the graph grade frames against a target
+  (`src/features/frame_target.h`): `fps_max`, lowered to the refresh rate
+  when `mat_vsync` is on, or the refresh rate of the game's monitor when
+  `fps_max` is 0 (60 Hz if Windows does not report one). Red means a frame
+  of at least two target frames in the last second; yellow means the average
+  fell more than 5% short or the 99th percentile more than a quarter frame.
+  Graph glyphs `. - = ^ !` mark a quarter, half, one, and two target frames.
 - **Demo provenance.** When a demo starts recording, p2boost issues one
   ordinary `echo` with its version, renderer, master-switch state, and
   flat-texture state, so a playback shows whether p2boost was loaded. No

@@ -27,6 +27,19 @@ namespace p2boost {
 		return search.m_window;
 	}
 
+	int display_refresh_rate( ) noexcept {
+		MONITORINFOEXW monitor{ };
+		monitor.cbSize = sizeof( monitor );
+		DEVMODEW mode{ };
+		mode.dmSize = sizeof( mode );
+		if( !GetMonitorInfoW( MonitorFromWindow( game_window( ), MONITOR_DEFAULTTOPRIMARY ), &monitor ) ||
+		    !EnumDisplaySettingsW( monitor.szDevice, ENUM_CURRENT_SETTINGS, &mode ) )
+			return 0;
+
+		// 0 and 1 both mean the hardware's default rate.
+		return mode.dmDisplayFrequency > 1 ? static_cast< int >( mode.dmDisplayFrequency ) : 0;
+	}
+
 	bool game_is_foreground( ) noexcept {
 		DWORD foreground_process{ };
 		GetWindowThreadProcessId( GetForegroundWindow( ), &foreground_process );

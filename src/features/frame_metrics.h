@@ -20,7 +20,7 @@ namespace p2boost {
 		double                               m_max_ms{ };
 		double                               m_shadow_ms{ };
 		double                               m_present_ms{ };
-		unsigned int                         m_hitch_count{ };
+		unsigned int                         m_dropped_frames{ };
 		unsigned int                         m_shadow_updates{ };
 		unsigned int                         m_shadow_hits{ };
 		std::array< double, graph_capacity > m_graph_ms{ };
@@ -65,7 +65,9 @@ namespace p2boost {
 		void record_shadow_update( double milliseconds, bool cache_hit ) noexcept;
 		void record_present( double milliseconds ) noexcept;
 
-		overlay_metrics_t overlay_metrics( ) const noexcept;
+		// the last second of frames; m_dropped_frames counts those of at least
+		// dropped_ms.
+		overlay_metrics_t overlay_metrics( double dropped_ms ) const noexcept;
 		bool              dump( const std::string& path ) const;
 		size_t            count( ) const noexcept;
 

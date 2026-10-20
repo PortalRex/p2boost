@@ -86,7 +86,7 @@ namespace p2boost {
 		m_pending_present_ms += milliseconds;
 	}
 
-	overlay_metrics_t FrameMetrics::overlay_metrics( ) const noexcept {
+	overlay_metrics_t FrameMetrics::overlay_metrics( double dropped_ms ) const noexcept {
 		overlay_metrics_t       result;
 		std::vector< sample_t > samples;
 
@@ -121,8 +121,8 @@ namespace p2boost {
 			result.m_present_ms += sample.m_present_ms;
 			result.m_shadow_updates += sample.m_shadow_updates;
 			result.m_shadow_hits += sample.m_shadow_hits;
-			if( sample.m_frame_ms >= 8.3 )
-				++result.m_hitch_count;
+			if( sample.m_frame_ms >= dropped_ms )
+				++result.m_dropped_frames;
 		}
 
 		const sample_t& latest = samples.back( );

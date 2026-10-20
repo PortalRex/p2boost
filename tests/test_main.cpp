@@ -5,6 +5,7 @@
 #include "flat_textures.h"
 #include "frame_limiter.h"
 #include "frame_metrics.h"
+#include "frame_target.h"
 #include "functor.h"
 #include "game_profile.h"
 #include "hook.h"
@@ -200,9 +201,37 @@ namespace {
 		metrics->record_shadow_update( 0.1, true );
 		metrics->record_frame( );
 
-		const p2boost::overlay_metrics_t result = metrics->overlay_metrics( );
+		const p2boost::overlay_metrics_t result = metrics->overlay_metrics( 1000.0 );
 		return result.m_average_ms > 0.0 && result.m_shadow_updates == 1 && result.m_shadow_hits == 1 && result.m_graph_count == 1 &&
-		       std::isfinite( result.m_p99_ms );
+		       result.m_dropped_frames == 0 && std::isfinite( result.m_p99_ms ) &&
+		       metrics->overlay_metrics( 0.0 ).m_dropped_frames == 1;
+	}
+
+	bool test_frame_target( ) {
+		using p2boost::frame_grade_t;
+		using p2boost::frame_target;
+
+		// fps_max caps unless vsync caps lower; uncapped falls back to the display.
+		const auto capped   = frame_target( 120.0, false, 144.0 );
+		const auto vsynced  = frame_target( 300.0, true, 144.0 );
+		const auto uncapped = frame_target( 0.0, false, 165.0 );
+		const auto unknown  = frame_target( 0.0, false, 0.0 );
+		const auto under_vs = frame_target( 60.0, true, 144.0 );
+		if( capped.m_fps != 120.0 || std::strcmp( capped.m_source, "fps_max" ) != 0 || vsynced.m_fps != 144.0 ||
+		    std::strcmp( vsynced.m_source, "vsync" ) != 0 || uncapped.m_fps != 165.0 || std::strcmp( uncapped.m_source, "display" ) != 0 ||
+		    unknown.m_fps != p2boost::fallback_refresh_rate || under_vs.m_fps != 60.0 )
+			return false;
+
+		// 120 FPS: 8.33 ms frames, a dropped frame is 16.7 ms or longer.
+		const double frame = capped.frame_ms( );
+		return std::abs( capped.dropped_ms( ) - 2.0 * frame ) < 1e-9 &&
+		       p2boost::grade_frames( frame, frame * 1.2, 0, capped ) == frame_grade_t::good &&
+		       p2boost::grade_frames( frame * 1.1, frame, 0, capped ) == frame_grade_t::warning &&
+		       p2boost::grade_frames( frame, frame * 1.3, 0, capped ) == frame_grade_t::warning &&
+		       p2boost::grade_frames( frame, frame, 1, capped ) == frame_grade_t::bad &&
+		       p2boost::graph_character( frame * 0.2, capped ) == '.' && p2boost::graph_character( frame * 0.3, capped ) == '-' &&
+		       p2boost::graph_character( frame * 0.6, capped ) == '=' && p2boost::graph_character( frame, capped ) == '^' &&
+		       p2boost::graph_character( frame * 2.0, capped ) == '!';
 	}
 
 	bool test_frame_phase_carry( ) {
@@ -825,6 +854,7 @@ int main( ) {
 	    { "overlay_abi", test_overlay_abi_contract },
 	    { "metrics", test_metrics },
 	    { "overlay", test_overlay_metrics },
+	    { "frame_target", test_frame_target },
 	    { "phase", test_frame_phase_carry },
 	    { "qpc", test_qpc },
 	    { "flat_alpha", test_flat_texture_alpha },

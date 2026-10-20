@@ -19,25 +19,29 @@ namespace p2boost {
 		constexpr int           panel_margin{ 12 };
 		constexpr unsigned long fps_font{ 20 };
 
-		// encode graph samples without depending on a custom font or texture.
-		char graph_character( double milliseconds ) noexcept {
-			if( milliseconds >= 8.3 )
-				return '!';
-			if( milliseconds >= 4.0 )
-				return '^';
-			if( milliseconds >= 2.0 )
-				return '=';
-			if( milliseconds >= 1.0 )
-				return '-';
-			return '.';
+		constexpr color_t white{ 255, 255, 255, 255 };
+		constexpr color_t neutral{ 200, 220, 242, 255 };
+		constexpr color_t good{ 115, 242, 158, 255 };
+		constexpr color_t warning{ 255, 191, 64, 255 };
+		constexpr color_t bad{ 255, 77, 64, 255 };
+
+		const color_t& grade_color( frame_grade_t grade, const color_t& good_color ) noexcept {
+			switch( grade ) {
+			case frame_grade_t::bad:
+				return bad;
+			case frame_grade_t::warning:
+				return warning;
+			default:
+				return good_color;
+			}
 		}
 
 	}
 
 	ProfilerOverlay* ProfilerOverlay::m_instance{ };
 
-	bool ProfilerOverlay::connect(
-	    const portal2_modules_t& modules, const Portal2Interfaces& interfaces, FrameMetrics* metrics ) noexcept {
+	bool ProfilerOverlay::connect( const portal2_modules_t& modules, const Portal2Interfaces& interfaces, const ConsoleCommandRegistry& commands,
+	                               FrameMetrics* metrics ) noexcept {
 		auto* engine_client  = interfaces.engine_client( );
 		auto* engine_vgui    = interfaces.engine_vgui( );
 		auto* scheme_manager = interfaces.scheme_manager( );
@@ -104,6 +108,8 @@ namespace p2boost {
 		m_line_height    = std::max( m_surface->GetFontTall( m_panel_font ) + 2, 12 );
 		m_metrics        = metrics;
 		m_engine_client  = engine_client;
+		m_fps_max        = commands.find_variable( "fps_max" );
+		m_vsync          = commands.find_variable( "mat_vsync" );
 		m_instance       = this;
 
 		if( m_engine_vgui_paint.install( engine_vgui->PaintSlot( ), reinterpret_cast< void* >( &EngineVGuiPaint ) ) )
@@ -127,6 +133,8 @@ namespace p2boost {
 		m_surface        = nullptr;
 		m_engine_client  = nullptr;
 		m_metrics        = nullptr;
+		m_fps_max        = nullptr;
+		m_vsync          = nullptr;
 		m_start_drawing  = nullptr;
 		m_finish_drawing = nullptr;
 		m_sample         = { };
@@ -177,7 +185,10 @@ namespace p2boost {
 			m_next_update = now + Qpc::ticks( 250.0 );
 			m_metrics->set_coop( m_engine_client && m_engine_client->GetMaxClients( ) > 1 );
 			m_metrics->set_focused( game_is_foreground( ) );
-			m_sample      = m_metrics->overlay_metrics( );
+			m_target = frame_target( m_fps_max ? m_fps_max->value_float( ) : 0.0,
+			                         m_vsync && m_vsync->value_integer( ) != 0,
+			                         display_refresh_rate( ) );
+			m_sample      = m_metrics->overlay_metrics( m_target.dropped_ms( ) );
 			m_have_sample = true;
 		}
 
@@ -189,9 +200,9 @@ namespace p2boost {
 
 		m_start_drawing( m_surface );
 		if( m_mode == profiler_mode_t::fps )
-			draw_fps( screen_width, m_sample );
+			draw_fps( screen_width );
 		else
-			draw_panel( screen_width, m_sample, m_fixes_enabled, static_cast< bool >( Module{ L"sar.dll" } ) );
+			draw_panel( screen_width, static_cast< bool >( Module{ L"sar.dll" } ) );
 		m_finish_drawing( );
 	}
 
@@ -220,20 +231,15 @@ namespace p2boost {
 		return width;
 	}
 
-	void ProfilerOverlay::draw_panel(
-	    int screen_width, const overlay_metrics_t& sample, bool fixes_enabled, bool sar_loaded ) noexcept {
-		static constexpr color_t neutral{ 200, 220, 242, 255 };
-		static constexpr color_t good{ 115, 242, 158, 255 };
-		static constexpr color_t warning{ 255, 191, 64, 255 };
-		static constexpr color_t bad{ 255, 77, 64, 255 };
-
-		char         line[ 192 ]{ };
-		const double fps = sample.m_average_ms > 0.0 ? 1000.0 / sample.m_average_ms : 0.0;
+	void ProfilerOverlay::draw_panel( int screen_width, bool sar_loaded ) noexcept {
+		const overlay_metrics_t& sample = m_sample;
+		char                     line[ 192 ]{ };
+		const double             fps = sample.m_average_ms > 0.0 ? 1000.0 / sample.m_average_ms : 0.0;
 		std::snprintf( line,
 		               sizeof( line ),
 		               "P2BOOST / VULKAN  %s  |  %s  |  SAR %s",
 		               sample.m_coop ? "CO-OP" : "SINGLE PLAYER",
-		               fixes_enabled ? "FIXES ON" : "A/B OFF",
+		               m_fixes_enabled ? "FIXES ON" : "A/B OFF",
 		               sar_loaded ? "ON" : "OFF" );
 		draw_line( screen_width, m_panel_font, 0, neutral, line );
 
@@ -245,40 +251,41 @@ namespace p2boost {
 		               sample.m_present_ms,
 		               sample.m_p95_ms,
 		               sample.m_p99_ms );
-		const auto& timing_color = sample.m_hitch_count > 0 ? bad : sample.m_p99_ms >= 4.0 ? warning
-		                                                                                   : good;
+		const frame_grade_t grade        = grade_frames( sample.m_average_ms, sample.m_p99_ms, sample.m_dropped_frames, m_target );
+		const color_t&      timing_color = grade_color( grade, good );
 		draw_line( screen_width, m_panel_font, 1, timing_color, line );
 
 		std::array< char, overlay_metrics_t::graph_capacity + 3 > graph{ };
 		graph[ 0 ] = '[';
 		for( size_t index = 0; index < sample.m_graph_count; ++index )
-			graph[ index + 1 ] = graph_character( sample.m_graph_ms[ index ] );
+			graph[ index + 1 ] = graph_character( sample.m_graph_ms[ index ], m_target );
 		graph[ sample.m_graph_count + 1 ] = ']';
 		draw_line( screen_width, m_panel_font, 2, timing_color, graph.data( ) );
 
 		std::snprintf( line,
 		               sizeof( line ),
-		               "LAST 1S  |  HITCHES >=8.3 ms: %u  |  SHADOW CACHE %u/%u  |  %s",
-		               sample.m_hitch_count,
+		               "LAST 1S  |  TARGET %.0f FPS (%s)  |  DROPPED >=%.1f ms: %u  |  SHADOW CACHE %u/%u  |  %s",
+		               m_target.m_fps,
+		               m_target.m_source,
+		               m_target.dropped_ms( ),
+		               sample.m_dropped_frames,
 		               sample.m_shadow_hits,
 		               sample.m_shadow_updates,
 		               sample.m_focused ? "FOCUSED" : "UNFOCUSED" );
-		draw_line( screen_width, m_panel_font, 3, sample.m_hitch_count > 0 ? bad : neutral, line );
+		draw_line( screen_width, m_panel_font, 3, sample.m_dropped_frames > 0 ? bad : neutral, line );
 	}
 
-	void ProfilerOverlay::draw_fps( int screen_width, const overlay_metrics_t& sample ) noexcept {
-		static constexpr color_t normal{ 255, 255, 255, 255 };
-		static constexpr color_t hitch{ 255, 77, 64, 255 };
-
-		const double fps = sample.m_average_ms > 0.0 ? 1000.0 / sample.m_average_ms : 0.0;
-		char         text[ 32 ]{ };
+	void ProfilerOverlay::draw_fps( int screen_width ) noexcept {
+		const overlay_metrics_t& sample = m_sample;
+		const double             fps    = sample.m_average_ms > 0.0 ? 1000.0 / sample.m_average_ms : 0.0;
+		char                     text[ 32 ]{ };
 		std::snprintf( text, sizeof( text ), "%.0ffps", fps );
 
-		// red means exactly one thing: the rolling one-second window contains a
-		// frame at or above the profiler's 8.3 ms hitch threshold.
-		const color_t color = sample.m_hitch_count > 0 ? hitch : normal;
-		const int     width = text_width( fps_font, text );
-		const int     x     = std::max( panel_margin, screen_width - panel_margin - width );
+		// white on target, yellow short of it, red when the last second dropped
+		// a frame (see grade_frames).
+		const color_t& color = grade_color( grade_frames( sample.m_average_ms, sample.m_p99_ms, sample.m_dropped_frames, m_target ), white );
+		const int      width = text_width( fps_font, text );
+		const int      x     = std::max( panel_margin, screen_width - panel_margin - width );
 		m_surface->DrawColoredText(
 		    fps_font, x, 0, color.red, color.green, color.blue, color.alpha, text );
 	}

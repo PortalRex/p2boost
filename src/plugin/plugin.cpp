@@ -68,7 +68,7 @@ namespace p2boost {
 		             m_commands.remove_flags( "r_drawparticles", cvar_flag_cheat ),
 		         "cvars unavailable" );
 
-		require( m_overlay.connect( m_modules, m_interfaces, &m_metrics ), "profiler client-paint interface unavailable" );
+		require( m_overlay.connect( m_modules, m_interfaces, m_commands, &m_metrics ), "profiler client-paint interface unavailable" );
 		require( m_demo_provenance.connect( m_modules, m_interfaces.engine_client( ) ), "demo command-buffer xref unavailable" );
 		require( m_frame_limiter.install( m_modules, &m_metrics ), "frame-limiter signature mismatch" );
 		require( m_shadow_cache.install( m_modules, m_interfaces, &m_metrics ), "projected-shadow signature mismatch" );

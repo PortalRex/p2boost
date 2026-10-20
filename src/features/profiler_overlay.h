@@ -1,7 +1,9 @@
 #pragma once
 
 #include "color.h"
+#include "console_commands.h"
 #include "frame_metrics.h"
+#include "frame_target.h"
 #include "hook.h"
 #include "interfaces.h"
 #include "portal2_context.h"
@@ -20,7 +22,8 @@ namespace p2boost {
 	// draw a low-frequency summary directly in the final VGUI surface pass.
 	class ProfilerOverlay {
 	public:
-		bool connect( const portal2_modules_t& modules, const Portal2Interfaces& interfaces, FrameMetrics* metrics ) noexcept;
+		bool connect( const portal2_modules_t& modules, const Portal2Interfaces& interfaces, const ConsoleCommandRegistry& commands,
+		              FrameMetrics* metrics ) noexcept;
 		void disconnect( ) noexcept;
 		void set_mode( profiler_mode_t mode, FrameMetrics& metrics ) noexcept;
 		void set_fixes_enabled( bool enabled ) noexcept;
@@ -43,8 +46,8 @@ namespace p2boost {
 		using finish_drawing_fn_t    = int( __cdecl* )( );
 		static int __fastcall EngineVGuiPaint( void* self, void*, int mode );
 		void draw( ) noexcept;
-		void draw_panel( int screen_width, const overlay_metrics_t& sample, bool fixes_enabled, bool sar_loaded ) noexcept;
-		void draw_fps( int screen_width, const overlay_metrics_t& sample ) noexcept;
+		void draw_panel( int screen_width, bool sar_loaded ) noexcept;
+		void draw_fps( int screen_width ) noexcept;
 		void draw_line( int screen_width, unsigned long font, int line, const color_t& color, const char* text ) noexcept;
 		int  text_width( unsigned long font, const char* text ) const noexcept;
 
@@ -56,6 +59,9 @@ namespace p2boost {
 		VmtHook              m_engine_vgui_paint;
 		start_drawing_fn_t   m_start_drawing{ };
 		finish_drawing_fn_t  m_finish_drawing{ };
+		const con_var_t*     m_fps_max{ };
+		const con_var_t*     m_vsync{ };
+		frame_target_t       m_target{ fallback_refresh_rate, "display" };
 		overlay_metrics_t    m_sample{ };
 		Qpc::tick_t          m_next_update{ };
 		unsigned long        m_panel_font{ };
