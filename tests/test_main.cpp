@@ -71,8 +71,13 @@ namespace {
 			return false;
 		std::int32_t displacement = 0;
 		std::memcpy( &displacement, encoded.data( ) + 1, sizeof( displacement ) );
-		std::memcpy( instruction + 1, &displacement, sizeof( displacement ) );
-		return displacement == 0x100 && call.rel32( 1 ).as< std::uintptr_t >( ) == call.add( 0x105 ).as< std::uintptr_t >( );
+		std::memcpy( instruction, encoded.data( ), encoded.size( ) );
+		if( displacement != 0x100 || call.call_target( ) != call.add( 0x105 ) )
+			return false;
+
+		// any other instruction at the site yields no target.
+		instruction[ 0 ] = 0xe9;
+		return !call.call_target( );
 	}
 
 	bool test_pattern_scanner( ) {

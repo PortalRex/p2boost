@@ -58,10 +58,7 @@ namespace p2boost {
 		// method 24 is CClientShadowMgr::UpdateProjectedTexture. its second direct
 		// call removes the handle from both dirty trees and must never be skipped.
 		const Address update_projected{ *update_projected_slot };
-		const Address remove_dirty_call = update_projected.add( game::active( )->shadow_remove_dirty_call );
-		if( remove_dirty_call.at< std::uint8_t >( ) != 0xe8 )
-			return false;
-		m_remove_dirty = remove_dirty_call.rel32( 1 ).as< remove_dirty_fn_t >( );
+		m_remove_dirty = update_projected.add( game::active( )->shadow_remove_dirty_call ).call_target( ).as< remove_dirty_fn_t >( );
 
 		// the private ConVar value controls model receiver projection even when
 		// the shadow entry is unchanged, so it remains part of the cache key.
@@ -73,9 +70,8 @@ namespace p2boost {
 		// priority, and maximum-shadow rule before applying exact frustum culling.
 		const Address active_call_xref = modules.m_client.find( game::active( )->active_shadow_depth_call );
 		const Address active_call      = active_call_xref.add( game::active( )->xref_active_shadow_depth_call );
-		const Address active_target    = active_call.rel32( 1 );
 		const Address expected_target  = modules.m_client.find( game::active( )->active_shadow_depth_list );
-		if( active_call.at< std::uint8_t >( ) != 0xe8 || active_target != expected_target )
+		if( !expected_target || active_call.call_target( ) != expected_target )
 			return false;
 
 		const Address shadow_manager_xref = modules.m_client.find( game::active( )->active_shadow_manager );
@@ -91,7 +87,7 @@ namespace p2boost {
 		if( m_depth_capacity_offset <= 0 || m_depth_capacity_offset > 0x1000 )
 			m_depth_capacity_offset = 0;
 
-		m_original_build_active_depth = active_target.as< build_active_depth_fn_t >( );
+		m_original_build_active_depth = expected_target.as< build_active_depth_fn_t >( );
 		std::vector< std::uint8_t > active_call_bytes( 5 );
 		std::memcpy( active_call_bytes.data( ), active_call.as< const void* >( ), active_call_bytes.size( ) );
 

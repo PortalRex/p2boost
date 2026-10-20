@@ -33,7 +33,7 @@ namespace p2boost {
 		// the only call to ExtractOccludedRenderables, inside BuildRenderablesList.
 		const Address site   = modules.m_client.find( game->occluded_renderables_call );
 		const Address call   = site.add( game->xref_occluded_renderables_call );
-		const Address target = call.rel32( 1 );
+		const Address target = call.call_target( );
 		if( !site || !modules.m_client.matches( target, game->occluded_renderables ) )
 			return false;
 

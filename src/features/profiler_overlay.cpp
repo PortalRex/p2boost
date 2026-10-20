@@ -4,6 +4,7 @@
 #include "game_profile.h"
 #include "game_window.h"
 #include "module.h"
+#include "surface_drawing.h"
 
 #include <Windows.h>
 
@@ -59,26 +60,15 @@ namespace p2boost {
 
 		// SAR renders its HUD after CEngineVGui::Paint, using these exact surface
 		// helpers to open and close a direct 2D draw section.
-		const Address paint_traverse{ m_surface->PaintTraverseExAddress( ) };
-		const Address draw_colored_text{ m_surface->DrawColoredTextAddress( ) };
-		const Address get_kerned_char_width{ m_surface->GetKernedCharWidthAddress( ) };
-		const Address get_font_tall{ m_surface->GetFontTallAddress( ) };
-		const Address start_operand  = paint_traverse.add( game::active( )->surface_start_drawing_operand );
-		const Address finish_operand = paint_traverse.add( game::active( )->surface_finish_drawing_operand );
-		if( !modules.m_surface.matches( paint_traverse, game::active( )->overlay_surface_paint_traverse ) ||
+		const Address           paint_traverse{ m_surface->PaintTraverseExAddress( ) };
+		const Address           draw_colored_text{ m_surface->DrawColoredTextAddress( ) };
+		const Address           get_kerned_char_width{ m_surface->GetKernedCharWidthAddress( ) };
+		const Address           get_font_tall{ m_surface->GetFontTallAddress( ) };
+		const surface_drawing_t drawing = find_surface_drawing( modules.m_surface, paint_traverse );
+		if( !drawing.m_start ||
 		    !modules.m_surface.matches( draw_colored_text, game::active( )->overlay_surface_draw_colored_text ) ||
 		    !modules.m_surface.contains( get_kerned_char_width ) ||
-		    !modules.m_surface.matches( get_font_tall, game::active( )->overlay_surface_get_font_tall ) ||
-		    start_operand.sub( 1 ).at< std::uint8_t >( ) != 0xe8 ||
-		    finish_operand.sub( 1 ).at< std::uint8_t >( ) != 0xe8 ) {
-			m_surface = nullptr;
-			return false;
-		}
-
-		const Address start_drawing  = start_operand.rel32( );
-		const Address finish_drawing = finish_operand.rel32( );
-		if( !modules.m_surface.matches( start_drawing, game::active( )->overlay_surface_start_drawing ) ||
-		    !modules.m_surface.matches( finish_drawing, game::active( )->overlay_surface_finish_drawing ) ) {
+		    !modules.m_surface.matches( get_font_tall, game::active( )->overlay_surface_get_font_tall ) ) {
 			m_surface = nullptr;
 			return false;
 		}
@@ -109,8 +99,8 @@ namespace p2boost {
 			return false;
 		}
 
-		m_start_drawing  = start_drawing.as< start_drawing_fn_t >( );
-		m_finish_drawing = finish_drawing.as< finish_drawing_fn_t >( );
+		m_start_drawing  = drawing.m_start.as< start_drawing_fn_t >( );
+		m_finish_drawing = drawing.m_finish.as< finish_drawing_fn_t >( );
 		m_line_height    = std::max( m_surface->GetFontTall( m_panel_font ) + 2, 12 );
 		m_metrics        = metrics;
 		m_engine_client  = engine_client;

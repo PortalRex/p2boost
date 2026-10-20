@@ -96,6 +96,13 @@ namespace p2boost {
 			Address displacement{ add( offset ) };
 			return displacement.add( sizeof( std::int32_t ) ).add( displacement.at< std::int32_t >( ) );
 		}
+
+		// the target of the direct call (E8 rel32) at this address, or null when
+		// the instruction here is anything else. failing closed keeps a changed
+		// game build from sending a hook through an unrelated displacement.
+		__forceinline Address call_target( ) const noexcept {
+			return at< std::uint8_t >( ) == 0xe8 ? rel32( 1 ) : Address{ };
+		}
 	};
 
 }

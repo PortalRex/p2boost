@@ -3,6 +3,7 @@
 #include "address.h"
 #include "game_profile.h"
 #include "interfaces.h"
+#include "surface_drawing.h"
 
 #include <Windows.h>
 
@@ -42,23 +43,12 @@ namespace p2boost {
 
 		// IMatSystemSurface::DrawPanelIn3DSpace, its 3D StartDrawing, and the 2D
 		// StartDrawing/FinishDrawing pair PaintTraverseEx calls around a panel.
-		const game::profile_t* game       = game::active( );
-		const Address          draw_panel = surface->DrawPanelIn3DSpaceAddress( );
-		const Address          start_3d   = modules.m_surface.find( game->surface_start_drawing_3d );
-		const Address          traverse   = surface->PaintTraverseExAddress( );
-		if( !modules.m_surface.matches( draw_panel, game->surface_draw_panel_in_3d ) || !start_3d ||
-		    !modules.m_surface.matches( traverse, game->overlay_surface_paint_traverse ) )
-			return false;
-
-		const Address start_operand  = traverse.add( game->surface_start_drawing_operand );
-		const Address finish_operand = traverse.add( game->surface_finish_drawing_operand );
-		if( start_operand.sub( 1 ).at< std::uint8_t >( ) != 0xe8 || finish_operand.sub( 1 ).at< std::uint8_t >( ) != 0xe8 )
-			return false;
-
-		const Address start_drawing  = start_operand.rel32( );
-		const Address finish_drawing = finish_operand.rel32( );
-		if( !modules.m_surface.matches( start_drawing, game->overlay_surface_start_drawing ) ||
-		    !modules.m_surface.matches( finish_drawing, game->overlay_surface_finish_drawing ) ||
+		const game::profile_t*  game       = game::active( );
+		const Address           draw_panel = surface->DrawPanelIn3DSpaceAddress( );
+		const Address           start_3d   = modules.m_surface.find( game->surface_start_drawing_3d );
+		const Address           traverse   = surface->PaintTraverseExAddress( );
+		const surface_drawing_t drawing    = find_surface_drawing( modules.m_surface, traverse );
+		if( !modules.m_surface.matches( draw_panel, game->surface_draw_panel_in_3d ) || !start_3d || !drawing.m_start ||
 		    !modules.m_material_system.contains( materials->FindMaterialAddress( ) ) ||
 		    !modules.m_material_system.contains( materials->CreateNamedRenderTargetAddress( ) ) )
 			return false;
@@ -71,8 +61,8 @@ namespace p2boost {
 
 		m_materials      = materials;
 		m_start_3d       = start_3d.as< start_3d_fn_t >( );
-		m_start_drawing  = start_drawing.as< start_drawing_fn_t >( );
-		m_finish_drawing = finish_drawing.as< finish_drawing_fn_t >( );
+		m_start_drawing  = drawing.m_start.as< start_drawing_fn_t >( );
+		m_finish_drawing = drawing.m_finish.as< finish_drawing_fn_t >( );
 		reset_atlas( );
 		m_instance = this;
 		if( !m_draw_panel.install( surface->DrawPanelIn3DSpaceSlot( ), reinterpret_cast< void* >( &DrawPanelIn3DSpace ) ) ||

@@ -15,11 +15,7 @@ namespace p2boost {
 		// follow ClientCmd's verified rel32 instead of storing Cbuf_AddText's RVA.
 		// the opcode check fails closed if a future build changes this call site.
 		const Address client_cmd = engine_client->ClientCmdAddress( );
-		const Address operand    = client_cmd.add( game::active( )->xref_engine_client_cmd_cbuf_add_text_operand );
-		if( operand.sub( 1 ).at< unsigned char >( ) != 0xe8 )
-			return false;
-
-		const Address target = operand.sub( 1 ).rel32( 1 );
+		const Address target     = client_cmd.add( game::active( )->xref_engine_client_cmd_cbuf_add_text_operand - 1 ).call_target( );
 		if( !modules.m_engine.contains( target ) )
 			return false;
 
