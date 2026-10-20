@@ -62,7 +62,7 @@ build wraps the download it moved to slot 32.
 
 `p2boost_enable 0|1` is the global switch: every performance change follows
 it, so one command compares stock and p2boost. Each change is also an entry
-in one table in `src/core/plugin.cpp`, controlled with
+in one table in `src/plugin/plugin.h`, controlled with
 `p2boost_fix <name> <value>` and on by default. Section headings below give
 each fix's name. Display features (gamma, viewport scale, `r_intensity`, flat
 textures) are user settings and do not follow the switch.
@@ -622,17 +622,26 @@ save 1–2%.
 
 ## Source layout
 
-- `src/core`: performance changes, runtime verification, metrics, overlay,
-  and the plugin entry point.
-- `src/engine`: module and interface context, typed Source ABI wrappers,
-  engine data layouts (`tier1.h`, `material_buckets.h`, `client_shadow.h`,
-  `client_view.h`), the console bridge, and the per-game signature/offset
-  profile (`game_profile.h`).
-- `src/features`: display adjustments, remote view, demo provenance, and flat
-  textures.
-- `src/memory`: pattern scanning and chain-aware hook primitives.
-- `src/platform`: D3D9 layout, window handling, and the NVIDIA profile bridge.
-- `src/util`: timing, math, and projected-frustum helpers.
+- `src/plugin`: the plugin entry point. `plugin.h` declares the plugin and the
+  fix table, `plugin.cpp` loads, unloads, and routes engine callbacks,
+  `plugin_commands.cpp` serves the console commands. Runtime verification and
+  the updater live beside them.
+- `src/fixes`: the performance changes, one class per `p2boost_fix` entry
+  (`partner_view` serves `partner_view_fps`, `queued_frames`
+  `frame_queue_depth`).
+- `src/features`: user-facing additions that are not performance fixes:
+  display adjustments, flat textures, the profiler overlay, frame metrics, and
+  demo provenance.
+- `src/engine`: module and interface context, typed Source interfaces
+  (`interfaces/`), engine data layouts (`tier1.h`, `material_buckets.h`,
+  `material_system.h`, `client_shadow.h`, `client_view.h`), shared engine
+  helpers (`functor.h`, `view_render.h`, `surface_drawing.h`), the console
+  bridge, and the per-game signature/offset profile (`game_profile.h`).
+- `src/memory`: addresses, pattern scanning, vtable calls, and chain-aware
+  hook primitives.
+- `src/platform`: D3D9 layout and helpers (`d3d9_util.h`), window handling,
+  and the NVIDIA profile bridge.
+- `src/util`: timing (`qpc.h`), math, and projected-frustum helpers.
 - `scripts`: build, format, install, package, DXVK install/restore, the
   benchmark runner (`bench.ps1`) and its game-control helpers, and
   `bootstrap-tools.ps1`.
