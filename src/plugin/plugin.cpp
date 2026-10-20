@@ -69,7 +69,7 @@ namespace p2boost {
 		         "cvars unavailable" );
 
 		require( m_overlay.connect( m_modules, m_interfaces, m_commands, &m_metrics ), "profiler client-paint interface unavailable" );
-		require( m_demo_provenance.connect( m_modules, m_interfaces.engine_client( ) ), "demo command-buffer xref unavailable" );
+		require( m_demo_provenance.connect( m_modules, m_interfaces.engine_client( ), &m_enabled, &m_flat_textures ), "demo-recorder hooks unavailable" );
 		require( m_frame_limiter.install( m_modules, &m_metrics ), "frame-limiter signature mismatch" );
 		require( m_shadow_cache.install( m_modules, m_interfaces, &m_metrics ), "projected-shadow signature mismatch" );
 		require( m_flashlight_buckets.install( m_modules ), "flashlight-bucket signature mismatch" );
@@ -231,7 +231,6 @@ namespace p2boost {
 	}
 
 	void Plugin::LevelInit( const char* ) {
-		m_demo_provenance.reset( );
 		invalidate_render_caches( );
 		enforce_render_threading( );
 	}
@@ -245,7 +244,6 @@ namespace p2boost {
 	void Plugin::GameFrame( bool simulating ) {
 		// mirror only the state needed by diagnostics.
 		m_metrics.set_simulating( simulating );
-		m_demo_provenance.update( P2BOOST_VERSION, m_enabled, m_flat_textures.enabled( ) );
 
 		// Mel's logic_auto re-forces mat_queue_mode 0 after map spawn;
 		// re-assert multicore every frame so the override never sticks.

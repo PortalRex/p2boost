@@ -535,10 +535,17 @@ These do not change performance and do not follow `p2boost_enable`.
   yellow means the average fell below 90% of the target or a frame dropped;
   red means below 75% or more than two dropped frames. Graph glyphs
   `. - = ^ !` mark a quarter, half, one, and two target frames.
-- **Demo provenance.** When a demo starts recording, p2boost issues one
-  ordinary `echo` with its version, renderer, master-switch state, and
-  flat-texture state, so a playback shows whether p2boost was loaded. No
-  custom demo message or simulation data is added.
+- **Demo provenance.** Every demo segment gets one ordinary `echo` with
+  p2boost's version, renderer, master-switch state, and flat-texture state,
+  so a playback shows whether p2boost was loaded. It is written exactly the
+  way SAR writes its own version line: hooks on the client's `CDemoRecorder`
+  (`StartRecording`, slot 2, and `SetSignonState`, slot 3, found through
+  `ClientCmd` → `GetClientState` → `CClientState::Disconnect`'s
+  `g_pClientDemoRecorder` load) mark a new recording, or a level change while
+  recording, once the client reaches `SIGNONSTATE_FULL`; the echo is queued
+  with `Cbuf_AddText` and flushed by an empty `ExecuteClientCmd`. Because the
+  hooks run on the client, a co-op guest's demos are marked too. No custom
+  demo message or simulation data is added.
 - **NVIDIA alt-tab profile.** Some NVIDIA systems show a black screen after
   alt-tabbing the Vulkan renderer. If the adapter behind DXVK is NVIDIA,
   p2boost sets the `portal2.exe` application profile (never the global

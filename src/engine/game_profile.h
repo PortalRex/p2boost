@@ -83,6 +83,14 @@ namespace p2boost::game {
 		std::ptrdiff_t xref_active_shadow_depth_call{ 26 };
 		std::ptrdiff_t xref_active_shadow_manager_global{ 5 };
 		std::ptrdiff_t xref_engine_client_cmd_cbuf_add_text_operand{ 46 };
+		// SAR's demo-recorder lookup: ClientCmd calls GetClientState, the client
+		// state's Disconnect loads g_pClientDemoRecorder, and the recorder's
+		// StartRecording and SetSignonState slots time the demo marker.
+		std::ptrdiff_t xref_engine_client_cmd_get_client_state_operand{ 4 };
+		std::size_t    client_state_disconnect_slot{ 16 };
+		std::ptrdiff_t xref_client_state_disconnect_demo_recorder{ 87 };
+		std::size_t    demo_recorder_start_recording_slot{ 2 };
+		std::size_t    demo_recorder_set_signon_state_slot{ 3 };
 		std::ptrdiff_t xref_split_view_local_mask{ 26 };
 		std::ptrdiff_t xref_split_view_remote_players{ 46 };
 
