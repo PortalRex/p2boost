@@ -80,7 +80,7 @@ namespace p2boost {
 		using draw_model_fn_t = int( __thiscall* )( void*, int, const void* );
 
 		static void __fastcall DrawPanelIn3DSpace( void* self, void*, void* panel, const float* matrix, int pixel_width, int pixel_height, float width, float height );
-		static int __fastcall  DrawModel( void* self, void*, int flags, const void* instance );
+		static int __fastcall DrawModel( void* self, void*, int flags, const void* instance );
 
 		entry_t* find_or_allocate( const void* panel, int width, int height, int atlas_width, int atlas_height );
 		void     reset_atlas( ) noexcept;

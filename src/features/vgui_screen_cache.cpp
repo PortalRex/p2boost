@@ -21,21 +21,21 @@ namespace p2boost {
 			return reinterpret_cast< function_t >( ( *static_cast< void* const* const* >( object ) )[ slot ] );
 		}
 
-		using void_fn_t          = void( __thiscall* )( void* );
+		using void_fn_t             = void( __thiscall* )( void* );
 		using texture_download_fn_t = void( __thiscall* )( void*, void*, int );
-		using clear_color_fn_t   = void( __thiscall* )( void*, unsigned char, unsigned char, unsigned char, unsigned char );
-		using clear_buffers_fn_t = void( __thiscall* )( void*, bool, bool, bool );
-		using int_fn_t           = int( __thiscall* )( void* );
-		using panel_client_fn_t  = void*( __thiscall* )( void* );
-		using paint_traverse_fn_t = void( __thiscall* )( void*, bool, bool );
-		using solve_fn_t         = void( __thiscall* )( void*, void*, bool );
-		using depth_fn_t         = void( __thiscall* )( void*, bool, bool, bool );
-		using push_target_fn_t   = void( __thiscall* )( void*, void*, int, int, int, int );
-		using set_color_fn_t     = void( __thiscall* )( void*, int, int, int, int );
-		using set_texture_fn_t   = void( __thiscall* )( void*, int );
-		using new_texture_fn_t   = int( __thiscall* )( void*, bool );
-		using set_material_fn_t  = void( __thiscall* )( void*, int, void* );
-		using sub_rect_fn_t      = void( __thiscall* )( void*, int, int, int, int, float, float, float, float );
+		using clear_color_fn_t      = void( __thiscall* )( void*, unsigned char, unsigned char, unsigned char, unsigned char );
+		using clear_buffers_fn_t    = void( __thiscall* )( void*, bool, bool, bool );
+		using int_fn_t              = int( __thiscall* )( void* );
+		using panel_client_fn_t     = void*(__thiscall*)( void* );
+		using paint_traverse_fn_t   = void( __thiscall* )( void*, bool, bool );
+		using solve_fn_t            = void( __thiscall* )( void*, void*, bool );
+		using depth_fn_t            = void( __thiscall* )( void*, bool, bool, bool );
+		using push_target_fn_t      = void( __thiscall* )( void*, void*, int, int, int, int );
+		using set_color_fn_t        = void( __thiscall* )( void*, int, int, int, int );
+		using set_texture_fn_t      = void( __thiscall* )( void*, int );
+		using new_texture_fn_t      = int( __thiscall* )( void*, bool );
+		using set_material_fn_t     = void( __thiscall* )( void*, int, void* );
+		using sub_rect_fn_t         = void( __thiscall* )( void*, int, int, int, int, float, float, float, float );
 
 		constexpr int atlas_size{ 2048 };
 		// IMAGE_FORMAT_BGRA8888, MATERIAL_RT_DEPTH_SEPARATE, and the texture
@@ -47,7 +47,7 @@ namespace p2boost {
 		constexpr const char*  atlas_material_name{ "p2boost/vgui_atlas" };
 		constexpr const char*  atlas_material_file{ "\\portal2\\materials\\p2boost\\vgui_atlas.vmt" };
 		constexpr const char*  atlas_material_text{
-			"\"UnlitGeneric\"\n{\n\t\"$basetexture\" \"_rt_p2boost_vgui\"\n\t\"$nocull\" 1\n\t\"$nofog\" 1\n\t\"$ignorez\" 1\n}\n" };
+            "\"UnlitGeneric\"\n{\n\t\"$basetexture\" \"_rt_p2boost_vgui\"\n\t\"$nocull\" 1\n\t\"$nofog\" 1\n\t\"$ignorez\" 1\n}\n" };
 
 	}
 
@@ -171,7 +171,7 @@ namespace p2boost {
 		*allocating          = 1;
 		m_texture            = materials->CreateNamedRenderTargetTextureEx2( atlas_texture_name, atlas_size, atlas_size, 0, atlas_format, atlas_depth,
 		                                                                     atlas_texture_flags, 0 );
-		*allocating = saved;
+		*allocating          = saved;
 		if( !m_texture )
 			return false;
 		vfunc< void_fn_t >( m_texture, game->vmt_texture_add_ref )( m_texture );
@@ -254,8 +254,8 @@ namespace p2boost {
 			return;
 		}
 
-		const game::profile_t* game    = game::active( );
-		void*                  texture = cache->m_texture;
+		const game::profile_t* game         = game::active( );
+		void*                  texture      = cache->m_texture;
 		const int              atlas_width  = vfunc< int_fn_t >( texture, game->vmt_texture_actual_width )( texture );
 		const int              atlas_height = vfunc< int_fn_t >( texture, game->vmt_texture_actual_height )( texture );
 		if( cache->m_invalidate.exchange( false, std::memory_order_acq_rel ) || atlas_width != cache->m_atlas_width || atlas_height != cache->m_atlas_height ) {
@@ -310,7 +310,7 @@ namespace p2boost {
 			extents[ 1 ]  = 0;
 			extents[ 2 ]  = pixel_width;
 			extents[ 3 ]  = pixel_height;
-			void* client = vfunc< panel_client_fn_t >( panel, game->vmt_vpanel_client )( panel );
+			void* client  = vfunc< panel_client_fn_t >( panel, game->vmt_vpanel_client )( panel );
 			if( client ) {
 				vfunc< void_fn_t >( client, game->vmt_client_panel_repaint )( client );
 				vfunc< paint_traverse_fn_t >( client, game->vmt_client_panel_paint_traverse )( client, true, false );

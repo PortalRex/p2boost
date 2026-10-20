@@ -89,12 +89,12 @@ namespace p2boost {
 			return reinterpret_cast< function_t >( ( *static_cast< void* const* const* >( object ) )[ slot ] );
 		}
 
-		using void_fn_t  = void( __thiscall* )( void* );
-		using bool_fn_t  = bool( __thiscall* )( void* );
-		using ptr_fn_t   = void*( __thiscall* )( void* );
-		using int_fn_t   = int( __thiscall* )( void* );
-		using set_fn_t   = void( __thiscall* )( void*, int );
-		using add_fn_t   = void( __thiscall* )( void*, void* );
+		using void_fn_t = void( __thiscall* )( void* );
+		using bool_fn_t = bool( __thiscall* )( void* );
+		using ptr_fn_t  = void*(__thiscall*)( void* );
+		using int_fn_t  = int( __thiscall* )( void* );
+		using set_fn_t  = void( __thiscall* )( void*, int );
+		using add_fn_t  = void( __thiscall* )( void*, void* );
 
 		int add_ref( void* object ) noexcept {
 			return vfunc< int_fn_t >( object, vmt_add_ref )( object );
@@ -162,22 +162,21 @@ namespace p2boost {
 		if( m_instance || m_end_frame.installed( ) || !modules.m_material_system || !modules.m_tier0 || !materials )
 			return false;
 
-		const game::profile_t* game      = game::active( );
-		const Module&          module    = modules.m_material_system;
-		const Address          end_frame = module.find( game->materials_end_frame );
+		const game::profile_t* game        = game::active( );
+		const Module&          module      = modules.m_material_system;
+		const Address          end_frame   = module.find( game->materials_end_frame );
 		const Address          begin_frame = module.find( game->materials_begin_frame );
-		const Address          ctor      = module.find( game->materials_queued_context_ctor );
-		const Address          lock_data = module.find( game->materials_lock_render_data );
-		const Address          stack_init = module.find( game->materials_memory_stack_init );
-		const Address          stack_free = module.find( game->materials_memory_stack_free_all );
-		const Address          stack_term = module.find( game->materials_memory_stack_term );
+		const Address          ctor        = module.find( game->materials_queued_context_ctor );
+		const Address          lock_data   = module.find( game->materials_lock_render_data );
+		const Address          stack_init  = module.find( game->materials_memory_stack_init );
+		const Address          stack_free  = module.find( game->materials_memory_stack_free_all );
+		const Address          stack_term  = module.find( game->materials_memory_stack_term );
 		if( !end_frame || !begin_frame || !ctor || !lock_data || !stack_init || !stack_free || !stack_term )
 			return false;
 
 		const Address render_data_index  = lock_data.add( lock_render_data_index ).at< Address >( );
 		const Address render_data_stacks = lock_data.add( lock_render_data_stacks ).at< Address >( );
-		if( !module.contains( render_data_index, sizeof( int ) )
-		    || !module.contains( render_data_stacks, 2 * render_data_stack_size + render_data_buffer_size ) )
+		if( !module.contains( render_data_index, sizeof( int ) ) || !module.contains( render_data_stacks, 2 * render_data_stack_size + render_data_buffer_size ) )
 			return false;
 
 		// the live object's table may be a copy another plugin installed, so
@@ -195,8 +194,8 @@ namespace p2boost {
 			return false;
 
 		constexpr operand_t operands[]{ op_in_main_thread, op_vprof, op_tls, op_queue_mode, op_shader_api, op_job_finished, op_job_wait,
-			                            op_end_marker, op_queue_functor, op_begin_queue, op_begin_marker, op_allocate, op_thread_execute,
-			                            op_job_construct, op_priority, op_thread_pool, op_end_queue, op_context_init, op_context_shutdown };
+		                                op_end_marker, op_queue_functor, op_begin_queue, op_begin_marker, op_allocate, op_thread_execute,
+		                                op_job_construct, op_priority, op_thread_pool, op_end_queue, op_context_init, op_context_shutdown };
 		for( const operand_t& operand : operands ) {
 			if( !operand_matches( end_frame, operand ) )
 				return false;
@@ -208,47 +207,47 @@ namespace p2boost {
 		if( !modules.m_tier0.contains( in_main_thread ) || !module.contains( tls_object, sizeof( unsigned long ) ) || !thread_pool )
 			return false;
 
-		m_in_main_thread   = in_main_thread.as< in_main_thread_fn_t >( );
-		m_vprof            = immediate< Address >( end_frame, op_vprof ).as< void** >( );
-		m_tls_index        = tls_object.at< unsigned long >( );
-		m_queue_mode_cvar  = immediate< Address >( end_frame, op_queue_mode ).as< void** >( );
-		m_shader_api       = immediate< Address >( end_frame, op_shader_api ).as< void** >( );
-		m_job_finished     = rel32_target( end_frame, op_job_finished ).as< job_finished_fn_t >( );
-		m_job_wait         = rel32_target( end_frame, op_job_wait ).as< job_wait_fn_t >( );
-		m_end_marker       = immediate< Address >( end_frame, op_end_marker ).as< void* >( );
-		m_begin_marker     = immediate< Address >( end_frame, op_begin_marker ).as< void* >( );
-		m_queue_functor    = rel32_target( end_frame, op_queue_functor ).as< queue_functor_fn_t >( );
-		m_begin_queue      = rel32_target( end_frame, op_begin_queue ).as< begin_queue_fn_t >( );
-		m_allocate         = rel32_target( end_frame, op_allocate ).as< allocate_fn_t >( );
-		m_thread_execute   = immediate< Address >( end_frame, op_thread_execute ).as< thread_execute_fn_t >( );
-		m_job_construct    = rel32_target( end_frame, op_job_construct ).as< job_construct_fn_t >( );
-		m_priority_cvar    = immediate< Address >( end_frame, op_priority ).as< void** >( );
-		m_thread_pool      = thread_pool.as< void*** >( );
-		m_end_queue        = rel32_target( end_frame, op_end_queue ).as< end_queue_fn_t >( );
-		m_context_init     = rel32_target( end_frame, op_context_init ).as< context_init_fn_t >( );
-		m_context_shutdown = rel32_target( end_frame, op_context_shutdown ).as< context_shut_fn_t >( );
-		m_context_construct = ctor.as< context_ctor_fn_t >( );
+		m_in_main_thread     = in_main_thread.as< in_main_thread_fn_t >( );
+		m_vprof              = immediate< Address >( end_frame, op_vprof ).as< void** >( );
+		m_tls_index          = tls_object.at< unsigned long >( );
+		m_queue_mode_cvar    = immediate< Address >( end_frame, op_queue_mode ).as< void** >( );
+		m_shader_api         = immediate< Address >( end_frame, op_shader_api ).as< void** >( );
+		m_job_finished       = rel32_target( end_frame, op_job_finished ).as< job_finished_fn_t >( );
+		m_job_wait           = rel32_target( end_frame, op_job_wait ).as< job_wait_fn_t >( );
+		m_end_marker         = immediate< Address >( end_frame, op_end_marker ).as< void* >( );
+		m_begin_marker       = immediate< Address >( end_frame, op_begin_marker ).as< void* >( );
+		m_queue_functor      = rel32_target( end_frame, op_queue_functor ).as< queue_functor_fn_t >( );
+		m_begin_queue        = rel32_target( end_frame, op_begin_queue ).as< begin_queue_fn_t >( );
+		m_allocate           = rel32_target( end_frame, op_allocate ).as< allocate_fn_t >( );
+		m_thread_execute     = immediate< Address >( end_frame, op_thread_execute ).as< thread_execute_fn_t >( );
+		m_job_construct      = rel32_target( end_frame, op_job_construct ).as< job_construct_fn_t >( );
+		m_priority_cvar      = immediate< Address >( end_frame, op_priority ).as< void** >( );
+		m_thread_pool        = thread_pool.as< void*** >( );
+		m_end_queue          = rel32_target( end_frame, op_end_queue ).as< end_queue_fn_t >( );
+		m_context_init       = rel32_target( end_frame, op_context_init ).as< context_init_fn_t >( );
+		m_context_shutdown   = rel32_target( end_frame, op_context_shutdown ).as< context_shut_fn_t >( );
+		m_context_construct  = ctor.as< context_ctor_fn_t >( );
 		m_render_data_index  = render_data_index.as< int* >( );
 		m_render_data_stacks = render_data_stacks.as< std::uint8_t* >( );
 		m_stack_init         = stack_init.as< stack_init_fn_t >( );
 		m_stack_free_all     = stack_free.as< stack_free_fn_t >( );
 		m_stack_term         = stack_term.as< stack_term_fn_t >( );
-		m_materials        = materials;
+		m_materials          = materials;
 
 		// every code target must be material-system code and the TLS slot must
 		// hold a render context (or nothing) on this thread.
 		const void* const targets[]{ reinterpret_cast< const void* >( m_job_finished ), reinterpret_cast< const void* >( m_job_wait ),
-			                         m_end_marker, m_begin_marker, reinterpret_cast< const void* >( m_queue_functor ),
-			                         reinterpret_cast< const void* >( m_begin_queue ), reinterpret_cast< const void* >( m_allocate ),
-			                         reinterpret_cast< const void* >( m_thread_execute ), reinterpret_cast< const void* >( m_job_construct ),
-			                         reinterpret_cast< const void* >( m_end_queue ), reinterpret_cast< const void* >( m_context_init ),
-			                         reinterpret_cast< const void* >( m_context_shutdown ) };
+		                             m_end_marker, m_begin_marker, reinterpret_cast< const void* >( m_queue_functor ),
+		                             reinterpret_cast< const void* >( m_begin_queue ), reinterpret_cast< const void* >( m_allocate ),
+		                             reinterpret_cast< const void* >( m_thread_execute ), reinterpret_cast< const void* >( m_job_construct ),
+		                             reinterpret_cast< const void* >( m_end_queue ), reinterpret_cast< const void* >( m_context_init ),
+		                             reinterpret_cast< const void* >( m_context_shutdown ) };
 		for( const void* target : targets ) {
 			if( !module.contains( Address{ const_cast< void* >( target ) } ) )
 				return false;
 		}
-		m_contexts = { Address{ materials }.add( queued_contexts ).as< void* >( ),
-		               Address{ materials }.add( queued_contexts + queued_context_size ).as< void* >( ), nullptr };
+		m_contexts          = { Address{ materials }.add( queued_contexts ).as< void* >( ),
+		                        Address{ materials }.add( queued_contexts + queued_context_size ).as< void* >( ), nullptr };
 		const void* current = TlsGetValue( m_tls_index );
 		if( current && current != Address{ materials }.add( hardware_context ).as< void* >( ) && !recording_context( materials ) )
 			return false;
@@ -343,7 +342,7 @@ namespace p2boost {
 		std::memset( context, 0, queued_context_size );
 		m_context_construct( context );
 		m_context_init( context, self, Address{ self }.add( hardware_context ).as< void* >( ) );
-		m_private      = context;
+		m_private       = context;
 		m_contexts[ 2 ] = context;
 		return true;
 	}
@@ -389,7 +388,7 @@ namespace p2boost {
 		void* job = m_job_construct( memory, functor, nullptr );
 		if( *m_priority_cvar && Address{ *m_priority_cvar }.at< int >( cvar_value ) != 0 )
 			Address{ job }.add( job_flags ).as< std::uint8_t* >( )[ 0 ] |= job_flag_queue;
-		( void )self;
+		(void)self;
 		return job;
 	}
 
@@ -433,9 +432,9 @@ namespace p2boost {
 			for( std::size_t index = 0; index < 2; ++index )
 				m_context_stack[ index ] = m_contexts[ index ] == recording ? recorded_stack : 1 - recorded_stack;
 			m_context_stack[ 2 ] = 2;
-			m_jobs      = { };
-			m_job_order = { };
-			void* engine_job = materials.at< void* >( active_job );
+			m_jobs               = { };
+			m_job_order          = { };
+			void* engine_job     = materials.at< void* >( active_job );
 			for( std::size_t index = 0; index < 2; ++index ) {
 				if( m_contexts[ index ] != recording && engine_job ) {
 					add_ref( engine_job );
@@ -545,8 +544,8 @@ namespace p2boost {
 
 		void* recording = recording_context( self );
 		if( recording == m_private && m_private ) {
-			const int   index   = materials.at< int >( current_context_index ) & 1;
-			void*       engine  = m_contexts[ index ];
+			const int index  = materials.at< int >( current_context_index ) & 1;
+			void*     engine = m_contexts[ index ];
 			m_begin_queue( engine, m_private );
 			set_recording_context( Address{ self }.add( hardware_context ).as< void* >( ) );
 			m_end_queue( m_private, true );

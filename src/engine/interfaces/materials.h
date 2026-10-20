@@ -81,12 +81,12 @@ namespace p2boost::sdk {
 		static constexpr std::size_t create_named_render_target_slot{ 97 };
 
 		void* FindMaterial( const char* name, const char* group, bool complain, const char* filter ) {
-			using function_t = void*( __thiscall* )( void*, const char*, const char*, bool, const char* );
+			using function_t = void*(__thiscall*)( void*, const char*, const char*, bool, const char* );
 			return invoke< find_material_slot, function_t >( name, group, complain, filter );
 		}
 
 		void* CreateNamedRenderTargetTextureEx2( const char* name, int width, int height, int size_mode, int format, int depth, unsigned int texture_flags, unsigned int target_flags ) {
-			using function_t = void*( __thiscall* )( void*, const char*, int, int, int, int, int, unsigned int, unsigned int );
+			using function_t = void*(__thiscall*)( void*, const char*, int, int, int, int, int, unsigned int, unsigned int );
 			return invoke< create_named_render_target_slot, function_t >( name, width, height, size_mode, format, depth, texture_flags, target_flags );
 		}
 
@@ -99,7 +99,7 @@ namespace p2boost::sdk {
 		}
 
 		void* FindTexture( const char* name, const char* group, bool complain, int flags ) {
-			using function_t = void*( __thiscall* )( void*, const char*, const char*, bool, int );
+			using function_t = void*(__thiscall*)( void*, const char*, const char*, bool, int );
 			return invoke< find_texture_slot, function_t >( name, group, complain, flags );
 		}
 

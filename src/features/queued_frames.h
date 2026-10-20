@@ -70,12 +70,12 @@ namespace p2boost {
 		using end_queue_fn_t      = void( __thiscall* )( void*, bool );
 		using context_init_fn_t   = void( __thiscall* )( void*, void*, void* );
 		using context_shut_fn_t   = void( __fastcall* )( void* );
-		using context_ctor_fn_t   = void*( __fastcall* )( void* );
+		using context_ctor_fn_t   = void*(__fastcall*)( void* );
 		using stack_init_fn_t     = bool( __thiscall* )( void*, const char*, int, int, int, int );
 		using stack_free_fn_t     = void( __thiscall* )( void*, bool );
 		using stack_term_fn_t     = void( __thiscall* )( void* );
-		using allocate_fn_t       = void*( __cdecl* )( std::size_t );
-		using job_construct_fn_t  = void*( __thiscall* )( void*, void*, const char* );
+		using allocate_fn_t       = void*(__cdecl*)( std::size_t );
+		using job_construct_fn_t  = void*(__thiscall*)( void*, void*, const char* );
 		using thread_execute_fn_t = void( __thiscall* )( void*, void* );
 		using in_main_thread_fn_t = bool( __cdecl* )( );
 
@@ -125,15 +125,15 @@ namespace p2boost {
 		// into (bone matrices, decals) in two static CMemoryStacks indexed by
 		// a static int; with three frames in flight a third is needed, and
 		// there is room for it in the unused buffer that follows the two.
-		int*                m_render_data_index{ };
-		std::uint8_t*       m_render_data_stacks{ };
-		stack_init_fn_t     m_stack_init{ };
-		stack_free_fn_t     m_stack_free_all{ };
-		stack_term_fn_t     m_stack_term{ };
-		bool                m_third_stack{ };
+		int*            m_render_data_index{ };
+		std::uint8_t*   m_render_data_stacks{ };
+		stack_init_fn_t m_stack_init{ };
+		stack_free_fn_t m_stack_free_all{ };
+		stack_term_fn_t m_stack_term{ };
+		bool            m_third_stack{ };
 		// the stack the frame after the next BeginFrame records into, or -1
 		// when the engine's own flip is right.
-		int                 m_render_data_target{ -1 };
+		int m_render_data_target{ -1 };
 
 		// the ring: the engine's two queued contexts and the private third.
 		std::array< void*, 3 > m_contexts{ };
@@ -141,9 +141,9 @@ namespace p2boost {
 		std::array< int, 3 >   m_job_order{ };
 		// the render-data stack each context's frames record into.
 		std::array< int, 3 > m_context_stack{ 0, 1, 2 };
-		void*                  m_private{ };
-		int                    m_order{ };
-		bool                   m_active{ };
+		void*                m_private{ };
+		int                  m_order{ };
+		bool                 m_active{ };
 
 		std::atomic_int              m_depth{ 2 };
 		std::atomic< std::uint64_t > m_ring_frames{ };
