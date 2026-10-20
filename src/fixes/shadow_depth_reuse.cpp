@@ -5,6 +5,7 @@
 #include "game_profile.h"
 #include "projected_frustum.h"
 #include "sdk.h"
+#include "view_render.h"
 #include "vmt.h"
 
 #include <Windows.h>
@@ -61,14 +62,9 @@ namespace p2boost {
 		if( m_instance || m_update_depth.installed( ) || !modules.m_client )
 			return false;
 
-		// CViewRender::Render is vtable slot 5; UpdateShadowDepthTexture is 29.
 		const game::profile_t* game        = game::active( );
-		void**                 render_slot = modules.m_client.unique_slot( modules.m_client.find( game->view_render ) );
-		if( !render_slot )
-			return false;
-
-		void** update_slot = render_slot + ( game->vmt_update_shadow_depth - game->vmt_view_render );
-		if( !modules.m_client.contains( Address{ *update_slot } ) )
+		void** const           update_slot = view_render_slot( modules.m_client, game->vmt_update_shadow_depth );
+		if( !update_slot )
 			return false;
 
 		// gpGlobals separates frames: a map is only reused within one frame.

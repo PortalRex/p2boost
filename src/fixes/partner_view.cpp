@@ -5,6 +5,7 @@
 #include "functor.h"
 #include "game_profile.h"
 #include "sdk.h"
+#include "view_render.h"
 
 #include <algorithm>
 #include <cstring>
@@ -72,14 +73,8 @@ namespace p2boost {
 		if( m_instance || !modules.m_client )
 			return false;
 
-		// CViewRender::Render is vtable slot 5; RenderView is the next slot.
-		const Address render = modules.m_client.find( game::active( )->view_render );
-		void**        render_slot{ modules.m_client.unique_slot( render ) };
-		if( !render_slot )
-			return false;
-
-		void** render_view_slot = render_slot + ( game::active( )->vmt_render_view - game::active( )->vmt_view_render );
-		if( !modules.m_client.contains( Address{ *render_view_slot } ) )
+		void** const render_view_slot = view_render_slot( modules.m_client, game::active( )->vmt_render_view );
+		if( !render_view_slot )
 			return false;
 
 		const Address split_player = modules.m_client.find( game::active( )->split_view_player );
