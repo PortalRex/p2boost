@@ -31,7 +31,7 @@ injection or elevation:
 - `harness.py` launches, drives, captures, and quits the game; `bench.py`
   runs interleaved suites measured with `p2boost_trace`.
 - `run_all.py [main|stock|sp|partner|l1000]` holds the suites behind
-  [benchmarks/plus-automated.md](../benchmarks/plus-automated.md).
+  [benchmarks/results.md](../benchmarks/results.md).
 - `sampler.py` is a user-mode main-thread sampler (no ETW, no UAC);
   `profile_lobby.py` profiles the split-screen lobby with it.
 - `coop_maps.py`, `coop_maps_deep.py` (spawns from `bsp_spawns.py`), and

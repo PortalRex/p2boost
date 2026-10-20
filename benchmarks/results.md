@@ -1,4 +1,4 @@
-# Automated A/B results on the `plus` branch
+# Automated A/B results
 
 All runs were driven by `research/harness` over Portal 2's network console
 (`-netconport`, no keyboard or window input), measured with `p2boost_trace`

@@ -7,6 +7,7 @@
   <img src="https://img.shields.io/badge/platform-Windows-0d1117?logo=windows&logoColor=white" alt="Windows">
   <img src="https://img.shields.io/badge/renderer-Vulkan%20(--vulkan)-ff8a1f" alt="Vulkan renderer">
   <img src="https://img.shields.io/badge/games-Portal%202%20%C2%B7%20Portal%20Stories%3A%20Mel-2ea8ff" alt="Portal 2 and Portal Stories: Mel">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-6e7681" alt="GPL-3.0"></a>
 </p>
 
 <p align="center">
@@ -63,7 +64,7 @@ lobby gain the most. The release also replaces the game's DXVK with DXVK 3.0.2,
 which on this machine is another 2.2× in the lobby on its own (482 → 1,070 FPS
 with every fix on). A Ryzen 7 7800X3D with an RTX 5090 measured it slower, so
 that part depends on your hardware; see
-[benchmarks/plus-automated.md](benchmarks/plus-automated.md).
+[benchmarks/results.md](benchmarks/results.md).
 
 ### Where the time goes
 
@@ -99,7 +100,8 @@ flowchart LR
 
 ## Install
 
-1. Download `p2boost-nightly-win32.zip` from the latest release.
+1. Download `p2boost-<version>-win32.zip` from the
+   [latest release](https://github.com/aIIison/p2boost/releases/latest).
 2. Extract it into your `Portal 2` game folder. `p2boost.dll` goes next to
    `portal2.exe`, and `bin\dxvk_d3d9.dll` goes into `bin\`. The zip already
    has this layout.
@@ -159,7 +161,7 @@ current values.
 | `frame_limiter` | 1 | Makes `fps_max` deliver the frame rate you set instead of about 2% less. |
 
 Per-fix contributions, measured on a second machine (Ryzen 7 7800X3D,
-RTX 5090), are in [benchmarks/plus-automated.md](benchmarks/plus-automated.md).
+RTX 5090), are in [benchmarks/results.md](benchmarks/results.md).
 
 ## Commands
 
@@ -225,3 +227,13 @@ intervals:
 it was found, what is patched, why the picture stays the same, and the
 measurements. [research/](research/README.md) holds the profiling and
 reverse-engineering tools and the archived investigation log.
+
+## License
+
+Copyright © 2026 hero and the p2boost contributors.
+
+p2boost is free software under the [GNU General Public License v3.0](LICENSE):
+you may use, study, share, and modify it, and anything you distribute that is
+built from its code must stay under the GPL, ship its source, and keep these
+copyright notices. Third-party components keep their own licenses; see
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

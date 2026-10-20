@@ -1,4 +1,4 @@
-"""Measured suites behind benchmarks/plus-automated.md.
+"""Measured suites behind benchmarks/results.md.
 
 run_all.py [suite ...]   (default: main)
 

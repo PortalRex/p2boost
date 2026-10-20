@@ -17,7 +17,7 @@ import library under its MIT license.
 - NVIDIA's public NVAPI headers and x86 import library are MIT-licensed. Their
   complete license is included at `third_party/nvapi/LICENSE`.
 - DXVK is zlib-licensed software by Philip Rebohle and contributors. The
-  drop-in release package (produced by `scripts/package-dropin.ps1`) contains
+  drop-in release package (produced by `scripts/package.ps1`) contains
   the official DXVK x86 `d3d9.dll` renamed to `bin\dxvk_d3d9.dll`, together
   with its complete license text as `LICENSE.dxvk.txt`.
   `scripts/install-dxvk.ps1` downloads the same official DXVK release archive
