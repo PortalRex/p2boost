@@ -3,6 +3,7 @@
 #include "address.h"
 #include "game_profile.h"
 #include "interfaces.h"
+#include "vmt.h"
 
 #include <Windows.h>
 
@@ -83,11 +84,6 @@ namespace p2boost {
 		constexpr operand_t op_end_queue{ 0x3ba, 0xe8 };
 		constexpr operand_t op_context_init{ 0x476, 0xe8 };
 		constexpr operand_t op_context_shutdown{ 0x536, 0xe8 };
-
-		template < typename function_t >
-		function_t vfunc( const void* object, std::size_t slot ) noexcept {
-			return reinterpret_cast< function_t >( ( *static_cast< void* const* const* >( object ) )[ slot ] );
-		}
 
 		using void_fn_t = void( __thiscall* )( void* );
 		using bool_fn_t = bool( __thiscall* )( void* );
@@ -181,7 +177,7 @@ namespace p2boost {
 
 		// the live object's table may be a copy another plugin installed, so
 		// find EndFrame in the table the engine actually calls through.
-		void** live       = *static_cast< void*** >( static_cast< void* >( materials ) );
+		void** live       = vmt_of( materials );
 		void** slot       = nullptr;
 		void** begin_slot = nullptr;
 		for( std::size_t index = 0; live && index < 200 && ( !slot || !begin_slot ); ++index ) {

@@ -17,4 +17,11 @@ namespace p2boost {
 		return methods ? methods + index : nullptr;
 	}
 
+	// the current target of one slot of an object's live VMT, typed by the
+	// caller, which passes the object itself as the first argument.
+	template < typename function_t >
+	function_t vfunc( const void* object, std::ptrdiff_t slot ) noexcept {
+		return reinterpret_cast< function_t >( ( *static_cast< void* const* const* >( object ) )[ slot ] );
+	}
+
 }

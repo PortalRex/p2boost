@@ -123,7 +123,6 @@ namespace p2boost {
 			m_display->add_reset_listener( &ResetListener, this );
 		}
 
-		QueryPerformanceFrequency( &m_frequency );
 		m_instance = this;
 		if( !m_render_view.install( render_view_slot, reinterpret_cast< void* >( &RenderView ) ) ) {
 			remove( );
@@ -247,14 +246,13 @@ namespace p2boost {
 		const RECT             rect{ left, top, left + setup.at< int >( game->view_unscaled_width ), top + setup.at< int >( game->view_unscaled_height ) };
 		const bool             reusable = instance->reuse_available( ) && rect.right > rect.left && rect.bottom > rect.top;
 
-		LARGE_INTEGER now{ };
-		QueryPerformanceCounter( &now );
-		const LONGLONG interval = reusable ? instance->m_frequency.QuadPart / fps : 0;
-		const bool     same_rect =
+		const Qpc::tick_t now      = Qpc::now( );
+		const Qpc::tick_t interval = reusable ? Qpc::frequency( ) / fps : 0;
+		const bool        same_rect =
 		    instance->m_picture_rect_valid && std::memcmp( &instance->m_picture_rect, &rect, sizeof( rect ) ) == 0;
 
 		if( reusable && same_rect && instance->m_picture_ready.load( std::memory_order_acquire ) &&
-		    now.QuadPart - instance->m_last_render < interval && instance->queue_device_call( false, rect ) ) {
+		    now - instance->m_last_render < interval && instance->queue_device_call( false, rect ) ) {
 			instance->m_reused.fetch_add( 1, std::memory_order_relaxed );
 			return;
 		}
@@ -263,7 +261,7 @@ namespace p2boost {
 		instance->m_rendered.fetch_add( 1, std::memory_order_relaxed );
 
 		if( reusable && instance->queue_device_call( true, rect ) ) {
-			instance->m_last_render        = now.QuadPart;
+			instance->m_last_render        = now;
 			instance->m_picture_rect       = rect;
 			instance->m_picture_rect_valid = true;
 		}

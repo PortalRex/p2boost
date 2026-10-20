@@ -3,6 +3,7 @@
 #include "address.h"
 #include "game_profile.h"
 #include "interfaces.h"
+#include "vmt.h"
 
 #include <Windows.h>
 
@@ -14,12 +15,6 @@ namespace p2boost {
 	VguiScreenCache* VguiScreenCache::m_instance{ };
 
 	namespace {
-
-		// call one slot of an engine object's live VMT with an explicit signature.
-		template < typename function_t >
-		function_t vfunc( const void* object, std::ptrdiff_t slot ) noexcept {
-			return reinterpret_cast< function_t >( ( *static_cast< void* const* const* >( object ) )[ slot ] );
-		}
 
 		using void_fn_t             = void( __thiscall* )( void* );
 		using texture_download_fn_t = void( __thiscall* )( void*, void*, int );
@@ -91,9 +86,6 @@ namespace p2boost {
 		// may take; every other caller (movie displays) keeps the stock path.
 		void** model_slot = draw_model_slot;
 
-		LARGE_INTEGER frequency{ };
-		QueryPerformanceFrequency( &frequency );
-		m_frequency      = frequency.QuadPart;
 		m_materials      = materials;
 		m_start_3d       = start_3d.as< start_3d_fn_t >( );
 		m_start_drawing  = start_drawing.as< start_drawing_fn_t >( );
@@ -209,13 +201,12 @@ namespace p2boost {
 		// a full atlas holds rectangles of panels that were replaced; once the
 		// stalest has gone a second without a draw, start over.
 		if( !free_slot || ( m_shelf_x + width > atlas_width && m_shelf_y + m_shelf_height + height > atlas_height ) ) {
-			LARGE_INTEGER now{ };
-			QueryPerformanceCounter( &now );
-			long long oldest = now.QuadPart;
+			const Qpc::tick_t now    = Qpc::now( );
+			Qpc::tick_t       oldest = now;
 			for( const entry_t& entry : m_entries )
 				if( entry.m_panel && entry.m_used < oldest )
 					oldest = entry.m_used;
-			if( now.QuadPart - oldest < m_frequency )
+			if( now - oldest < Qpc::frequency( ) )
 				return nullptr;
 			reset_atlas( );
 			free_slot = &m_entries[ 0 ];
@@ -270,10 +261,9 @@ namespace p2boost {
 			return;
 		}
 
-		LARGE_INTEGER now{ };
-		QueryPerformanceCounter( &now );
-		entry->m_used  = now.QuadPart;
-		const bool due = !entry->m_painted || now.QuadPart - entry->m_time >= cache->m_frequency / fps;
+		const Qpc::tick_t now = Qpc::now( );
+		entry->m_used         = now;
+		const bool due        = !entry->m_painted || now - entry->m_time >= Qpc::frequency( ) / fps;
 
 		// the stock method: lay the panel out, take the render context, set the
 		// panel's depth mode, and load the panel-to-world transform.
@@ -317,7 +307,7 @@ namespace p2boost {
 			}
 			cache->m_finish_drawing( );
 			vfunc< void_fn_t >( context, game->vmt_context_pop_render_target )( context );
-			entry->m_time    = now.QuadPart;
+			entry->m_time    = now;
 			entry->m_painted = true;
 			cache->m_painted.fetch_add( 1, std::memory_order_relaxed );
 		} else {

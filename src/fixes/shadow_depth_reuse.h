@@ -3,6 +3,7 @@
 #include "hook.h"
 #include "math_types.h"
 #include "portal2_context.h"
+#include "qpc.h"
 
 #include <array>
 #include <atomic>
@@ -97,7 +98,7 @@ namespace p2boost {
 		struct entry_t {
 			const void*  m_texture{ };
 			int          m_frame{ -1 };
-			long long    m_time{ };
+			Qpc::tick_t  m_time{ };
 			key_t        m_key{ };
 			light_view_t m_view{ };
 			const void*  m_viewer{ };
@@ -122,7 +123,6 @@ namespace p2boost {
 		std::atomic_bool             m_enabled{ };
 		std::atomic_bool             m_invalidate{ };
 		std::atomic_int              m_max_fps{ };
-		long long                    m_frequency{ };
 		std::atomic< std::uint64_t > m_rendered{ };
 		std::atomic< std::uint64_t > m_reused{ };
 	};

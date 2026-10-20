@@ -4,6 +4,7 @@
 #include "display_adjustments.h"
 #include "hook.h"
 #include "portal2_context.h"
+#include "qpc.h"
 
 #include <Windows.h>
 #include <d3d9.h>
@@ -97,8 +98,7 @@ namespace p2boost {
 		std::atomic_int m_max_fps{ };
 
 		// main-thread picture schedule.
-		LARGE_INTEGER m_frequency{ };
-		LONGLONG      m_last_render{ };
+		Qpc::tick_t   m_last_render{ };
 		RECT          m_picture_rect{ };
 		bool          m_picture_rect_valid{ };
 

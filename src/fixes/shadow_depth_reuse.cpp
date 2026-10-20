@@ -5,6 +5,7 @@
 #include "game_profile.h"
 #include "projected_frustum.h"
 #include "sdk.h"
+#include "vmt.h"
 
 #include <Windows.h>
 
@@ -76,9 +77,6 @@ namespace p2boost {
 		if( !modules.m_client.contains( globals, sizeof( void* ) ) )
 			return false;
 
-		LARGE_INTEGER frequency{ };
-		QueryPerformanceFrequency( &frequency );
-		m_frequency = frequency.QuadPart;
 		m_globals   = globals.as< void* const* >( );
 		m_materials = interfaces.material_system( );
 		m_entries   = { };
@@ -135,8 +133,7 @@ namespace p2boost {
 		if( !context )
 			return;
 		using clear_color_fn_t = void( __thiscall* )( void*, unsigned char, unsigned char, unsigned char );
-		const auto clear_color = ( *reinterpret_cast< clear_color_fn_t* const* >( context ) )[ game::active( )->vmt_context_clear_color3 ];
-		clear_color( context, 255, 255, 255 );
+		vfunc< clear_color_fn_t >( context, game::active( )->vmt_context_clear_color3 )( context, 255, 255, 255 );
 		context->Release( );
 	}
 
@@ -157,8 +154,7 @@ namespace p2boost {
 		if( reuse->m_invalidate.exchange( false, std::memory_order_acq_rel ) )
 			reuse->m_entries = { };
 
-		LARGE_INTEGER now{ };
-		QueryPerformanceCounter( &now );
+		const Qpc::tick_t      now   = Qpc::now( );
 		const game::profile_t* game  = game::active( );
 		const int              frame = Address{ globals }.at< int >( game->globals_framecount );
 		const key_t            key   = make_key( view );
@@ -170,7 +166,7 @@ namespace p2boost {
 		// frame, and across frames while its refresh interval has not elapsed.
 		if( entry != reuse->m_entries.end( ) && reuse->enabled( ) && entry->m_frame >= 0 && entry->m_key == key ) {
 			const int  fps   = reuse->m_max_fps.load( std::memory_order_relaxed );
-			const bool fresh = fps > 0 && now.QuadPart - entry->m_time < reuse->m_frequency / fps;
+			const bool fresh = fps > 0 && now - entry->m_time < Qpc::frequency( ) / fps;
 			if( ( entry->m_frame == frame || fresh ) && reuse->shareable( view, *entry ) ) {
 				reuse->repeat_draw_state( );
 				reuse->m_reused.fetch_add( 1, std::memory_order_relaxed );
@@ -190,7 +186,7 @@ namespace p2boost {
 		}
 		entry->m_texture    = depth;
 		entry->m_frame      = rendered ? frame : -1;
-		entry->m_time       = now.QuadPart;
+		entry->m_time       = now;
 		entry->m_key        = key;
 		entry->m_viewer     = reuse->m_viewer;
 		entry->m_viewer_eye = reuse->m_viewer_eye;

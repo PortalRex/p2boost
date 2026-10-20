@@ -2,6 +2,7 @@
 
 #include "hook.h"
 #include "portal2_context.h"
+#include "qpc.h"
 
 #include <array>
 #include <atomic>
@@ -72,8 +73,8 @@ namespace p2boost {
 			int         m_y{ };
 			int         m_width{ };
 			int         m_height{ };
-			long long   m_time{ };
-			long long   m_used{ };
+			Qpc::tick_t m_time{ };
+			Qpc::tick_t m_used{ };
 			bool        m_painted{ };
 		};
 
@@ -98,7 +99,6 @@ namespace p2boost {
 		void*                 m_texture{ };
 		void*                 m_material{ };
 		int                   m_texture_id{ -1 };
-		long long             m_frequency{ };
 
 		std::array< entry_t, 64 > m_entries{ };
 		int                       m_shelf_x{ };
