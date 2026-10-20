@@ -96,8 +96,8 @@ namespace p2boost {
 		start_3d_fn_t         m_start_3d{ };
 		start_drawing_fn_t    m_start_drawing{ };
 		finish_drawing_fn_t   m_finish_drawing{ };
-		void*                 m_texture{ };
-		void*                 m_material{ };
+		sdk::ITexture*        m_texture{ };
+		sdk::IMaterial*       m_material{ };
 		int                   m_texture_id{ -1 };
 
 		std::array< entry_t, 64 > m_entries{ };

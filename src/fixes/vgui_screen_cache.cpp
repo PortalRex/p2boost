@@ -3,7 +3,6 @@
 #include "address.h"
 #include "game_profile.h"
 #include "interfaces.h"
-#include "vmt.h"
 
 #include <Windows.h>
 
@@ -15,22 +14,6 @@ namespace p2boost {
 	VguiScreenCache* VguiScreenCache::m_instance{ };
 
 	namespace {
-
-		using void_fn_t             = void( __thiscall* )( void* );
-		using texture_download_fn_t = void( __thiscall* )( void*, void*, int );
-		using clear_color_fn_t      = void( __thiscall* )( void*, unsigned char, unsigned char, unsigned char, unsigned char );
-		using clear_buffers_fn_t    = void( __thiscall* )( void*, bool, bool, bool );
-		using int_fn_t              = int( __thiscall* )( void* );
-		using panel_client_fn_t     = void*(__thiscall*)( void* );
-		using paint_traverse_fn_t   = void( __thiscall* )( void*, bool, bool );
-		using solve_fn_t            = void( __thiscall* )( void*, void*, bool );
-		using depth_fn_t            = void( __thiscall* )( void*, bool, bool, bool );
-		using push_target_fn_t      = void( __thiscall* )( void*, void*, int, int, int, int );
-		using set_color_fn_t        = void( __thiscall* )( void*, int, int, int, int );
-		using set_texture_fn_t      = void( __thiscall* )( void*, int );
-		using new_texture_fn_t      = int( __thiscall* )( void*, bool );
-		using set_material_fn_t     = void( __thiscall* )( void*, int, void* );
-		using sub_rect_fn_t         = void( __thiscall* )( void*, int, int, int, int, float, float, float, float );
 
 		constexpr int atlas_size{ 2048 };
 		// IMAGE_FORMAT_BGRA8888, MATERIAL_RT_DEPTH_SEPARATE, and the texture
@@ -166,15 +149,15 @@ namespace p2boost {
 		*allocating          = saved;
 		if( !m_texture )
 			return false;
-		vfunc< void_fn_t >( m_texture, game->vmt_texture_add_ref )( m_texture );
-		vfunc< texture_download_fn_t >( m_texture, game->vmt_texture_download )( m_texture, nullptr, 0 );
+		m_texture->IncrementReferenceCount( );
+		m_texture->Download( );
 
 		m_material = materials->FindMaterial( atlas_material_name, "Other textures", true, nullptr );
 		if( !m_material ) {
 			m_texture = nullptr;
 			return false;
 		}
-		vfunc< void_fn_t >( m_material, game->vmt_material_add_ref )( m_material );
+		m_material->IncrementReferenceCount( );
 		return true;
 	}
 
@@ -246,9 +229,9 @@ namespace p2boost {
 		}
 
 		const game::profile_t* game         = game::active( );
-		void*                  texture      = cache->m_texture;
-		const int              atlas_width  = vfunc< int_fn_t >( texture, game->vmt_texture_actual_width )( texture );
-		const int              atlas_height = vfunc< int_fn_t >( texture, game->vmt_texture_actual_height )( texture );
+		sdk::ITexture*         texture      = cache->m_texture;
+		const int              atlas_width  = texture->GetActualWidth( );
+		const int              atlas_height = texture->GetActualHeight( );
 		if( cache->m_invalidate.exchange( false, std::memory_order_acq_rel ) || atlas_width != cache->m_atlas_width || atlas_height != cache->m_atlas_height ) {
 			cache->reset_atlas( );
 			cache->m_atlas_width  = atlas_width;
@@ -267,16 +250,18 @@ namespace p2boost {
 
 		// the stock method: lay the panel out, take the render context, set the
 		// panel's depth mode, and load the panel-to-world transform.
-		const Address surface{ self };
-		auto*         flags = surface.add( game->surface_paint_flags ).as< std::uint8_t* >( );
-		vfunc< solve_fn_t >( self, game->vmt_surface_solve_traverse )( self, panel, false );
-		void* context = cache->m_materials->GetRenderContext( );
+		auto* const   surface = static_cast< sdk::ISurface* >( self );
+		auto* const   vpanel  = static_cast< sdk::VPanel* >( panel );
+		const Address fields{ self };
+		auto*         flags = fields.add( game->surface_paint_flags ).as< std::uint8_t* >( );
+		surface->SolveTraverse( vpanel, false );
+		const sdk::RenderContextRef context{ cache->m_materials };
 		if( !context ) {
 			original( self, panel, matrix, pixel_width, pixel_height, width, height );
 			return;
 		}
-		vfunc< void_fn_t >( context, game->vmt_context_begin_render )( context );
-		vfunc< depth_fn_t >( context, game->vmt_context_override_depth )( context, true, false, true );
+		context->BeginRender( );
+		context->OverrideDepthEnable( true, false, true );
 		*flags |= 2;
 		cache->m_start_3d( self, matrix, pixel_width, pixel_height, width, height );
 
@@ -287,26 +272,25 @@ namespace p2boost {
 			// $ignorez would test against it. the surface clips against its
 			// extents, which StartDrawing takes from the viewport origin; the
 			// rectangle's paint runs from 0,0.
-			vfunc< push_target_fn_t >( context, game->vmt_context_push_render_target )( context, texture, entry->m_x, entry->m_y, pixel_width, pixel_height );
+			context->PushRenderTargetAndViewport( texture, entry->m_x, entry->m_y, pixel_width, pixel_height );
 			// the rectangle starts black: a panel's paint blends over whatever
 			// is there, and the atlas is drawn opaque (the paint leaves no
 			// usable alpha behind, so translucent or additive screen art ends
 			// up composited over black rather than over the wall).
-			vfunc< clear_color_fn_t >( context, game->vmt_context_clear_color )( context, 0, 0, 0, 0 );
-			vfunc< clear_buffers_fn_t >( context, game->vmt_context_clear_buffers )( context, true, false, false );
+			context->ClearColor4ub( 0, 0, 0, 0 );
+			context->ClearBuffers( true, false, false );
 			cache->m_start_drawing( self );
-			auto* extents = surface.add( game->surface_extents ).as< int* >( );
+			auto* extents = fields.add( game->surface_extents ).as< int* >( );
 			extents[ 0 ]  = 0;
 			extents[ 1 ]  = 0;
 			extents[ 2 ]  = pixel_width;
 			extents[ 3 ]  = pixel_height;
-			void* client  = vfunc< panel_client_fn_t >( panel, game->vmt_vpanel_client )( panel );
-			if( client ) {
-				vfunc< void_fn_t >( client, game->vmt_client_panel_repaint )( client );
-				vfunc< paint_traverse_fn_t >( client, game->vmt_client_panel_paint_traverse )( client, true, false );
+			if( sdk::IClientPanel* client = vpanel->Client( ) ) {
+				client->Repaint( );
+				client->PaintTraverse( true, false );
 			}
 			cache->m_finish_drawing( );
-			vfunc< void_fn_t >( context, game->vmt_context_pop_render_target )( context );
+			context->PopRenderTargetAndViewport( );
 			entry->m_time    = now;
 			entry->m_painted = true;
 			cache->m_painted.fetch_add( 1, std::memory_order_relaxed );
@@ -318,25 +302,24 @@ namespace p2boost {
 		// DrawFullScreenBuffer does: the atlas material on a lazily created
 		// texture id, white, half-texel inset.
 		if( cache->m_texture_id == -1 ) {
-			cache->m_texture_id = vfunc< new_texture_fn_t >( self, game->vmt_surface_create_texture_id )( self, false );
-			vfunc< set_material_fn_t >( self, game->vmt_surface_draw_set_texture_material )( self, cache->m_texture_id, cache->m_material );
+			cache->m_texture_id = surface->CreateNewTextureID( false );
+			surface->DrawSetTextureMaterial( cache->m_texture_id, cache->m_material );
 		}
 		std::uint8_t color[ 4 ];
-		std::memcpy( color, surface.add( game->surface_draw_color ).as< const void* >( ), sizeof( color ) );
-		vfunc< set_color_fn_t >( self, game->vmt_surface_draw_set_color )( self, 255, 255, 255, 255 );
-		vfunc< set_texture_fn_t >( self, game->vmt_surface_draw_set_texture )( self, cache->m_texture_id );
+		std::memcpy( color, fields.add( game->surface_draw_color ).as< const void* >( ), sizeof( color ) );
+		surface->DrawSetColor( 255, 255, 255, 255 );
+		surface->DrawSetTexture( cache->m_texture_id );
 		const float u0 = ( static_cast< float >( entry->m_x ) + 0.5f ) / static_cast< float >( atlas_width );
 		const float v0 = ( static_cast< float >( entry->m_y ) + 0.5f ) / static_cast< float >( atlas_height );
 		const float u1 = ( static_cast< float >( entry->m_x + pixel_width ) - 0.5f ) / static_cast< float >( atlas_width );
 		const float v1 = ( static_cast< float >( entry->m_y + pixel_height ) - 0.5f ) / static_cast< float >( atlas_height );
-		vfunc< sub_rect_fn_t >( self, game->vmt_surface_draw_textured_sub_rect )( self, 0, 0, pixel_width, pixel_height, u0, v0, u1, v1 );
-		std::memcpy( surface.add( game->surface_draw_color ).as< void* >( ), color, sizeof( color ) );
+		surface->DrawTexturedSubRect( 0, 0, pixel_width, pixel_height, u0, v0, u1, v1 );
+		std::memcpy( fields.add( game->surface_draw_color ).as< void* >( ), color, sizeof( color ) );
 
 		cache->m_finish_drawing( );
-		vfunc< depth_fn_t >( context, game->vmt_context_override_depth )( context, false, true, true );
+		context->OverrideDepthEnable( false, true, true );
 		*flags &= static_cast< std::uint8_t >( ~2 );
-		vfunc< void_fn_t >( context, game->vmt_context_end_render )( context );
-		vfunc< void_fn_t >( context, game->vmt_context_release )( context );
+		context->EndRender( );
 	}
 
 }

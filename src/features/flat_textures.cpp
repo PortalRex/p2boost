@@ -39,20 +39,13 @@ namespace p2boost {
 		if( !engine_paint && !plugin_paint )
 			return false;
 
-		sdk::IMatRenderContext* render_context = material_system->GetRenderContext( );
-		if( !render_context )
+		const sdk::RenderContextRef render_context{ material_system };
+		if( !render_context || !modules.m_material_system.contains( render_context->BindAddress( ) ) )
 			return false;
-
-		if( !modules.m_material_system.contains( render_context->BindAddress( ) ) ) {
-			render_context->Release( );
-			return false;
-		}
 
 		void** device_vmt = vmt_of( device );
-		if( !device_vmt ) {
-			render_context->Release( );
+		if( !device_vmt )
 			return false;
-		}
 
 		// publish borrowed objects before a newly installed hook can observe them.
 		m_device          = device;
@@ -66,7 +59,6 @@ namespace p2boost {
 		                       m_update_surface.install( device_vmt + d3d9_slot::update_surface, reinterpret_cast< void* >( &UpdateSurface ) ) &&
 		                       m_update_texture.install( device_vmt + d3d9_slot::update_texture, reinterpret_cast< void* >( &UpdateTexture ) ) &&
 		                       m_set_texture.install( device_vmt + d3d9_slot::set_texture, reinterpret_cast< void* >( &SetTexture ) );
-		render_context->Release( );
 
 		if( installed )
 			return true;

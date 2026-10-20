@@ -173,8 +173,6 @@ namespace p2boost::game {
 		// refuses outside Begin/EndRenderTargetAllocation; DXVK needs neither the
 		// device release End performs nor the pool ordering the block exists for.
 		std::ptrdiff_t materials_allocating_render_targets{ 0x2bac };
-		// IMaterial reference counting.
-		std::ptrdiff_t vmt_material_add_ref{ 12 };
 
 		// CMatSystemSurface fields: the current draw color, the surface extents
 		// StartDrawing takes from the viewport, and the paint-mode flag byte
@@ -182,39 +180,6 @@ namespace p2boost::game {
 		std::ptrdiff_t surface_draw_color{ 0x2c };
 		std::ptrdiff_t surface_extents{ 0x1c };
 		std::ptrdiff_t surface_paint_flags{ 0x102dc };
-
-		// ISurface slots DrawPanelIn3DSpace and DrawFullScreenBuffer use.
-		std::ptrdiff_t vmt_surface_draw_set_color{ 14 };
-		std::ptrdiff_t vmt_surface_draw_set_texture{ 37 };
-		std::ptrdiff_t vmt_surface_create_texture_id{ 41 };
-		std::ptrdiff_t vmt_surface_solve_traverse{ 89 };
-		std::ptrdiff_t vmt_surface_draw_textured_sub_rect{ 103 };
-		std::ptrdiff_t vmt_surface_draw_set_texture_material{ 165 };
-
-		// the VPanel's Client() and IClientPanel's PaintTraverse and Repaint.
-		std::ptrdiff_t vmt_vpanel_client{ 39 };
-		std::ptrdiff_t vmt_client_panel_paint_traverse{ 3 };
-		std::ptrdiff_t vmt_client_panel_repaint{ 4 };
-
-		// IMatRenderContext slots: Release, BeginRender, EndRender, the depth
-		// override DrawPanelIn3DSpace sets for the panel, and the render-target
-		// and viewport push/pop. ITexture's actual width and height.
-		std::ptrdiff_t vmt_context_release{ 1 };
-		std::ptrdiff_t vmt_context_begin_render{ 2 };
-		std::ptrdiff_t vmt_context_end_render{ 3 };
-		std::ptrdiff_t vmt_context_override_depth{ 75 };
-		// IMatRenderContext: ClearBuffers( color, depth, stencil ), ClearColor4ub.
-		std::ptrdiff_t vmt_context_clear_buffers{ 12 };
-		std::ptrdiff_t vmt_context_clear_color{ 74 };
-		// ClearColor3ub, which CShadowDepthView::Draw sets to white.
-		std::ptrdiff_t vmt_context_clear_color3{ 73 };
-		std::ptrdiff_t vmt_context_push_render_target{ 108 };
-		std::ptrdiff_t vmt_context_pop_render_target{ 111 };
-		// ITexture: IncrementReferenceCount, Download( rect, flags ).
-		std::ptrdiff_t vmt_texture_add_ref{ 10 };
-		std::ptrdiff_t vmt_texture_download{ 13 };
-		std::ptrdiff_t vmt_texture_actual_width{ 3 };
-		std::ptrdiff_t vmt_texture_actual_height{ 4 };
 	};
 
 	// the base game; constructed from the default member initializers above.

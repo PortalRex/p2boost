@@ -4,7 +4,6 @@
 #include "display_adjustments.h"
 #include "functor.h"
 #include "game_profile.h"
-#include "sdk.h"
 #include "view_render.h"
 
 #include <algorithm>
@@ -85,10 +84,8 @@ namespace p2boost {
 		// render-thread order, through the material system's call queue.
 		m_material_system = interfaces.material_system( );
 		if( m_material_system && device && display ) {
-			if( sdk::IMatRenderContext* context = m_material_system->GetRenderContext( ) ) {
+			if( const sdk::RenderContextRef context{ m_material_system } )
 				m_reuse_supported = call_queue_getter_shape( modules.m_material_system, context->GetCallQueueAddress( ) );
-				context->Release( );
-			}
 		}
 		if( m_reuse_supported ) {
 			m_device  = device;
@@ -170,18 +167,13 @@ namespace p2boost {
 	}
 
 	bool PartnerView::queue_device_call( bool save, const RECT& rect ) {
-		if( !m_material_system )
-			return false;
-
-		sdk::IMatRenderContext* context = m_material_system->GetRenderContext( );
+		const sdk::RenderContextRef context{ m_material_system };
 		if( !context )
 			return false;
 
 		auto* call = new( std::nothrow ) device_call_t{ this, save, rect, &m_pending_calls };
-		if( !call ) {
-			context->Release( );
+		if( !call )
 			return false;
-		}
 
 		// with mat_queue_mode 0 there is no queue and rendering is immediate,
 		// so the device call runs inline at exactly the same point.
@@ -191,7 +183,6 @@ namespace p2boost {
 			call->Run( );
 			call->Release( );
 		}
-		context->Release( );
 		return true;
 	}
 

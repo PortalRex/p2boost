@@ -4,9 +4,7 @@
 #include "client_view.h"
 #include "game_profile.h"
 #include "projected_frustum.h"
-#include "sdk.h"
 #include "view_render.h"
-#include "vmt.h"
 
 #include <Windows.h>
 
@@ -125,12 +123,8 @@ namespace p2boost {
 	// else that outlives its Push3DView/PopView; the main view clears with
 	// that color when its camera is in solid space (out of bounds).
 	void ShadowDepthReuse::repeat_draw_state( ) const noexcept {
-		sdk::IMatRenderContext* context = m_materials ? m_materials->GetRenderContext( ) : nullptr;
-		if( !context )
-			return;
-		using clear_color_fn_t = void( __thiscall* )( void*, unsigned char, unsigned char, unsigned char );
-		vfunc< clear_color_fn_t >( context, game::active( )->vmt_context_clear_color3 )( context, 255, 255, 255 );
-		context->Release( );
+		if( const sdk::RenderContextRef context{ m_materials } )
+			context->ClearColor3ub( 255, 255, 255 );
 	}
 
 	bool __fastcall ShadowDepthReuse::UpdateShadowDepthTexture( void* self, void*, void* color, void* depth, const void* view ) {
