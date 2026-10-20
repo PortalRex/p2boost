@@ -49,9 +49,16 @@ signature-located function instruction by instruction with addresses
 masked, which exposes any struct offset or vtable slot that moved. Two
 differ: the active-list sort workspace (`0x1198` vs `0x1188`) and
 `CMatSystemSurface`'s fields from the paint-mode flags on, 4 bytes lower
-(`surface_paint_flags` `0x102d8`). The surface vtable slots, the queued
-frame ring's `CMaterialSystem` fields, and the functions `EndFrame` calls
-are identical.
+(`surface_paint_flags` `0x102d8`). The queued frame ring's
+`CMaterialSystem` fields, the functions `EndFrame` calls, and
+`ComputeShadowDepthTextures` are identical. `compare_vtables.py` checks
+every interface slot p2boost calls by number (`CViewRender` 0–40, the
+render contexts, `CMaterialSystem`, `CTexture`, `CEngineClient`,
+`CModelRender`, `CShadowMgr`, `CClientShadowMgr`, `CHLClient`,
+`CMatSystemSurface`, `CCvar`, `VPanelWrapper`, `C_VGuiScreen`,
+`C_Portal_Player`): all hold the same methods. The one body that differs,
+`CTexture` slot 13, is `Download( Rect_t*, int )` in both; Portal 2's newer
+build wraps the download it moved to slot 32.
 
 `p2boost_enable 0|1` is the global switch: every performance change follows
 it, so one command compares stock and p2boost. Each change is also an entry

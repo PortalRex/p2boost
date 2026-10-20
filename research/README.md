@@ -21,8 +21,9 @@ and verify the changes described in [docs/technical.md](../docs/technical.md).
 - `tools/check_signatures.py <portal 2 root> <mod root>` matches every
   profile signature in both installs' modules, and
   `tools/compare_functions.py <a.dll> <b.dll> "<signature>"` diffs one
-  function between two builds with addresses masked; together they show
-  which profile fields a mod must override.
+  function between two builds with addresses masked, and
+  `tools/compare_vtables.py` does the same for numbered interface slots;
+  together they show which profile fields a mod must override.
 
 `harness/` drives the game unattended over the net console, without input
 injection or elevation:
