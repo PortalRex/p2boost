@@ -1,3 +1,4 @@
+#include "d3d9_util.h"
 #include "flat_textures.h"
 
 #include "flat_material_pass.h"
@@ -75,29 +76,25 @@ namespace p2boost {
 		if( FAILED( result ) || !source || !destination || !instance->enabled( ) )
 			return result;
 
-		IDirect3DTexture9* destination_texture{ };
-		if( FAILED( destination->GetContainer( __uuidof( IDirect3DTexture9 ), reinterpret_cast< void** >( &destination_texture ) ) ) ||
+		com_ptr< IDirect3DTexture9 > destination_texture;
+		if( FAILED( destination->GetContainer( __uuidof( IDirect3DTexture9 ), reinterpret_cast< void** >( destination_texture.ReleaseAndGetAddressOf( ) ) ) ) ||
 		    !destination_texture )
 			return result;
 
 		texture_record_t record;
 		{
 			std::shared_lock lock{ instance->m_mutex };
-			auto             found = instance->m_textures.find( destination_texture );
-			if( found == instance->m_textures.end( ) || !found->second.m_flat ) {
-				destination_texture->Release( );
+			auto             found = instance->m_textures.find( destination_texture.Get( ) );
+			if( found == instance->m_textures.end( ) || !found->second.m_flat )
 				return result;
-			}
 			record = found->second;
 		}
 
 		D3DSURFACE_DESC source_description{ };
 		D3DSURFACE_DESC destination_description{ };
 		if( FAILED( source->GetDesc( &source_description ) ) || FAILED( destination->GetDesc( &destination_description ) ) ||
-		    source_description.Format != record.m_format || destination_description.Format != record.m_format ) {
-			destination_texture->Release( );
+		    source_description.Format != record.m_format || destination_description.Format != record.m_format )
 			return result;
-		}
 
 		unsigned int       level  = std::numeric_limits< unsigned int >::max( );
 		const unsigned int levels = destination_texture->GetLevelCount( );
@@ -110,10 +107,8 @@ namespace p2boost {
 				break;
 			}
 		}
-		if( level == std::numeric_limits< unsigned int >::max( ) ) {
-			destination_texture->Release( );
+		if( level == std::numeric_limits< unsigned int >::max( ) )
 			return result;
-		}
 
 		const RECT         upload_source      = source_rect ? *source_rect : RECT{ 0, 0, static_cast< LONG >( source_description.Width ), static_cast< LONG >( source_description.Height ) };
 		const POINT        upload_destination = destination_point ? *destination_point : POINT{ 0, 0 };
@@ -121,30 +116,22 @@ namespace p2boost {
 		const unsigned int height             = static_cast< unsigned int >( upload_source.bottom - upload_source.top );
 		if( !width || !height || upload_destination.x < 0 || upload_destination.y < 0 ||
 		    static_cast< unsigned int >( upload_destination.x ) + width > destination_description.Width ||
-		    static_cast< unsigned int >( upload_destination.y ) + height > destination_description.Height ) {
-			destination_texture->Release( );
+		    static_cast< unsigned int >( upload_destination.y ) + height > destination_description.Height )
 			return result;
-		}
 
 		const RECT         flat_rect{ upload_destination.x,
                               upload_destination.y,
                               upload_destination.x + static_cast< LONG >( width ),
                               upload_destination.y + static_cast< LONG >( height ) };
-		IDirect3DSurface9* flat_surface{ };
-		D3DLOCKED_RECT     source_bits{ };
-		D3DLOCKED_RECT     destination_bits{ };
-		if( FAILED( record.m_flat->GetSurfaceLevel( level, &flat_surface ) ) || !flat_surface ||
-		    FAILED( source->LockRect( &source_bits, &upload_source, D3DLOCK_READONLY ) ) ) {
-			if( flat_surface )
-				flat_surface->Release( );
-			destination_texture->Release( );
+		com_ptr< IDirect3DSurface9 > flat_surface;
+		D3DLOCKED_RECT               source_bits{ };
+		D3DLOCKED_RECT               destination_bits{ };
+		if( FAILED( record.m_flat->GetSurfaceLevel( level, flat_surface.ReleaseAndGetAddressOf( ) ) ) || !flat_surface ||
+		    FAILED( source->LockRect( &source_bits, &upload_source, D3DLOCK_READONLY ) ) )
 			return result;
-		}
 
 		if( FAILED( flat_surface->LockRect( &destination_bits, &flat_rect, 0 ) ) ) {
 			source->UnlockRect( );
-			flat_surface->Release( );
-			destination_texture->Release( );
 			return result;
 		}
 
@@ -166,17 +153,15 @@ namespace p2boost {
 			instance->m_device_uploads.fetch_add( 1, std::memory_order_relaxed );
 		flat_surface->UnlockRect( );
 		source->UnlockRect( );
-		flat_surface->Release( );
 
 		if( written && complete_base ) {
 			std::unique_lock lock{ instance->m_mutex };
-			auto             found = instance->m_textures.find( destination_texture );
+			auto             found = instance->m_textures.find( destination_texture.Get( ) );
 			if( found != instance->m_textures.end( ) ) {
 				found->second.m_color       = color;
 				found->second.m_color_valid = true;
 			}
 		}
-		destination_texture->Release( );
 		return result;
 	}
 
@@ -532,11 +517,11 @@ namespace p2boost {
 			const unsigned int height       = region.m_has_rect ? static_cast< unsigned int >( region.m_rect.bottom - region.m_rect.top ) : level_height;
 			const flat_color_t color        = texture_record.m_color_valid ? texture_record.m_color : classify_flat_texture( texture_record.m_format, region.m_source.pBits, region.m_source.Pitch, width, height );
 
-			IDirect3DSurface9* flat_surface{ };
-			if( SUCCEEDED( texture_record.m_flat->GetSurfaceLevel( surface_record.m_level, &flat_surface ) ) && flat_surface ) {
+			com_ptr< IDirect3DSurface9 > flat_surface;
+			if( SUCCEEDED( texture_record.m_flat->GetSurfaceLevel( surface_record.m_level, flat_surface.ReleaseAndGetAddressOf( ) ) ) && flat_surface ) {
 				D3DLOCKED_RECT destination{ };
 				const RECT*    rect = region.m_has_rect ? &region.m_rect : nullptr;
-				if( SUCCEEDED( original_lock( flat_surface, &destination, rect, 0 ) ) ) {
+				if( SUCCEEDED( original_lock( flat_surface.Get( ), &destination, rect, 0 ) ) ) {
 					const bool written = write_flat_texture( texture_record.m_format,
 					                                         destination.pBits,
 					                                         destination.Pitch,
@@ -545,7 +530,7 @@ namespace p2boost {
 					                                         width,
 					                                         height,
 					                                         color );
-					original_unlock( flat_surface );
+					original_unlock( flat_surface.Get( ) );
 					if( written )
 						instance->m_surface_uploads.fetch_add( 1, std::memory_order_relaxed );
 
@@ -560,7 +545,6 @@ namespace p2boost {
 						}
 					}
 				}
-				flat_surface->Release( );
 			}
 		}
 

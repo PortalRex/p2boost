@@ -1,6 +1,7 @@
 #pragma once
 
 #include "console_commands.h"
+#include "d3d9_util.h"
 #include "display_adjustments.h"
 #include "hook.h"
 #include "portal2_context.h"
@@ -103,8 +104,8 @@ namespace p2boost {
 		bool          m_picture_rect_valid{ };
 
 		// render-thread resources; released before device Reset.
-		IDirect3DTexture9*    m_picture{ };
-		IDirect3DStateBlock9* m_state_block{ };
+		com_ptr< IDirect3DTexture9 >    m_picture;
+		com_ptr< IDirect3DStateBlock9 > m_state_block;
 		UINT                  m_picture_width{ };
 		UINT                  m_picture_height{ };
 		D3DFORMAT             m_picture_format{ D3DFMT_UNKNOWN };

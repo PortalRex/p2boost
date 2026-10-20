@@ -1,6 +1,7 @@
 #pragma once
 
 #include "console_commands.h"
+#include "d3d9_util.h"
 #include "frame_metrics.h"
 #include "hook.h"
 #include "interfaces.h"
@@ -57,9 +58,6 @@ namespace p2boost {
 		// split-screen slot renders. this is the engine-side companion to the
 		// degenerate-viewport clamp in SetViewport.
 		bool install_viewport_commit_patch( const portal2_modules_t& modules );
-		bool viewport_commit_patched( ) const noexcept {
-			return m_viewport_commit.installed( );
-		}
 
 		bool available( ) const noexcept {
 			return m_present.installed( ) && m_reset.installed( ) && m_set_viewport.installed( );
@@ -103,7 +101,6 @@ namespace p2boost {
 
 		bool apply_gamma( IDirect3DDevice9* device );
 		bool apply_viewport_scale( IDirect3DDevice9* device, const viewport_scale_t& view );
-		bool rendering_to_back_buffer( IDirect3DDevice9* device, D3DSURFACE_DESC& description ) const;
 		bool ensure_upscale_target( IDirect3DDevice9* device, LONG width, LONG height );
 		void clear_back_buffer_rects( IDirect3DDevice9* device, const D3DRECT* rects, DWORD count );
 		bool copy_back_buffer( IDirect3DDevice9*    device,
@@ -126,10 +123,10 @@ namespace p2boost {
 		con_var_t*                 m_viewport_scale{ };
 		con_var_t*                 m_viewport_upscale{ };
 		IDirect3DDevice9*          m_device{ };
-		IDirect3DTexture9*         m_copy_texture{ };
-		IDirect3DTexture9*         m_upscale_texture{ };
-		IDirect3DPixelShader9*     m_gamma_shader{ };
-		IDirect3DStateBlock9*      m_state_block{ };
+		com_ptr< IDirect3DTexture9 >     m_copy_texture;
+		com_ptr< IDirect3DTexture9 >     m_upscale_texture;
+		com_ptr< IDirect3DPixelShader9 > m_gamma_shader;
+		com_ptr< IDirect3DStateBlock9 >  m_state_block;
 		unsigned int               m_copy_width{ };
 		unsigned int               m_copy_height{ };
 		unsigned int               m_upscale_width{ };

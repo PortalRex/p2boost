@@ -2,6 +2,7 @@
 
 #include "game_profile.h"
 #include "d3d9_slots.h"
+#include "d3d9_util.h"
 #include "monitor_gamma_shader.h"
 #include "portal2_context.h"
 #include "qpc.h"
@@ -15,17 +16,6 @@ namespace p2boost {
 	namespace {
 		constexpr float neutral_monitor_gamma{ 2.2f };
 		constexpr float gamma_epsilon{ 0.001f };
-
-		struct screen_vertex_t {
-			float x;
-			float y;
-			float z;
-			float rhw;
-			float u;
-			float v;
-		};
-
-		constexpr DWORD screen_vertex_format{ D3DFVF_XYZRHW | D3DFVF_TEX1 };
 
 		bool same_rect( const RECT& left, const RECT& right ) noexcept {
 			return left.left == right.left && left.top == right.top && left.right == right.right && left.bottom == right.bottom;
@@ -171,7 +161,7 @@ namespace p2boost {
 		                                   D3DUSAGE_RENDERTARGET,
 		                                   description.Format,
 		                                   D3DPOOL_DEFAULT,
-		                                   &m_copy_texture,
+		                                   m_copy_texture.ReleaseAndGetAddressOf( ),
 		                                   nullptr ) ) )
 			return false;
 
@@ -188,23 +178,14 @@ namespace p2boost {
 		    m_upscale_height == static_cast< unsigned int >( padded_height ) )
 			return true;
 
-		if( m_upscale_texture )
-			m_upscale_texture->Release( );
-		m_upscale_texture = nullptr;
-
 		// one pixel of black padding on every side gives the linear expansion
 		// a guaranteed-clean sample at the source boundary. the region outside
 		// the source rect is cleared once here and never written again, so the
 		// border stays black even when the scale changes mid-frame.
-		D3DSURFACE_DESC    description{ };
-		IDirect3DSurface9* back_buffer{ };
-		if( !SUCCEEDED( device->GetBackBuffer( 0, 0, D3DBACKBUFFER_TYPE_MONO, &back_buffer ) ) || !back_buffer ||
-		    FAILED( back_buffer->GetDesc( &description ) ) ) {
-			if( back_buffer )
-				back_buffer->Release( );
+		m_upscale_texture.Reset( );
+		D3DSURFACE_DESC description{ };
+		if( !back_buffer_description( device, description ) )
 			return false;
-		}
-		back_buffer->Release( );
 
 		if( FAILED( device->CreateTexture( static_cast< UINT >( padded_width ),
 		                                   static_cast< UINT >( padded_height ),
@@ -212,7 +193,7 @@ namespace p2boost {
 		                                   D3DUSAGE_RENDERTARGET,
 		                                   description.Format,
 		                                   D3DPOOL_DEFAULT,
-		                                   &m_upscale_texture,
+		                                   m_upscale_texture.ReleaseAndGetAddressOf( ),
 		                                   nullptr ) ) )
 			return false;
 
@@ -221,28 +202,26 @@ namespace p2boost {
 
 		// clear the padding while the surface is bound, then restore the
 		// device's original render target so the engine's next draw is safe.
-		IDirect3DSurface9* surface{ };
-		IDirect3DSurface9* previous_target{ };
-		if( SUCCEEDED( m_upscale_texture->GetSurfaceLevel( 0, &surface ) ) && surface ) {
-			if( SUCCEEDED( device->GetRenderTarget( 0, &previous_target ) ) ) {
-				const D3DVIEWPORT9 padded_viewport{ 0, 0, m_upscale_width, m_upscale_height, 0.0f, 1.0f };
-				m_internal_viewport = true;
-				device->SetViewport( &padded_viewport );
-				device->SetRenderTarget( 0, surface );
-				device->Clear( 0, nullptr, D3DCLEAR_TARGET, 0x00000000, 1.0f, 0 );
-				device->SetRenderTarget( 0, previous_target );
-				previous_target->Release( );
-				m_internal_viewport = false;
-			}
-			surface->Release( );
+		com_ptr< IDirect3DSurface9 > surface;
+		com_ptr< IDirect3DSurface9 > previous_target;
+		if( SUCCEEDED( m_upscale_texture->GetSurfaceLevel( 0, surface.ReleaseAndGetAddressOf( ) ) ) && surface &&
+		    SUCCEEDED( device->GetRenderTarget( 0, previous_target.ReleaseAndGetAddressOf( ) ) ) ) {
+			const D3DVIEWPORT9 padded_viewport{ 0, 0, m_upscale_width, m_upscale_height, 0.0f, 1.0f };
+			m_internal_viewport = true;
+			device->SetViewport( &padded_viewport );
+			device->SetRenderTarget( 0, surface.Get( ) );
+			device->Clear( 0, nullptr, D3DCLEAR_TARGET, 0x00000000, 1.0f, 0 );
+			device->SetRenderTarget( 0, previous_target.Get( ) );
+			m_internal_viewport = false;
 		}
 		return true;
 	}
 
 	bool DisplayAdjustments::ensure_gamma_resources( IDirect3DDevice9* device ) {
-		if( !m_gamma_shader && FAILED( device->CreatePixelShader( reinterpret_cast< const DWORD* >( g_monitor_gamma_shader ), &m_gamma_shader ) ) )
+		if( !m_gamma_shader &&
+		    FAILED( device->CreatePixelShader( reinterpret_cast< const DWORD* >( g_monitor_gamma_shader ), m_gamma_shader.ReleaseAndGetAddressOf( ) ) ) )
 			return false;
-		if( !m_state_block && FAILED( device->CreateStateBlock( D3DSBT_ALL, &m_state_block ) ) )
+		if( !m_state_block && FAILED( device->CreateStateBlock( D3DSBT_ALL, m_state_block.ReleaseAndGetAddressOf( ) ) ) )
 			return false;
 		return true;
 	}
@@ -251,44 +230,26 @@ namespace p2boost {
 	                                           const RECT*          source,
 	                                           const RECT*          destination,
 	                                           D3DTEXTUREFILTERTYPE filter ) {
-		IDirect3DSurface9* back_buffer{ };
-		if( FAILED( device->GetBackBuffer( 0, 0, D3DBACKBUFFER_TYPE_MONO, &back_buffer ) ) || !back_buffer )
+		const com_ptr< IDirect3DSurface9 > surface = back_buffer( device );
+		D3DSURFACE_DESC                    description{ };
+		com_ptr< IDirect3DSurface9 >       copy_surface;
+		if( !surface || FAILED( surface->GetDesc( &description ) ) || !ensure_copy_target( device, description ) ||
+		    FAILED( m_copy_texture->GetSurfaceLevel( 0, copy_surface.ReleaseAndGetAddressOf( ) ) ) || !copy_surface )
 			return false;
-
-		D3DSURFACE_DESC    description{ };
-		IDirect3DSurface9* copy_surface{ };
-		const bool         ready = SUCCEEDED( back_buffer->GetDesc( &description ) ) && ensure_copy_target( device, description ) &&
-		                   SUCCEEDED( m_copy_texture->GetSurfaceLevel( 0, &copy_surface ) ) && copy_surface;
-		if( !ready ) {
-			if( copy_surface )
-				copy_surface->Release( );
-			back_buffer->Release( );
-			return false;
-		}
 
 		const RECT  full_target{ 0, 0, static_cast< LONG >( description.Width ), static_cast< LONG >( description.Height ) };
 		const RECT* copy_destination = destination ? destination : &full_target;
-		const bool  copied           = SUCCEEDED( device->StretchRect( back_buffer, source, copy_surface, copy_destination, filter ) );
-		copy_surface->Release( );
-		back_buffer->Release( );
-		return copied;
+		return SUCCEEDED( device->StretchRect( surface.Get( ), source, copy_surface.Get( ), copy_destination, filter ) );
 	}
 
 	bool DisplayAdjustments::restore_back_buffer( IDirect3DDevice9* device ) {
 		if( !m_copy_texture )
 			return false;
 
-		IDirect3DSurface9* copy_surface{ };
-		IDirect3DSurface9* back_buffer{ };
-		const bool         ready = SUCCEEDED( m_copy_texture->GetSurfaceLevel( 0, &copy_surface ) ) && copy_surface &&
-		                   SUCCEEDED( device->GetBackBuffer( 0, 0, D3DBACKBUFFER_TYPE_MONO, &back_buffer ) ) && back_buffer;
-		const bool restored = ready &&
-		                      SUCCEEDED( device->StretchRect( copy_surface, nullptr, back_buffer, nullptr, D3DTEXF_NONE ) );
-		if( back_buffer )
-			back_buffer->Release( );
-		if( copy_surface )
-			copy_surface->Release( );
-		if( restored )
+		com_ptr< IDirect3DSurface9 >       copy_surface;
+		const com_ptr< IDirect3DSurface9 > surface = back_buffer( device );
+		if( surface && SUCCEEDED( m_copy_texture->GetSurfaceLevel( 0, copy_surface.ReleaseAndGetAddressOf( ) ) ) && copy_surface &&
+		    SUCCEEDED( device->StretchRect( copy_surface.Get( ), nullptr, surface.Get( ), nullptr, D3DTEXF_NONE ) ) )
 			return true;
 
 		// reverse StretchRect support is driver-dependent, and a multisampled
@@ -316,39 +277,14 @@ namespace p2boost {
 		if( !ensure_upscale_target( device, source_width, source_height ) )
 			return false;
 
-		IDirect3DSurface9* stage_surface{ };
-		IDirect3DSurface9* back_buffer{ };
-		if( !SUCCEEDED( m_upscale_texture->GetSurfaceLevel( 0, &stage_surface ) ) || !stage_surface ||
-		    !SUCCEEDED( device->GetBackBuffer( 0, 0, D3DBACKBUFFER_TYPE_MONO, &back_buffer ) ) || !back_buffer ) {
-			if( stage_surface )
-				stage_surface->Release( );
-			if( back_buffer )
-				back_buffer->Release( );
+		com_ptr< IDirect3DSurface9 >       stage_surface;
+		const com_ptr< IDirect3DSurface9 > surface = back_buffer( device );
+		if( !surface || FAILED( m_upscale_texture->GetSurfaceLevel( 0, stage_surface.ReleaseAndGetAddressOf( ) ) ) || !stage_surface )
 			return false;
-		}
 
 		const RECT stage_rect{ 1, 1, source_width + 1, source_height + 1 };
-		const bool captured = SUCCEEDED( device->StretchRect( back_buffer, &view.m_source, stage_surface, &stage_rect, D3DTEXF_NONE ) );
-		bool       expanded = false;
-		if( captured )
-			expanded = SUCCEEDED( device->StretchRect( stage_surface, &stage_rect, back_buffer, &view.m_destination, D3DTEXF_LINEAR ) );
-
-		back_buffer->Release( );
-		stage_surface->Release( );
-		return expanded;
-	}
-
-	bool DisplayAdjustments::rendering_to_back_buffer( IDirect3DDevice9* device, D3DSURFACE_DESC& description ) const {
-		IDirect3DSurface9* render_target{ };
-		IDirect3DSurface9* back_buffer{ };
-		const bool         acquired = SUCCEEDED( device->GetRenderTarget( 0, &render_target ) ) && render_target &&
-		                      SUCCEEDED( device->GetBackBuffer( 0, 0, D3DBACKBUFFER_TYPE_MONO, &back_buffer ) ) && back_buffer;
-		const bool matches = acquired && render_target == back_buffer && SUCCEEDED( back_buffer->GetDesc( &description ) );
-		if( back_buffer )
-			back_buffer->Release( );
-		if( render_target )
-			render_target->Release( );
-		return matches;
+		return SUCCEEDED( device->StretchRect( surface.Get( ), &view.m_source, stage_surface.Get( ), &stage_rect, D3DTEXF_NONE ) ) &&
+		       SUCCEEDED( device->StretchRect( stage_surface.Get( ), &stage_rect, surface.Get( ), &view.m_destination, D3DTEXF_LINEAR ) );
 	}
 
 	// D3D9 interprets Clear pRects relative to the current viewport, which at
@@ -360,18 +296,11 @@ namespace p2boost {
 		if( !device || !rects || !count )
 			return;
 
-		D3DVIEWPORT9 previous{ };
-		const bool   has_previous = SUCCEEDED( device->GetViewport( &previous ) );
-
-		D3DSURFACE_DESC    description{ };
-		IDirect3DSurface9* back_buffer{ };
-		if( !SUCCEEDED( device->GetBackBuffer( 0, 0, D3DBACKBUFFER_TYPE_MONO, &back_buffer ) ) || !back_buffer ||
-		    FAILED( back_buffer->GetDesc( &description ) ) ) {
-			if( back_buffer )
-				back_buffer->Release( );
+		D3DVIEWPORT9    previous{ };
+		const bool      has_previous = SUCCEEDED( device->GetViewport( &previous ) );
+		D3DSURFACE_DESC description{ };
+		if( !back_buffer_description( device, description ) )
 			return;
-		}
-		back_buffer->Release( );
 
 		const D3DVIEWPORT9 fullscreen{ 0, 0, description.Width, description.Height, 0.0f, 1.0f };
 		m_internal_viewport = true;
@@ -386,14 +315,6 @@ namespace p2boost {
 		if( !m_copy_texture || !m_gamma_shader || !m_state_block || FAILED( m_state_block->Capture( ) ) )
 			return false;
 
-		const float           width  = static_cast< float >( m_copy_width );
-		const float           height = static_cast< float >( m_copy_height );
-		const screen_vertex_t vertices[]{
-		    { -0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f },
-		    { width - 0.5f, -0.5f, 0.0f, 1.0f, 1.0f, 0.0f },
-		    { -0.5f, height - 0.5f, 0.0f, 1.0f, 0.0f, 1.0f },
-		    { width - 0.5f, height - 0.5f, 0.0f, 1.0f, 1.0f, 1.0f },
-		};
 		const D3DVIEWPORT9 viewport{ 0, 0, m_copy_width, m_copy_height, 0.0f, 1.0f };
 		const float        curve[ 4 ]{ curve_value, intensity, 0.0f, 0.0f };
 
@@ -401,9 +322,8 @@ namespace p2boost {
 		device->SetViewport( &viewport );
 		m_internal_viewport = false;
 		device->SetVertexShader( nullptr );
-		device->SetPixelShader( m_gamma_shader );
-		device->SetFVF( screen_vertex_format );
-		device->SetTexture( 0, m_copy_texture );
+		device->SetPixelShader( m_gamma_shader.Get( ) );
+		device->SetTexture( 0, m_copy_texture.Get( ) );
 		device->SetPixelShaderConstantF( 0, curve, 1 );
 		device->SetRenderState( D3DRS_ZENABLE, FALSE );
 		device->SetRenderState( D3DRS_ALPHABLENDENABLE, FALSE );
@@ -412,7 +332,8 @@ namespace p2boost {
 		device->SetSamplerState( 0, D3DSAMP_SRGBTEXTURE, 0 );
 		device->SetSamplerState( 0, D3DSAMP_MINFILTER, D3DTEXF_POINT );
 		device->SetSamplerState( 0, D3DSAMP_MAGFILTER, D3DTEXF_POINT );
-		const bool drawn = SUCCEEDED( device->DrawPrimitiveUP( D3DPT_TRIANGLESTRIP, 2, vertices, sizeof( screen_vertex_t ) ) );
+		const bool drawn =
+		    draw_screen_quad( device, screen_quad( 0.0f, 0.0f, static_cast< float >( m_copy_width ), static_cast< float >( m_copy_height ) ) );
 
 		// restore state even after a failed draw; callers only need to know
 		// whether this pass actually copied pixels.
@@ -436,23 +357,15 @@ namespace p2boost {
 	}
 
 	void DisplayAdjustments::release_resources( ) {
-		if( m_state_block )
-			m_state_block->Release( );
-		if( m_gamma_shader )
-			m_gamma_shader->Release( );
-		if( m_copy_texture )
-			m_copy_texture->Release( );
-		if( m_upscale_texture )
-			m_upscale_texture->Release( );
-		m_state_block     = nullptr;
-		m_gamma_shader    = nullptr;
-		m_copy_texture    = nullptr;
-		m_upscale_texture = nullptr;
-		m_copy_width      = 0;
-		m_copy_height     = 0;
-		m_copy_format     = D3DFMT_UNKNOWN;
-		m_upscale_width   = 0;
-		m_upscale_height  = 0;
+		m_state_block.Reset( );
+		m_gamma_shader.Reset( );
+		m_copy_texture.Reset( );
+		m_upscale_texture.Reset( );
+		m_copy_width     = 0;
+		m_copy_height    = 0;
+		m_copy_format    = D3DFMT_UNKNOWN;
+		m_upscale_width  = 0;
+		m_upscale_height = 0;
 	}
 
 	HRESULT __stdcall DisplayAdjustments::Present( IDirect3DDevice9* device,
@@ -463,14 +376,11 @@ namespace p2boost {
 		DisplayAdjustments* instance = m_instance;
 		const auto          next     = instance ? instance->m_present.previous< present_fn_t >( ) : nullptr;
 		if( instance && instance->m_scaled_view_pending ) {
-			const RECT&        destination_rect = instance->m_scaled_view.m_destination;
-			IDirect3DSurface9* back_buffer{ };
-			D3DSURFACE_DESC    description{ };
-			const bool         described = SUCCEEDED( device->GetBackBuffer( 0, 0, D3DBACKBUFFER_TYPE_MONO, &back_buffer ) ) && back_buffer &&
-			                       SUCCEEDED( back_buffer->GetDesc( &description ) );
-			if( back_buffer )
-				back_buffer->Release( );
-			const bool subview = described && ( destination_rect.left != 0 || destination_rect.top != 0 || destination_rect.right != static_cast< LONG >( description.Width ) || destination_rect.bottom != static_cast< LONG >( description.Height ) );
+			// a full-screen destination has nothing to expand into.
+			D3DSURFACE_DESC description{ };
+			const bool      subview = back_buffer_description( device, description ) &&
+			                     !same_rect( instance->m_scaled_view.m_destination,
+			                                 RECT{ 0, 0, static_cast< LONG >( description.Width ), static_cast< LONG >( description.Height ) } );
 			if( subview && instance->apply_viewport_scale( device, instance->m_scaled_view ) )
 				instance->m_viewport_passes.fetch_add( 1, std::memory_order_relaxed );
 			instance->m_scaled_view_pending = false;
@@ -556,7 +466,7 @@ namespace p2boost {
 			return next ? next( device, viewport ) : D3DERR_INVALIDCALL;
 
 		D3DSURFACE_DESC description{ };
-		if( instance->rendering_to_back_buffer( device, description ) ) {
+		if( back_buffer_is_target( device, description ) ) {
 			const RECT incoming{ static_cast< LONG >( viewport->X ),
 			                     static_cast< LONG >( viewport->Y ),
 			                     static_cast< LONG >( viewport->X + viewport->Width ),

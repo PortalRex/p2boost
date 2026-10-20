@@ -41,13 +41,6 @@ namespace p2boost {
 			std::atomic_int* m_pending;
 		};
 
-		struct picture_vertex_t {
-			float m_x, m_y, m_z, m_rhw;
-			float m_u, m_v;
-		};
-
-		constexpr DWORD picture_vertex_format{ D3DFVF_XYZRHW | D3DFVF_TEX1 };
-
 		// the queued context returns &m_CallQueueExternal (lea eax,[ecx+disp32];
 		// ret) and the immediate context returns null (xor eax,eax; ret).
 		bool call_queue_getter_shape( const Module& module, Address function ) noexcept {
@@ -252,15 +245,9 @@ namespace p2boost {
 		if( !device )
 			return;
 
-		// only act on the back buffer: the remote slot always finishes there.
-		IDirect3DSurface9* render_target{ };
-		IDirect3DSurface9* back_buffer{ };
-		D3DSURFACE_DESC    description{ };
-		const bool         ready = SUCCEEDED( device->GetRenderTarget( 0, &render_target ) ) && render_target &&
-		                   SUCCEEDED( device->GetBackBuffer( 0, 0, D3DBACKBUFFER_TYPE_MONO, &back_buffer ) ) && back_buffer &&
-		                   render_target == back_buffer && SUCCEEDED( back_buffer->GetDesc( &description ) );
-		if( render_target )
-			render_target->Release( );
+		// only act on the back buffer: the partner's slot always finishes there.
+		D3DSURFACE_DESC description{ };
+		const bool      ready = back_buffer_is_target( device, description );
 
 		const RECT rect{ std::max< LONG >( requested.left, 0 ),
 		                 std::max< LONG >( requested.top, 0 ),
@@ -271,17 +258,16 @@ namespace p2boost {
 		const UINT height     = valid_rect ? static_cast< UINT >( rect.bottom - rect.top ) : 0;
 
 		if( save ) {
-			bool               saved = false;
-			IDirect3DSurface9* surface{ };
+			bool                         saved = false;
+			com_ptr< IDirect3DSurface9 > surface;
 			// the HUD normally sets the slot's unscaled viewport, which expands a
 			// scaled scene; a slot that drew no HUD still has it pending here.
 			if( valid_rect && m_display )
 				m_display->finish_scaled_view( device, rect );
 			if( valid_rect && ensure_picture( device, width, height, description.Format ) &&
-			    SUCCEEDED( m_picture->GetSurfaceLevel( 0, &surface ) ) && surface ) {
+			    SUCCEEDED( m_picture->GetSurfaceLevel( 0, surface.ReleaseAndGetAddressOf( ) ) ) && surface ) {
 				// a multisampled back buffer resolves into the single-sample copy.
-				saved = SUCCEEDED( device->StretchRect( back_buffer, &rect, surface, nullptr, D3DTEXF_NONE ) );
-				surface->Release( );
+				saved = SUCCEEDED( device->StretchRect( back_buffer( device ).Get( ), &rect, surface.Get( ), nullptr, D3DTEXF_NONE ) );
 			}
 			m_picture_ready.store( saved, std::memory_order_release );
 		} else if( valid_rect && m_picture && m_picture_ready.load( std::memory_order_acquire ) && m_picture_width == width &&
@@ -290,21 +276,16 @@ namespace p2boost {
 			// is not portable D3D9.
 			draw_picture( device, rect );
 		}
-
-		if( back_buffer )
-			back_buffer->Release( );
 	}
 
 	bool PartnerView::ensure_picture( IDirect3DDevice9* device, UINT width, UINT height, D3DFORMAT format ) {
 		if( m_picture && m_picture_width == width && m_picture_height == height && m_picture_format == format )
 			return true;
 
-		if( m_picture )
-			m_picture->Release( );
-		m_picture = nullptr;
+		m_picture.Reset( );
 		m_picture_ready.store( false, std::memory_order_release );
-		if( FAILED( device->CreateTexture( width, height, 1, D3DUSAGE_RENDERTARGET, format, D3DPOOL_DEFAULT, &m_picture, nullptr ) ) ) {
-			m_picture = nullptr;
+		if( FAILED( device->CreateTexture( width, height, 1, D3DUSAGE_RENDERTARGET, format, D3DPOOL_DEFAULT, m_picture.ReleaseAndGetAddressOf( ), nullptr ) ) ) {
+			m_picture.Reset( );
 			return false;
 		}
 
@@ -315,37 +296,22 @@ namespace p2boost {
 	}
 
 	bool PartnerView::draw_picture( IDirect3DDevice9* device, const RECT& rect ) {
-		if( !m_state_block && FAILED( device->CreateStateBlock( D3DSBT_ALL, &m_state_block ) ) ) {
-			m_state_block = nullptr;
+		if( !m_state_block && FAILED( device->CreateStateBlock( D3DSBT_ALL, m_state_block.ReleaseAndGetAddressOf( ) ) ) ) {
+			m_state_block.Reset( );
 			return false;
 		}
 		if( FAILED( m_state_block->Capture( ) ) )
 			return false;
 
-		D3DSURFACE_DESC    description{ };
-		IDirect3DSurface9* back_buffer{ };
-		if( FAILED( device->GetBackBuffer( 0, 0, D3DBACKBUFFER_TYPE_MONO, &back_buffer ) ) || !back_buffer )
+		D3DSURFACE_DESC description{ };
+		if( !back_buffer_description( device, description ) )
 			return false;
-		back_buffer->GetDesc( &description );
-		back_buffer->Release( );
-
-		const float            left   = static_cast< float >( rect.left ) - 0.5f;
-		const float            top    = static_cast< float >( rect.top ) - 0.5f;
-		const float            right  = static_cast< float >( rect.right ) - 0.5f;
-		const float            bottom = static_cast< float >( rect.bottom ) - 0.5f;
-		const picture_vertex_t vertices[]{
-		    { left, top, 0.0f, 1.0f, 0.0f, 0.0f },
-		    { right, top, 0.0f, 1.0f, 1.0f, 0.0f },
-		    { left, bottom, 0.0f, 1.0f, 0.0f, 1.0f },
-		    { right, bottom, 0.0f, 1.0f, 1.0f, 1.0f },
-		};
 		const D3DVIEWPORT9 viewport{ 0, 0, description.Width, description.Height, 0.0f, 1.0f };
 
 		device->SetViewport( &viewport );
 		device->SetVertexShader( nullptr );
 		device->SetPixelShader( nullptr );
-		device->SetFVF( picture_vertex_format );
-		device->SetTexture( 0, m_picture );
+		device->SetTexture( 0, m_picture.Get( ) );
 		device->SetTexture( 1, nullptr );
 		device->SetTextureStageState( 0, D3DTSS_COLOROP, D3DTOP_SELECTARG1 );
 		device->SetTextureStageState( 0, D3DTSS_COLORARG1, D3DTA_TEXTURE );
@@ -371,7 +337,10 @@ namespace p2boost {
 		device->SetSamplerState( 0, D3DSAMP_MIPFILTER, D3DTEXF_NONE );
 		device->SetSamplerState( 0, D3DSAMP_ADDRESSU, D3DTADDRESS_CLAMP );
 		device->SetSamplerState( 0, D3DSAMP_ADDRESSV, D3DTADDRESS_CLAMP );
-		const bool drawn = SUCCEEDED( device->DrawPrimitiveUP( D3DPT_TRIANGLESTRIP, 2, vertices, sizeof( picture_vertex_t ) ) );
+		const bool drawn = draw_screen_quad( device, screen_quad( static_cast< float >( rect.left ),
+		                                                          static_cast< float >( rect.top ),
+		                                                          static_cast< float >( rect.right ),
+		                                                          static_cast< float >( rect.bottom ) ) );
 
 		m_state_block->Apply( );
 		return drawn;
@@ -379,12 +348,8 @@ namespace p2boost {
 
 	void PartnerView::release_device_resources( ) noexcept {
 		m_picture_ready.store( false, std::memory_order_release );
-		if( m_state_block )
-			m_state_block->Release( );
-		if( m_picture )
-			m_picture->Release( );
-		m_state_block    = nullptr;
-		m_picture        = nullptr;
+		m_state_block.Reset( );
+		m_picture.Reset( );
 		m_picture_width  = 0;
 		m_picture_height = 0;
 		m_picture_format = D3DFMT_UNKNOWN;
