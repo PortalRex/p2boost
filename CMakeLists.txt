@@ -83,6 +83,7 @@ target_link_libraries(p2boost_core PRIVATE bcrypt)
 
 add_library(p2boost SHARED
   src/plugin/plugin.cpp
+  src/plugin/plugin_commands.cpp
   src/engine/console.cpp
   src/engine/console_commands.cpp
   src/platform/nvidia_profile.cpp
