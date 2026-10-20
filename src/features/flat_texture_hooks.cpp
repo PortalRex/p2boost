@@ -149,8 +149,6 @@ namespace p2boost {
 		                                                 width,
 		                                                 height,
 		                                                 color );
-		if( written )
-			instance->m_device_uploads.fetch_add( 1, std::memory_order_relaxed );
 		flat_surface->UnlockRect( );
 		source->UnlockRect( );
 
@@ -235,7 +233,6 @@ namespace p2boost {
 		}
 
 		if( complete ) {
-			instance->m_device_uploads.fetch_add( 1, std::memory_order_relaxed );
 			std::unique_lock lock{ instance->m_mutex };
 			auto             found = instance->m_textures.find( static_cast< IDirect3DTexture9* >( destination ) );
 			if( found != instance->m_textures.end( ) ) {
@@ -273,11 +270,9 @@ namespace p2boost {
 			const bool learned_flat   = found != instance->m_textures.end( ) && found->second.m_flat_texture;
 			if( ( current_normal || ( learned_normal && !learned_flat ) ) && instance->m_flat_normal ) {
 				selected = instance->m_flat_normal;
-				instance->m_substitutions.fetch_add( 1, std::memory_order_relaxed );
 			} else if( found != instance->m_textures.end( ) && ( current_flat || learned_flat ) && found->second.m_flat &&
 			           found->second.m_color_valid ) {
 				selected = found->second.m_flat;
-				instance->m_substitutions.fetch_add( 1, std::memory_order_relaxed );
 			}
 		}
 
@@ -420,7 +415,6 @@ namespace p2boost {
 				                                         color );
 				original_unlock( record.m_flat, level );
 				if( written ) {
-					instance->m_texture_uploads.fetch_add( 1, std::memory_order_relaxed );
 					const bool complete_base = level == 0 && ( !region.m_has_rect || ( region.m_rect.left == 0 && region.m_rect.top == 0 && region.m_rect.right == static_cast< LONG >( level_width ) && region.m_rect.bottom == static_cast< LONG >( level_height ) ) );
 					if( complete_base ) {
 						std::unique_lock lock{ instance->m_mutex };
@@ -531,8 +525,6 @@ namespace p2boost {
 					                                         height,
 					                                         color );
 					original_unlock( flat_surface.Get( ) );
-					if( written )
-						instance->m_surface_uploads.fetch_add( 1, std::memory_order_relaxed );
 
 					const bool complete_base = surface_record.m_level == 0 &&
 					                           ( !region.m_has_rect || ( region.m_rect.left == 0 && region.m_rect.top == 0 && region.m_rect.right == static_cast< LONG >( level_width ) && region.m_rect.bottom == static_cast< LONG >( level_height ) ) );

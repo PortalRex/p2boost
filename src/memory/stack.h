@@ -25,11 +25,6 @@ namespace p2boost {
 			return m_addr ? Address{ at< std::uintptr_t >( sizeof( std::uintptr_t ) ) } : Address{ };
 		}
 
-		// get the address that stores the return address.
-		__forceinline Address AddressOfReturnAddress( ) const noexcept {
-			return m_addr ? add( sizeof( std::uintptr_t ) ) : Address{ };
-		}
-
 		// walk to the caller's stack frame.
 		__forceinline Stack next( ) const noexcept {
 			return Stack{ Address{ at< std::uintptr_t >( ) } };

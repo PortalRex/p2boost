@@ -51,18 +51,6 @@ namespace p2boost {
 		size_t        texture_count( ) const noexcept;
 		size_t        ready_texture_count( ) const noexcept;
 		bool          normal_ready( ) const noexcept;
-		std::uint64_t substitution_count( ) const noexcept {
-			return m_substitutions.load( std::memory_order_relaxed );
-		}
-		std::uint64_t texture_upload_count( ) const noexcept {
-			return m_texture_uploads.load( std::memory_order_relaxed );
-		}
-		std::uint64_t surface_upload_count( ) const noexcept {
-			return m_surface_uploads.load( std::memory_order_relaxed );
-		}
-		std::uint64_t device_upload_count( ) const noexcept {
-			return m_device_uploads.load( std::memory_order_relaxed );
-		}
 
 	private:
 		enum class companion_policy_t {
@@ -190,12 +178,8 @@ namespace p2boost {
 		surface_map_t             m_surfaces;
 		surface_locks_t           m_surface_locks;
 
-		// hot-path flags and counters remain lock-free.
-		std::atomic_bool     m_enabled{ };
-		std::atomic_uint64_t m_substitutions{ };
-		std::atomic_uint64_t m_texture_uploads{ };
-		std::atomic_uint64_t m_surface_uploads{ };
-		std::atomic_uint64_t m_device_uploads{ };
+		// the hot-path flag remains lock-free.
+		std::atomic_bool m_enabled{ };
 	};
 
 }

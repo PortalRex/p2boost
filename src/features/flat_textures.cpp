@@ -90,10 +90,6 @@ namespace p2boost {
 		m_engine_vgui     = nullptr;
 		m_material_system = nullptr;
 		m_device          = nullptr;
-		m_substitutions.store( 0, std::memory_order_relaxed );
-		m_texture_uploads.store( 0, std::memory_order_relaxed );
-		m_surface_uploads.store( 0, std::memory_order_relaxed );
-		m_device_uploads.store( 0, std::memory_order_relaxed );
 		if( m_instance == this )
 			m_instance = nullptr;
 	}

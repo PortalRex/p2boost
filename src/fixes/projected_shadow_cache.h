@@ -43,10 +43,6 @@ namespace p2boost {
 			m_exact_cull.store( enabled, std::memory_order_relaxed );
 		}
 
-		bool exact_cull( ) const noexcept {
-			return m_exact_cull.load( std::memory_order_relaxed );
-		}
-
 		// hand selected lights to ComputeShadowDepthTextures in handle order
 		// when that cannot change which lights receive depth slots.
 		void set_stable_depth_order( bool enabled ) noexcept {
@@ -59,10 +55,6 @@ namespace p2boost {
 		void set_view_listener( view_listener_fn_t listener, void* context ) noexcept {
 			m_view_context = context;
 			m_view_listener.store( listener, std::memory_order_release );
-		}
-
-		bool stable_depth_order_available( ) const noexcept {
-			return m_depth_capacity_offset > 0;
 		}
 
 		bool installed( ) const noexcept {
