@@ -2,6 +2,7 @@
 
 #include "address.h"
 #include "display_adjustments.h"
+#include "functor.h"
 #include "game_profile.h"
 #include "sdk.h"
 
@@ -14,42 +15,26 @@ namespace p2boost {
 	PartnerView* PartnerView::m_instance{ };
 
 	namespace {
-		// a queued render-thread call. CMatQueuedRenderContext's call queue
-		// AddRefs the functor through slot 0, drops the caller's reference
-		// through slot 1, and later invokes slot 3; slot 2 is never called.
-		class device_call_t final {
+		// a device call queued in render-thread order. pending counts the calls
+		// not yet destroyed, so remove() can wait for them before unloading.
+		class device_call_t final : public sdk::Functor< device_call_t > {
 		public:
 			device_call_t( PartnerView* owner, bool save, const RECT& rect, std::atomic_int* pending ) noexcept
 			    : m_owner{ owner }, m_save{ save }, m_rect{ rect }, m_pending{ pending } {
 				m_pending->fetch_add( 1, std::memory_order_acq_rel );
 			}
 
-			virtual int AddRef( ) {
-				return m_references.fetch_add( 1, std::memory_order_acq_rel ) + 1;
+			~device_call_t( ) {
+				m_pending->fetch_sub( 1, std::memory_order_acq_rel );
 			}
 
-			virtual int Release( ) {
-				const int remaining = m_references.fetch_sub( 1, std::memory_order_acq_rel ) - 1;
-				if( remaining == 0 ) {
-					std::atomic_int* pending = m_pending;
-					delete this;
-					pending->fetch_sub( 1, std::memory_order_acq_rel );
-				}
-				return remaining;
-			}
-
-			virtual int Reserved( ) {
-				return 0;
-			}
-
-			virtual void Run( ) {
+			void Run( ) override {
 				if( m_owner )
 					m_owner->run_device_call( m_save, m_rect );
 			}
 
 		private:
-			std::atomic_int  m_references{ 1 };
-			PartnerView*      m_owner;
+			PartnerView*     m_owner;
 			bool             m_save;
 			RECT             m_rect;
 			std::atomic_int* m_pending;

@@ -1,6 +1,7 @@
 #include "queued_frames.h"
 
 #include "address.h"
+#include "functor.h"
 #include "game_profile.h"
 #include "interfaces.h"
 #include "vmt.h"
@@ -100,39 +101,24 @@ namespace p2boost {
 			return vfunc< int_fn_t >( object, vmt_release )( object );
 		}
 
-		// the functor a frame job runs: CFunctor's layout is AddRef, Release, a
-		// destructor the job never calls, then operator().
-		class frame_functor_t final {
+		// the functor a frame job runs: replay one recorded context after the
+		// job before it.
+		class frame_functor_t final : public sdk::Functor< frame_functor_t > {
 		public:
 			frame_functor_t( QueuedFrames* owner, void* context, void* previous ) noexcept
 			    : m_owner{ owner }, m_context{ context }, m_previous{ previous } {
 			}
 
-			virtual int AddRef( ) {
-				return m_references.fetch_add( 1, std::memory_order_acq_rel ) + 1;
-			}
-
-			virtual int Release( ) {
-				const int remaining = m_references.fetch_sub( 1, std::memory_order_acq_rel ) - 1;
-				if( remaining == 0 )
-					delete this;
-				return remaining;
-			}
-
-			virtual void Destroy( ) {
-			}
-
-			virtual void Run( ) {
+			void Run( ) override {
 				if( m_owner )
 					m_owner->execute_job( m_context, m_previous );
 				m_previous = nullptr;
 			}
 
 		private:
-			std::atomic_int m_references{ 1 };
-			QueuedFrames*   m_owner;
-			void*           m_context;
-			void*           m_previous;
+			QueuedFrames* m_owner;
+			void*         m_context;
+			void*         m_previous;
 		};
 
 		bool operand_matches( Address function, const operand_t& operand ) noexcept {

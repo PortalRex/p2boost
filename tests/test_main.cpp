@@ -1,19 +1,20 @@
-﻿#include "address.h"
+#include "address.h"
 #include "client_view.h"
 #include "display_adjustments.h"
 #include "flashlight_buckets.h"
 #include "flat_textures.h"
 #include "frame_limiter.h"
 #include "frame_metrics.h"
+#include "functor.h"
+#include "game_profile.h"
 #include "hook.h"
 #include "nvidia_profile.h"
 #include "occlusion_skip.h"
 #include "pattern.h"
-#include "game_profile.h"
 #include "projected_frustum.h"
 #include "runtime_verification.h"
-#include "game_profile.h"
 #include "stack.h"
+#include "vmt.h"
 #include "x86.h"
 #include "xinput_throttle.h"
 
@@ -772,65 +773,77 @@ namespace {
 		return true;
 	}
 
+	// the engine drives a functor only through vtable slots 0 (AddRef),
+	// 1 (Release), and 3 (Run); the last Release must destroy it.
+	bool test_functor_abi( ) {
+		struct probe_t final : p2boost::sdk::Functor< probe_t > {
+			probe_t( int* runs, int* destroyed ) noexcept
+			    : m_runs{ runs }, m_destroyed{ destroyed } {
+			}
+			~probe_t( ) {
+				++*m_destroyed;
+			}
+			void Run( ) override {
+				++*m_runs;
+			}
+			int* m_runs;
+			int* m_destroyed;
+		};
+		using int_fn_t  = int( __thiscall* )( void* );
+		using void_fn_t = void( __thiscall* )( void* );
+
+		int   runs = 0, destroyed = 0;
+		auto* probe = new probe_t( &runs, &destroyed );
+		if( p2boost::vfunc< int_fn_t >( probe, 0 )( probe ) != 2 )
+			return false;
+		p2boost::vfunc< void_fn_t >( probe, 3 )( probe );
+		if( p2boost::vfunc< int_fn_t >( probe, 1 )( probe ) != 1 || destroyed != 0 )
+			return false;
+		return runs == 1 && p2boost::vfunc< int_fn_t >( probe, 1 )( probe ) == 0 && destroyed == 1;
+	}
+
 }
 
 int main( ) {
-	const bool address        = test_address_and_stack_frame( );
-	const bool relative_call  = test_relative_call_encoding( );
-	const bool pattern        = test_pattern_scanner( );
-	const bool hook           = test_hook_chain( );
-	const bool callsite       = test_call_site_patch( );
-	const bool callsite_chain = test_call_site_chain( );
-	const bool hash           = test_known_hash( );
+	struct test_t {
+		const char* m_name;
+		bool ( *m_run )( );
+	};
+	constexpr test_t tests[]{
+	    { "address", test_address_and_stack_frame },
+	    { "relative_call", test_relative_call_encoding },
+	    { "pattern", test_pattern_scanner },
+	    { "hook", test_hook_chain },
+	    { "callsite", test_call_site_patch },
+	    { "callsite_chain", test_call_site_chain },
+	    { "hash", test_known_hash },
+	    { "overlay_abi", test_overlay_abi_contract },
+	    { "metrics", test_metrics },
+	    { "overlay", test_overlay_metrics },
+	    { "phase", test_frame_phase_carry },
+	    { "qpc", test_qpc },
+	    { "flat_alpha", test_flat_texture_alpha },
+	    { "flat_color", test_flat_texture_dominant_color },
+	    { "gamma_curve", test_monitor_gamma_curve },
+	    { "intensity", test_r_intensity_clamp },
+	    { "viewport_scale", test_viewport_scale_rects },
+	    { "degenerate_clamp", test_degenerate_viewport_clamp },
+	    { "commit_patch", test_viewport_commit_signature },
+	    { "nvidia_vendor", test_nvidia_vendor_filter },
+	    { "dxvk_fp", test_dxvk_fingerprints },
+	    { "frustum", test_projected_frustum_views },
+	    { "flashlight_flush", test_flashlight_bucket_flush },
+	    { "xinput_throttle", test_xinput_throttle },
+	    { "occlusion_skip", test_occlusion_skip },
+	    { "functor_abi", test_functor_abi },
+	};
 
-	const bool overlay_abi      = test_overlay_abi_contract( );
-	const bool metrics          = test_metrics( );
-	const bool overlay          = test_overlay_metrics( );
-	const bool phase            = test_frame_phase_carry( );
-	const bool qpc              = test_qpc( );
-	const bool flat_alpha       = test_flat_texture_alpha( );
-	const bool flat_color       = test_flat_texture_dominant_color( );
-	const bool gamma_curve      = test_monitor_gamma_curve( );
-	const bool intensity        = test_r_intensity_clamp( );
-	const bool viewport_scale   = test_viewport_scale_rects( );
-	const bool degenerate_clamp = test_degenerate_viewport_clamp( );
-	const bool commit_patch     = test_viewport_commit_signature( );
-	const bool nvidia_vendor    = test_nvidia_vendor_filter( );
-	const bool dxvk_fp          = test_dxvk_fingerprints( );
-	const bool frustum          = test_projected_frustum_views( );
-	const bool flashlight_flush = test_flashlight_bucket_flush( );
-	const bool xinput_throttle  = test_xinput_throttle( );
-	const bool occlusion_skip   = test_occlusion_skip( );
-	std::printf( "address=%s rel32=%s pattern=%s hook_chain=%s callsite=%s callsite_chain=%s "
-	             "hash=%s overlay_abi=%s metrics=%s overlay=%s "
-	             "phase=%s qpc=%s flat_alpha=%s flat_color=%s gamma_curve=%s intensity=%s viewport_scale=%s degenerate_clamp=%s commit_patch=%s nvidia_vendor=%s dxvk_fp=%s frustum=%s flashlight_flush=%s xinput_throttle=%s occlusion_skip=%s\n",
-	             address ? "ok" : "FAIL",
-	             relative_call ? "ok" : "FAIL",
-	             pattern ? "ok" : "FAIL",
-	             hook ? "ok" : "FAIL",
-	             callsite ? "ok" : "FAIL",
-	             callsite_chain ? "ok" : "FAIL",
-	             hash ? "ok" : "FAIL",
-	             overlay_abi ? "ok" : "FAIL",
-	             metrics ? "ok" : "FAIL",
-	             overlay ? "ok" : "FAIL",
-	             phase ? "ok" : "FAIL",
-	             qpc ? "ok" : "FAIL",
-	             flat_alpha ? "ok" : "FAIL",
-	             flat_color ? "ok" : "FAIL",
-	             gamma_curve ? "ok" : "FAIL",
-	             intensity ? "ok" : "FAIL",
-	             viewport_scale ? "ok" : "FAIL",
-	             degenerate_clamp ? "ok" : "FAIL",
-	             commit_patch ? "ok" : "FAIL",
-	             nvidia_vendor ? "ok" : "FAIL",
-	             dxvk_fp ? "ok" : "FAIL",
-	             frustum ? "ok" : "FAIL",
-	             flashlight_flush ? "ok" : "FAIL",
-	             xinput_throttle ? "ok" : "FAIL",
-	             occlusion_skip ? "ok" : "FAIL" );
-	return address && relative_call && pattern && hook && callsite && callsite_chain && hash && overlay_abi && metrics && overlay && phase && qpc && flat_alpha && flat_color && gamma_curve &&
-	               intensity && viewport_scale && degenerate_clamp && commit_patch && nvidia_vendor && dxvk_fp && frustum && flashlight_flush && xinput_throttle && occlusion_skip
-	           ? 0
-	           : 1;
+	bool passed = true;
+	for( const test_t& test : tests ) {
+		const bool ok = test.m_run( );
+		std::printf( "%s=%s ", test.m_name, ok ? "ok" : "FAIL" );
+		passed = passed && ok;
+	}
+	std::printf( "\n" );
+	return passed ? 0 : 1;
 }
