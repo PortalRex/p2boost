@@ -48,9 +48,9 @@ namespace p2boost {
 			return m_enabled.load( std::memory_order_relaxed );
 		}
 
-		size_t        texture_count( ) const noexcept;
-		size_t        ready_texture_count( ) const noexcept;
-		bool          normal_ready( ) const noexcept;
+		size_t texture_count( ) const noexcept;
+		size_t ready_texture_count( ) const noexcept;
+		bool   normal_ready( ) const noexcept;
 
 	private:
 		enum class companion_policy_t {

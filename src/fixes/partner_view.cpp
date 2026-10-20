@@ -58,10 +58,10 @@ namespace p2boost {
 	}
 
 	bool PartnerView::install( const portal2_modules_t&      modules,
-	                          const Portal2Interfaces&      interfaces,
-	                          const ConsoleCommandRegistry& commands,
-	                          IDirect3DDevice9*             device,
-	                          DisplayAdjustments*           display ) {
+	                           const Portal2Interfaces&      interfaces,
+	                           const ConsoleCommandRegistry& commands,
+	                           IDirect3DDevice9*             device,
+	                           DisplayAdjustments*           display ) {
 		if( m_instance || !modules.m_client )
 			return false;
 
@@ -188,7 +188,7 @@ namespace p2boost {
 
 	void __fastcall PartnerView::RenderView( void* self, void*, const void* view, const void* hud_view, int clear_flags, int what_to_draw ) {
 		PartnerView* instance = m_instance;
-		const auto  original = instance ? instance->m_render_view.previous< render_view_fn_t >( ) : nullptr;
+		const auto   original = instance ? instance->m_render_view.previous< render_view_fn_t >( ) : nullptr;
 		if( !original )
 			return;
 

@@ -30,7 +30,7 @@ namespace p2boost {
 	public:
 		~PartnerView( );
 
-		PartnerView( )                              = default;
+		PartnerView( )                               = default;
 		PartnerView( const PartnerView& )            = delete;
 		PartnerView& operator=( const PartnerView& ) = delete;
 
@@ -99,17 +99,17 @@ namespace p2boost {
 		std::atomic_int m_max_fps{ };
 
 		// main-thread picture schedule.
-		Qpc::tick_t   m_last_render{ };
-		RECT          m_picture_rect{ };
-		bool          m_picture_rect_valid{ };
+		Qpc::tick_t m_last_render{ };
+		RECT        m_picture_rect{ };
+		bool        m_picture_rect_valid{ };
 
 		// render-thread resources; released before device Reset.
 		com_ptr< IDirect3DTexture9 >    m_picture;
 		com_ptr< IDirect3DStateBlock9 > m_state_block;
-		UINT                  m_picture_width{ };
-		UINT                  m_picture_height{ };
-		D3DFORMAT             m_picture_format{ D3DFMT_UNKNOWN };
-		std::atomic_bool      m_picture_ready{ };
+		UINT                            m_picture_width{ };
+		UINT                            m_picture_height{ };
+		D3DFORMAT                       m_picture_format{ D3DFMT_UNKNOWN };
+		std::atomic_bool                m_picture_ready{ };
 
 		std::atomic_int      m_pending_calls{ };
 		std::atomic_uint64_t m_rendered{ };

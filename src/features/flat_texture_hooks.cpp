@@ -119,7 +119,7 @@ namespace p2boost {
 		    static_cast< unsigned int >( upload_destination.y ) + height > destination_description.Height )
 			return result;
 
-		const RECT         flat_rect{ upload_destination.x,
+		const RECT                   flat_rect{ upload_destination.x,
                               upload_destination.y,
                               upload_destination.x + static_cast< LONG >( width ),
                               upload_destination.y + static_cast< LONG >( height ) };

@@ -13,7 +13,7 @@ namespace p2boost::sdk {
 	template < typename derived_t >
 	class Functor {
 	public:
-		Functor( )                            = default;
+		Functor( )                           = default;
 		Functor( const Functor& )            = delete;
 		Functor& operator=( const Functor& ) = delete;
 
