@@ -13,11 +13,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
 set(P2BOOST_INCLUDE_DIRECTORIES
-  src/core
   src/engine
   src/features
+  src/fixes
   src/memory
   src/platform
+  src/plugin
   src/util
 )
 
@@ -46,32 +47,32 @@ add_custom_command(
 # adds only the plugin entry point, console bridge, and NVIDIA profile code.
 # Nothing under research/ is compiled.
 add_library(p2boost_core STATIC
+  "${P2BOOST_GAMMA_SHADER_HEADER}"
+  src/engine/game_profile.cpp
+  src/engine/portal2_context.cpp
+  src/engine/portal_stories_mel.cpp
+  src/features/demo_provenance.cpp
+  src/features/display_adjustments.cpp
   src/features/flat_material_pass.cpp
   src/features/flat_texture_codec.cpp
   src/features/flat_texture_hooks.cpp
   src/features/flat_textures.cpp
-  src/features/display_adjustments.cpp
-  src/features/remote_view.cpp
-  src/features/vgui_screen_cache.cpp
-  src/features/queued_frames.cpp
-  src/features/demo_provenance.cpp
-  "${P2BOOST_GAMMA_SHADER_HEADER}"
-  src/core/flashlight_buckets.cpp
-  src/core/frame_limiter.cpp
-  src/core/occlusion_skip.cpp
-  src/core/vgui_screen_shadow_skip.cpp
-  src/core/shadow_depth_reuse.cpp
-  src/core/frame_metrics.cpp
-  src/core/projected_shadow_cache.cpp
-  src/core/profiler_overlay.cpp
-  src/core/runtime_verification.cpp
-  src/core/auto_update.cpp
-  src/core/xinput_throttle.cpp
-  src/engine/game_profile.cpp
-  src/engine/portal2_context.cpp
-  src/engine/portal_stories_mel.cpp
+  src/features/frame_metrics.cpp
+  src/features/profiler_overlay.cpp
+  src/fixes/flashlight_buckets.cpp
+  src/fixes/frame_limiter.cpp
+  src/fixes/occlusion_skip.cpp
+  src/fixes/partner_view.cpp
+  src/fixes/projected_shadow_cache.cpp
+  src/fixes/queued_frames.cpp
+  src/fixes/shadow_depth_reuse.cpp
+  src/fixes/vgui_screen_cache.cpp
+  src/fixes/vgui_screen_shadow_skip.cpp
+  src/fixes/xinput_throttle.cpp
   src/memory/hook.cpp
   src/platform/game_window.cpp
+  src/plugin/auto_update.cpp
+  src/plugin/runtime_verification.cpp
   src/util/projected_frustum.cpp
 )
 target_include_directories(p2boost_core PUBLIC ${P2BOOST_INCLUDE_DIRECTORIES})
@@ -81,7 +82,7 @@ target_compile_options(p2boost_core PRIVATE /W4 /WX /permissive- /Zc:__cplusplus
 target_link_libraries(p2boost_core PRIVATE bcrypt)
 
 add_library(p2boost SHARED
-  src/core/plugin.cpp
+  src/plugin/plugin.cpp
   src/engine/console.cpp
   src/engine/console_commands.cpp
   src/platform/nvidia_profile.cpp

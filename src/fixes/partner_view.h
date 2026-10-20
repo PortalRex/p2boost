@@ -24,13 +24,13 @@ namespace p2boost {
 	// view being controlled always renders every frame. the picture is the
 	// slot's finished unscaled rect, HUD included, so mat_viewportscale only
 	// changes what the real renders cost.
-	class RemoteView {
+	class PartnerView {
 	public:
-		~RemoteView( );
+		~PartnerView( );
 
-		RemoteView( )                              = default;
-		RemoteView( const RemoteView& )            = delete;
-		RemoteView& operator=( const RemoteView& ) = delete;
+		PartnerView( )                              = default;
+		PartnerView( const PartnerView& )            = delete;
+		PartnerView& operator=( const PartnerView& ) = delete;
 
 		bool install( const portal2_modules_t&      modules,
 		              const Portal2Interfaces&      interfaces,
@@ -83,7 +83,7 @@ namespace p2boost {
 		bool draw_picture( IDirect3DDevice9* device, const RECT& rect );
 		void release_device_resources( ) noexcept;
 
-		static RemoteView* m_instance;
+		static PartnerView* m_instance;
 
 		VmtHook               m_render_view;
 		IDirect3DDevice9*     m_device{ };

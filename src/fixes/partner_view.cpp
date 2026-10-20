@@ -1,4 +1,4 @@
-#include "remote_view.h"
+#include "partner_view.h"
 
 #include "address.h"
 #include "display_adjustments.h"
@@ -11,7 +11,7 @@
 
 namespace p2boost {
 
-	RemoteView* RemoteView::m_instance{ };
+	PartnerView* PartnerView::m_instance{ };
 
 	namespace {
 		// a queued render-thread call. CMatQueuedRenderContext's call queue
@@ -19,7 +19,7 @@ namespace p2boost {
 		// through slot 1, and later invokes slot 3; slot 2 is never called.
 		class device_call_t final {
 		public:
-			device_call_t( RemoteView* owner, bool save, const RECT& rect, std::atomic_int* pending ) noexcept
+			device_call_t( PartnerView* owner, bool save, const RECT& rect, std::atomic_int* pending ) noexcept
 			    : m_owner{ owner }, m_save{ save }, m_rect{ rect }, m_pending{ pending } {
 				m_pending->fetch_add( 1, std::memory_order_acq_rel );
 			}
@@ -49,7 +49,7 @@ namespace p2boost {
 
 		private:
 			std::atomic_int  m_references{ 1 };
-			RemoteView*      m_owner;
+			PartnerView*      m_owner;
 			bool             m_save;
 			RECT             m_rect;
 			std::atomic_int* m_pending;
@@ -75,11 +75,11 @@ namespace p2boost {
 		}
 	}
 
-	RemoteView::~RemoteView( ) {
+	PartnerView::~PartnerView( ) {
 		remove( );
 	}
 
-	bool RemoteView::install( const portal2_modules_t&      modules,
+	bool PartnerView::install( const portal2_modules_t&      modules,
 	                          const Portal2Interfaces&      interfaces,
 	                          const ConsoleCommandRegistry& commands,
 	                          IDirect3DDevice9*             device,
@@ -132,7 +132,7 @@ namespace p2boost {
 		return true;
 	}
 
-	void RemoteView::remove( ) {
+	void PartnerView::remove( ) {
 		m_render_view.remove( );
 		m_max_fps.store( 0, std::memory_order_relaxed );
 
@@ -156,12 +156,12 @@ namespace p2boost {
 			m_instance = nullptr;
 	}
 
-	void RemoteView::set_max_fps( int fps ) noexcept {
+	void PartnerView::set_max_fps( int fps ) noexcept {
 		m_max_fps.store( std::clamp( fps, 0, 1000 ), std::memory_order_relaxed );
 		invalidate( );
 	}
 
-	int RemoteView::view_slot( const void* self, const void* view ) const noexcept {
+	int PartnerView::view_slot( const void* self, const void* view ) const noexcept {
 		if( !self || !view || !m_local_slot_mask || !m_remote_players )
 			return -1;
 
@@ -176,14 +176,14 @@ namespace p2boost {
 
 	// a local split-screen player owns its slot outright; a remote slot is one
 	// the engine filled with a remote (+remote_view) player.
-	bool RemoteView::slot_is_remote( int slot ) const noexcept {
+	bool PartnerView::slot_is_remote( int slot ) const noexcept {
 		return slot >= 0 && slot <= 1 && m_local_slot_mask && m_remote_players &&
 		       ( m_local_slot_mask[ 0 ] & ( 1u << slot ) ) == 0 && m_remote_players[ slot ] != 0;
 	}
 
 	// the slot whose picture may be reused: with two local players, the one
 	// in_forceuser does not send input to; otherwise the remote-view slot.
-	int RemoteView::partner_slot( ) const noexcept {
+	int PartnerView::partner_slot( ) const noexcept {
 		if( !m_local_slot_mask || !m_remote_players )
 			return -1;
 
@@ -197,7 +197,7 @@ namespace p2boost {
 		return -1;
 	}
 
-	bool RemoteView::queue_device_call( bool save, const RECT& rect ) {
+	bool PartnerView::queue_device_call( bool save, const RECT& rect ) {
 		if( !m_material_system )
 			return false;
 
@@ -223,8 +223,8 @@ namespace p2boost {
 		return true;
 	}
 
-	void __fastcall RemoteView::RenderView( void* self, void*, const void* view, const void* hud_view, int clear_flags, int what_to_draw ) {
-		RemoteView* instance = m_instance;
+	void __fastcall PartnerView::RenderView( void* self, void*, const void* view, const void* hud_view, int clear_flags, int what_to_draw ) {
+		PartnerView* instance = m_instance;
 		const auto  original = instance ? instance->m_render_view.previous< render_view_fn_t >( ) : nullptr;
 		if( !original )
 			return;
@@ -269,7 +269,7 @@ namespace p2boost {
 		}
 	}
 
-	void RemoteView::run_device_call( bool save, const RECT& requested ) {
+	void PartnerView::run_device_call( bool save, const RECT& requested ) {
 		IDirect3DDevice9* device = m_device;
 		if( !device )
 			return;
@@ -317,7 +317,7 @@ namespace p2boost {
 			back_buffer->Release( );
 	}
 
-	bool RemoteView::ensure_picture( IDirect3DDevice9* device, UINT width, UINT height, D3DFORMAT format ) {
+	bool PartnerView::ensure_picture( IDirect3DDevice9* device, UINT width, UINT height, D3DFORMAT format ) {
 		if( m_picture && m_picture_width == width && m_picture_height == height && m_picture_format == format )
 			return true;
 
@@ -336,7 +336,7 @@ namespace p2boost {
 		return true;
 	}
 
-	bool RemoteView::draw_picture( IDirect3DDevice9* device, const RECT& rect ) {
+	bool PartnerView::draw_picture( IDirect3DDevice9* device, const RECT& rect ) {
 		if( !m_state_block && FAILED( device->CreateStateBlock( D3DSBT_ALL, &m_state_block ) ) ) {
 			m_state_block = nullptr;
 			return false;
@@ -399,7 +399,7 @@ namespace p2boost {
 		return drawn;
 	}
 
-	void RemoteView::release_device_resources( ) noexcept {
+	void PartnerView::release_device_resources( ) noexcept {
 		m_picture_ready.store( false, std::memory_order_release );
 		if( m_state_block )
 			m_state_block->Release( );
@@ -412,9 +412,9 @@ namespace p2boost {
 		m_picture_format = D3DFMT_UNKNOWN;
 	}
 
-	void RemoteView::ResetListener( void* context ) {
+	void PartnerView::ResetListener( void* context ) {
 		// runs inside the device Reset hook, on the thread that owns the device.
-		if( auto* instance = static_cast< RemoteView* >( context ) )
+		if( auto* instance = static_cast< PartnerView* >( context ) )
 			instance->release_device_resources( );
 	}
 

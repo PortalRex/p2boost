@@ -3,7 +3,7 @@
 #include "auto_update.h"
 #include "demo_provenance.h"
 #include "display_adjustments.h"
-#include "remote_view.h"
+#include "partner_view.h"
 #include "flashlight_buckets.h"
 #include "flat_textures.h"
 #include "frame_limiter.h"
@@ -162,9 +162,9 @@ namespace p2boost {
 			if( m_verification.m_supported && !m_display_adjustments.install_viewport_commit_patch( m_modules ) )
 				m_verification.m_errors.emplace_back( "viewport-commit signature mismatch" );
 			if( m_verification.m_supported &&
-			    !m_remote_view.install( m_modules, m_interfaces, m_commands, m_device,
+			    !m_partner_view.install( m_modules, m_interfaces, m_commands, m_device,
 			                            m_display_adjustments.available( ) ? &m_display_adjustments : nullptr ) )
-				m_verification.m_errors.emplace_back( "optional remote-view hooks unavailable" );
+				m_verification.m_errors.emplace_back( "optional partner-view hooks unavailable" );
 
 			// a device Reset leaves every depth texture's contents undefined.
 			if( m_shadow_depth_reuse.installed( ) && m_display_adjustments.available( ) )
@@ -217,7 +217,7 @@ namespace p2boost {
 			// remote view and depth reuse register reset listeners on the display hooks.
 			m_display_adjustments.remove_reset_listener( &m_shadow_depth_reuse );
 			m_shadow_cache.set_view_listener( nullptr, nullptr );
-			m_remote_view.remove( );
+			m_partner_view.remove( );
 			m_display_adjustments.remove( );
 			m_flat_textures.remove( );
 			m_overlay.set_mode( profiler_mode_t::off, m_metrics );
@@ -308,7 +308,7 @@ namespace p2boost {
 			m_shadow_cache.invalidate_all( );
 			m_shadow_depth_reuse.invalidate( );
 			m_vgui_screen_cache.invalidate( );
-			m_remote_view.invalidate( );
+			m_partner_view.invalidate( );
 			enforce_render_threading( );
 		}
 
@@ -336,7 +336,7 @@ namespace p2boost {
 				m_shadow_cache.invalidate_all( );
 				m_shadow_depth_reuse.invalidate( );
 				m_vgui_screen_cache.invalidate( );
-				m_remote_view.invalidate( );
+				m_partner_view.invalidate( );
 				enforce_render_threading( );
 				m_last_focused = focused;
 			}
@@ -688,7 +688,7 @@ namespace p2boost {
 			case fix_t::shadow_depth_fps:
 				return m_shadow_depth_reuse.installed( );
 			case fix_t::partner_view_fps:
-				return m_remote_view.reuse_available( );
+				return m_partner_view.reuse_available( );
 			case fix_t::vgui_screen_fps:
 				return m_vgui_screen_cache.installed( );
 			case fix_t::frame_queue_depth:
@@ -738,8 +738,8 @@ namespace p2boost {
 				}
 				case fix_t::partner_view_fps:
 					std::snprintf( detail, sizeof( detail ), "%llu rendered, %llu reused",
-					               static_cast< unsigned long long >( m_remote_view.rendered_count( ) ),
-					               static_cast< unsigned long long >( m_remote_view.reused_count( ) ) );
+					               static_cast< unsigned long long >( m_partner_view.rendered_count( ) ),
+					               static_cast< unsigned long long >( m_partner_view.reused_count( ) ) );
 					break;
 				case fix_t::vgui_screen_fps:
 					std::snprintf( detail, sizeof( detail ), "%llu painted, %llu reused",
@@ -813,8 +813,8 @@ namespace p2boost {
 			m_frame_limiter.set_enabled( on( fix_t::frame_limiter ) );
 			m_shadow_cache.set_enabled( on( fix_t::shadow_cache ) );
 			m_shadow_cache.set_exact_cull( on( fix_t::shadow_cull ) );
-			if( m_remote_view.reuse_available( ) )
-				m_remote_view.set_max_fps( m_enabled ? fix( fix_t::partner_view_fps ) : 0 );
+			if( m_partner_view.reuse_available( ) )
+				m_partner_view.set_max_fps( m_enabled ? fix( fix_t::partner_view_fps ) : 0 );
 			if( on( fix_t::multicore ) )
 				enforce_render_threading( );
 			else
@@ -854,7 +854,7 @@ namespace p2boost {
 		QueuedFrames                 m_queued_frames;
 		ShadowDepthReuse             m_shadow_depth_reuse;
 		DisplayAdjustments           m_display_adjustments;
-		RemoteView                   m_remote_view;
+		PartnerView                   m_partner_view;
 		AutoUpdate                   m_auto_update;
 		DemoProvenance               m_demo_provenance;
 		FlatTextures                 m_flat_textures;
