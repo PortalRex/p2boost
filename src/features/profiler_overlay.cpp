@@ -109,7 +109,6 @@ namespace p2boost {
 		m_metrics        = metrics;
 		m_engine_client  = engine_client;
 		m_fps_max        = commands.find_variable( "fps_max" );
-		m_vsync          = commands.find_variable( "mat_vsync" );
 		m_instance       = this;
 
 		if( m_engine_vgui_paint.install( engine_vgui->PaintSlot( ), reinterpret_cast< void* >( &EngineVGuiPaint ) ) )
@@ -134,7 +133,6 @@ namespace p2boost {
 		m_engine_client  = nullptr;
 		m_metrics        = nullptr;
 		m_fps_max        = nullptr;
-		m_vsync          = nullptr;
 		m_start_drawing  = nullptr;
 		m_finish_drawing = nullptr;
 		m_sample         = { };
@@ -185,9 +183,7 @@ namespace p2boost {
 			m_next_update = now + Qpc::ticks( 250.0 );
 			m_metrics->set_coop( m_engine_client && m_engine_client->GetMaxClients( ) > 1 );
 			m_metrics->set_focused( game_is_foreground( ) );
-			m_target = frame_target( m_fps_max ? m_fps_max->value_float( ) : 0.0,
-			                         m_vsync && m_vsync->value_integer( ) != 0,
-			                         display_refresh_rate( ) );
+			m_target      = frame_target( display_refresh_rate( ), m_fps_max ? m_fps_max->value_float( ) : 0.0 );
 			m_sample      = m_metrics->overlay_metrics( m_target.dropped_ms( ) );
 			m_have_sample = true;
 		}
@@ -251,7 +247,7 @@ namespace p2boost {
 		               sample.m_present_ms,
 		               sample.m_p95_ms,
 		               sample.m_p99_ms );
-		const frame_grade_t grade        = grade_frames( sample.m_average_ms, sample.m_p99_ms, sample.m_dropped_frames, m_target );
+		const frame_grade_t grade        = grade_frames( sample.m_average_ms, sample.m_dropped_frames, m_target );
 		const color_t&      timing_color = grade_color( grade, good );
 		draw_line( screen_width, m_panel_font, 1, timing_color, line );
 
@@ -272,7 +268,7 @@ namespace p2boost {
 		               sample.m_shadow_hits,
 		               sample.m_shadow_updates,
 		               sample.m_focused ? "FOCUSED" : "UNFOCUSED" );
-		draw_line( screen_width, m_panel_font, 3, sample.m_dropped_frames > 0 ? bad : neutral, line );
+		draw_line( screen_width, m_panel_font, 3, neutral, line );
 	}
 
 	void ProfilerOverlay::draw_fps( int screen_width ) noexcept {
@@ -281,9 +277,9 @@ namespace p2boost {
 		char                     text[ 32 ]{ };
 		std::snprintf( text, sizeof( text ), "%.0ffps", fps );
 
-		// white on target, yellow short of it, red when the last second dropped
-		// a frame (see grade_frames).
-		const color_t& color = grade_color( grade_frames( sample.m_average_ms, sample.m_p99_ms, sample.m_dropped_frames, m_target ), white );
+		// white on target, yellow for a slip, red for a visible stutter (see
+		// grade_frames).
+		const color_t& color = grade_color( grade_frames( sample.m_average_ms, sample.m_dropped_frames, m_target ), white );
 		const int      width = text_width( fps_font, text );
 		const int      x     = std::max( panel_margin, screen_width - panel_margin - width );
 		m_surface->DrawColoredText(

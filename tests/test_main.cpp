@@ -211,27 +211,26 @@ namespace {
 		using p2boost::frame_grade_t;
 		using p2boost::frame_target;
 
-		// fps_max caps unless vsync caps lower; uncapped falls back to the display.
-		const auto capped   = frame_target( 120.0, false, 144.0 );
-		const auto vsynced  = frame_target( 300.0, true, 144.0 );
-		const auto uncapped = frame_target( 0.0, false, 165.0 );
-		const auto unknown  = frame_target( 0.0, false, 0.0 );
-		const auto under_vs = frame_target( 60.0, true, 144.0 );
-		if( capped.m_fps != 120.0 || std::strcmp( capped.m_source, "fps_max" ) != 0 || vsynced.m_fps != 144.0 ||
-		    std::strcmp( vsynced.m_source, "vsync" ) != 0 || uncapped.m_fps != 165.0 || std::strcmp( uncapped.m_source, "display" ) != 0 ||
-		    unknown.m_fps != p2boost::fallback_refresh_rate || under_vs.m_fps != 60.0 )
+		// the display wins; fps_max only stands in when it is unknown.
+		const auto display  = frame_target( 120.0, 300.0 );
+		const auto fps_max  = frame_target( 0.0, 300.0 );
+		const auto fallback = frame_target( 0.0, 0.0 );
+		if( display.m_fps != 120.0 || std::strcmp( display.m_source, "display" ) != 0 || fps_max.m_fps != 300.0 ||
+		    std::strcmp( fps_max.m_source, "fps_max" ) != 0 || fallback.m_fps != p2boost::fallback_refresh_rate )
 			return false;
 
-		// 120 FPS: 8.33 ms frames, a dropped frame is 16.7 ms or longer.
-		const double frame = capped.frame_ms( );
-		return std::abs( capped.dropped_ms( ) - 2.0 * frame ) < 1e-9 &&
-		       p2boost::grade_frames( frame, frame * 1.2, 0, capped ) == frame_grade_t::good &&
-		       p2boost::grade_frames( frame * 1.1, frame, 0, capped ) == frame_grade_t::warning &&
-		       p2boost::grade_frames( frame, frame * 1.3, 0, capped ) == frame_grade_t::warning &&
-		       p2boost::grade_frames( frame, frame, 1, capped ) == frame_grade_t::bad &&
-		       p2boost::graph_character( frame * 0.2, capped ) == '.' && p2boost::graph_character( frame * 0.3, capped ) == '-' &&
-		       p2boost::graph_character( frame * 0.6, capped ) == '=' && p2boost::graph_character( frame, capped ) == '^' &&
-		       p2boost::graph_character( frame * 2.0, capped ) == '!';
+		// 120 Hz: 8.33 ms frames, a dropped frame is 16.7 ms or longer.
+		const double frame = display.frame_ms( );
+		return std::abs( display.dropped_ms( ) - 2.0 * frame ) < 1e-9 &&
+		       p2boost::grade_frames( frame * 0.2, 0, display ) == frame_grade_t::good &&
+		       p2boost::grade_frames( frame * 1.05, 0, display ) == frame_grade_t::good &&
+		       p2boost::grade_frames( frame * 1.2, 0, display ) == frame_grade_t::warning &&
+		       p2boost::grade_frames( frame, 1, display ) == frame_grade_t::warning &&
+		       p2boost::grade_frames( frame, 3, display ) == frame_grade_t::bad &&
+		       p2boost::grade_frames( frame * 1.5, 0, display ) == frame_grade_t::bad &&
+		       p2boost::graph_character( frame * 0.2, display ) == '.' && p2boost::graph_character( frame * 0.3, display ) == '-' &&
+		       p2boost::graph_character( frame * 0.6, display ) == '=' && p2boost::graph_character( frame, display ) == '^' &&
+		       p2boost::graph_character( frame * 2.0, display ) == '!';
 	}
 
 	bool test_frame_phase_carry( ) {

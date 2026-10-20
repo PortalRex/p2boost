@@ -2,10 +2,9 @@
 
 namespace p2boost {
 
-	// the frame rate the profiler overlay grades frames against. fps_max caps
-	// the game when it is set, and vsync caps it at the display's refresh rate.
-	// an uncapped game (fps_max 0, vsync off) is graded against the refresh
-	// rate too: the display never shows more frames than that.
+	// the frame rate the profiler overlay grades frames against: the refresh
+	// rate of the game's monitor, since the display never shows more frames
+	// than that. fps_max stands in when Windows cannot report the rate.
 	struct frame_target_t {
 		double      m_fps;
 		const char* m_source;
@@ -14,23 +13,21 @@ namespace p2boost {
 			return 1000.0 / m_fps;
 		}
 
-		// a frame two target frames long or longer is a visibly dropped frame.
+		// a frame two target frames long or longer misses a whole refresh.
 		double dropped_ms( ) const noexcept {
 			return 2.0 * frame_ms( );
 		}
 	};
 
-	// used when Windows cannot report the display's refresh rate.
+	// used when neither the display nor fps_max gives a rate.
 	inline constexpr double fallback_refresh_rate{ 60.0 };
 
-	inline frame_target_t frame_target( double fps_max, bool vsync, double refresh_rate ) noexcept {
-		const double display = refresh_rate >= 1.0 ? refresh_rate : fallback_refresh_rate;
-		const bool   capped  = fps_max >= 1.0;
-		if( vsync && ( !capped || fps_max > display ) )
-			return { display, "vsync" };
-		if( capped )
+	inline frame_target_t frame_target( double refresh_rate, double fps_max ) noexcept {
+		if( refresh_rate >= 1.0 )
+			return { refresh_rate, "display" };
+		if( fps_max >= 1.0 )
 			return { fps_max, "fps_max" };
-		return { display, "display" };
+		return { fallback_refresh_rate, "default" };
 	}
 
 	enum class frame_grade_t {
@@ -39,13 +36,16 @@ namespace p2boost {
 		bad,
 	};
 
-	// bad: the last second dropped a frame. warning: it fell short of the
-	// target, on average by more than 5% or at the 99th percentile by more
-	// than a quarter of a frame.
-	inline frame_grade_t grade_frames( double average_ms, double p99_ms, unsigned int dropped_frames, const frame_target_t& target ) noexcept {
-		if( dropped_frames > 0 )
+	// lenient on purpose: a single slow frame (a texture streaming in, a
+	// checkpoint save) only warns. bad means the last second visibly
+	// stuttered or ran well below the display.
+	//   warning: average below 90% of the target, or any dropped frame.
+	//   bad:     average below 75% of the target, or more than two dropped frames.
+	inline frame_grade_t grade_frames( double average_ms, unsigned int dropped_frames, const frame_target_t& target ) noexcept {
+		const double share = average_ms > 0.0 ? target.frame_ms( ) / average_ms : 0.0;
+		if( share < 0.75 || dropped_frames > 2 )
 			return frame_grade_t::bad;
-		if( average_ms * 0.95 > target.frame_ms( ) || p99_ms > target.frame_ms( ) * 1.25 )
+		if( share < 0.9 || dropped_frames > 0 )
 			return frame_grade_t::warning;
 		return frame_grade_t::good;
 	}

@@ -529,12 +529,12 @@ These do not change performance and do not follow `p2boost_enable`.
   completion, not the 60 Hz `GameFrame` callback. The overlay is drawn in each
   local client's final VGUI paint, which also works for Orange on a remote
   co-op connection. Colors and the graph grade frames against a target
-  (`src/features/frame_target.h`): `fps_max`, lowered to the refresh rate
-  when `mat_vsync` is on, or the refresh rate of the game's monitor when
-  `fps_max` is 0 (60 Hz if Windows does not report one). Red means a frame
-  of at least two target frames in the last second; yellow means the average
-  fell more than 5% short or the 99th percentile more than a quarter frame.
-  Graph glyphs `. - = ^ !` mark a quarter, half, one, and two target frames.
+  (`src/features/frame_target.h`): the refresh rate of the game's monitor,
+  or `fps_max` when Windows does not report one (60 Hz if that is 0 too).
+  A dropped frame takes at least two target frames. Over the last second,
+  yellow means the average fell below 90% of the target or a frame dropped;
+  red means below 75% or more than two dropped frames. Graph glyphs
+  `. - = ^ !` mark a quarter, half, one, and two target frames.
 - **Demo provenance.** When a demo starts recording, p2boost issues one
   ordinary `echo` with its version, renderer, master-switch state, and
   flat-texture state, so a playback shows whether p2boost was loaded. No

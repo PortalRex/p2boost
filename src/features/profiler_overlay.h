@@ -60,8 +60,7 @@ namespace p2boost {
 		start_drawing_fn_t   m_start_drawing{ };
 		finish_drawing_fn_t  m_finish_drawing{ };
 		const con_var_t*     m_fps_max{ };
-		const con_var_t*     m_vsync{ };
-		frame_target_t       m_target{ fallback_refresh_rate, "display" };
+		frame_target_t       m_target{ fallback_refresh_rate, "default" };
 		overlay_metrics_t    m_sample{ };
 		Qpc::tick_t          m_next_update{ };
 		unsigned long        m_panel_font{ };
