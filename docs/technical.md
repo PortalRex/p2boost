@@ -418,23 +418,34 @@ model data, `LockRenderData`) lives in two static `CMemoryStack`s,
 stack. With three frames in flight the frame being recorded would reuse
 the stack of the frame still replaying, so a third stack is initialised in
 the unused path buffer that follows the two (only written while the first
-render context initialises) and a `BeginFrame` hook steers the engine's
-flip onto the stack of the context that records the next frame, whose job
-was waited for. For the two engine stacks it sets the index to the other
-one just before the flip. For the third, where both engine stacks may still
-belong to jobs in flight, it parks the third stack's `CMemoryStack` in the
-slot the flip lands on for the call and swaps it back after, so the flip
-frees, and `BeginFrame` allocates from, the third stack only. Until then
-the index stays on the stack just recorded, as the engine leaves it, so its
-single current-alloc-point always belongs to the indexed stack.
+render context initialises). Each context records into its own stack;
+the stack a frame frees is always that of the context whose job was just
+waited for. A `BeginFrame` hook steers the engine's flip there. Before the
+flip the indexed slot must hold the stack just recorded, and the slot the
+flip lands on must hold the target; when either is the third stack, which
+has no engine slot, its `CMemoryStack` is parked in that slot for the call
+and swapped back after, so neither engine stack is ever reset while a job
+may read it.
 
-The first version moved the index on after the engine's flip, which had
-already reset `sm_RenderData[1]` while a job could still read it.
-Allocations that followed overwrote a frame not yet replayed: Portal
-Stories: Mel crashed in `studiorender` within seconds of loading
-`sp_a2_firestorm` (3 of 5 loads; none with `frame_queue_depth 1`). A crash
-dump showed `sm_nRenderStack` = 2, both engine stacks reset to their base,
-and the replaying job reading overwritten instance data inside stack 1.
+Context and stack numbers can differ. The engine flips its context index
+only in queued `EndFrame`s but its stack index in every `BeginFrame`, so
+after single-threaded frames context k may record into stack 1 - k. When
+the ring adopts the engine's state it records each context's stack from the
+index the current frame was recorded with.
+
+Two bugs in the first version each freed a stack a job was still replaying,
+and the frames recorded next overwrote its data. Portal Stories: Mel
+crashed in `studiorender` within seconds of a load (`sp_a2_firestorm`: 2 of
+2, and 3 of 10 after the first fix; none with `frame_queue_depth 1`).
+First, the hook moved the index on only after the engine's flip had
+already reset `sm_RenderData[1]`. Second, and the reason Mel was affected:
+its maps force `mat_queue_mode 0` right after spawn and the `multicore` fix
+restores 2, so the ring drains and re-adopts with context and stack
+parities about half the time apart, and then waited for one context's job
+while freeing the stack another job was still reading. Crash dumps showed
+`sm_nRenderStack` 2 and the replaying job reading overwritten instance data
+in stack 1. With both fixed: 0 crashes in 15 loads of `sp_a2_firestorm` and
+`sp_a3_junkyard`.
 
 Any other state (another thread mode, a pending mode switch,
 VProf active, a focus loss) drains the ring: every job is waited for, a

@@ -139,6 +139,8 @@ namespace p2boost {
 		std::array< void*, 3 > m_contexts{ };
 		std::array< void*, 3 > m_jobs{ };
 		std::array< int, 3 >   m_job_order{ };
+		// the render-data stack each context's frames record into.
+		std::array< int, 3 > m_context_stack{ 0, 1, 2 };
 		void*                  m_private{ };
 		int                    m_order{ };
 		bool                   m_active{ };
