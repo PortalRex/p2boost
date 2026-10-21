@@ -4,6 +4,7 @@
 #include "game_profile.h"
 #include "interfaces.h"
 #include "surface_drawing.h"
+#include "timestep.h"
 
 #include <Windows.h>
 
@@ -212,7 +213,7 @@ namespace p2boost {
 		if( !original )
 			return;
 
-		const int fps = cache->m_max_fps.load( std::memory_order_relaxed );
+		const int fps = fixed_timestep( ) ? 0 : cache->m_max_fps.load( std::memory_order_relaxed );
 		if( fps <= 0 || !cache->m_in_draw_model || !panel || !matrix || pixel_width <= 0 || pixel_height <= 0 ) {
 			original( self, panel, matrix, pixel_width, pixel_height, width, height );
 			return;

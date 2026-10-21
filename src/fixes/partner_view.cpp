@@ -4,6 +4,7 @@
 #include "display_adjustments.h"
 #include "functor.h"
 #include "game_profile.h"
+#include "timestep.h"
 #include "view_render.h"
 
 #include <algorithm>
@@ -194,7 +195,7 @@ namespace p2boost {
 
 		// only the partner's slot is ever capped; the controlled view renders.
 		const int slot = instance->view_slot( self, view );
-		const int fps  = instance->m_max_fps.load( std::memory_order_relaxed );
+		const int fps  = fixed_timestep( ) ? 0 : instance->m_max_fps.load( std::memory_order_relaxed );
 		if( fps <= 0 || slot < 0 || slot != instance->partner_slot( ) ) {
 			original( self, view, hud_view, clear_flags, what_to_draw );
 			return;

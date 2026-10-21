@@ -2,6 +2,7 @@
 
 #include "console.h"
 #include "game_window.h"
+#include "timestep.h"
 
 #include <Windows.h>
 
@@ -72,6 +73,9 @@ namespace p2boost {
 		             m_commands.remove_flags( "mat_viewportupscale", cvar_flag_cheat ) &&
 		             m_commands.remove_flags( "r_drawparticles", cvar_flag_cheat ),
 		         "cvars unavailable" );
+
+		// the wall-clock reuse fixes refresh every frame while it is set.
+		g_host_framerate.store( m_commands.find_variable( "host_framerate" ), std::memory_order_relaxed );
 
 		require( m_overlay.connect( m_modules, m_interfaces, m_commands, &m_metrics ), "profiler client-paint interface unavailable" );
 		require( m_demo_provenance.connect( m_modules, m_interfaces.engine_client( ), &m_enabled, &m_flat_textures ), "demo-recorder hooks unavailable" );
@@ -160,6 +164,7 @@ namespace p2boost {
 		m_vgui_screen_shadow_skip.remove( );
 		m_shadow_depth_reuse.remove( );
 		m_frame_limiter.remove( );
+		g_host_framerate.store( nullptr, std::memory_order_relaxed );
 		m_commands.disconnect( );
 		m_interfaces.disconnect( );
 		m_device          = nullptr;

@@ -4,6 +4,7 @@
 #include "client_view.h"
 #include "game_profile.h"
 #include "projected_frustum.h"
+#include "timestep.h"
 #include "view_render.h"
 
 #include <Windows.h>
@@ -155,7 +156,7 @@ namespace p2boost {
 		// the same light in the same texture: always reusable later in the same
 		// frame, and across frames while its refresh interval has not elapsed.
 		if( entry != reuse->m_entries.end( ) && reuse->enabled( ) && entry->m_frame >= 0 && entry->m_key == key ) {
-			const int  fps   = reuse->m_max_fps.load( std::memory_order_relaxed );
+			const int  fps   = fixed_timestep( ) ? 0 : reuse->m_max_fps.load( std::memory_order_relaxed );
 			const bool fresh = fps > 0 && now - entry->m_time < Qpc::frequency( ) / fps;
 			if( ( entry->m_frame == frame || fresh ) && reuse->shareable( view, *entry ) ) {
 				reuse->repeat_draw_state( );
