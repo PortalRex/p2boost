@@ -50,7 +50,10 @@ namespace p2boost {
 		DisplayAdjustments( const DisplayAdjustments& )            = delete;
 		DisplayAdjustments& operator=( const DisplayAdjustments& ) = delete;
 
-		bool install( const ConsoleCommandRegistry& commands, IDirect3DDevice9* device, FrameMetrics* metrics );
+		// engine_gamma_ramp: the D3D9 runtime honours the engine's gamma ramp
+		// (native D3D9, not DXVK), so mat_monitorgamma already works in
+		// exclusive fullscreen and the gamma pass only runs while windowed.
+		bool install( const ConsoleCommandRegistry& commands, IDirect3DDevice9* device, FrameMetrics* metrics, bool engine_gamma_ramp = false );
 		void remove( );
 
 		// the shader API's CommitSetViewports skips zero-size viewports, which
@@ -135,6 +138,8 @@ namespace p2boost {
 		viewport_scale_t                 m_scaled_view{ };
 		bool                             m_scaled_view_pending{ };
 		bool                             m_internal_viewport{ };
+		bool                             m_engine_gamma_ramp{ };
+		std::atomic_bool                 m_windowed{ true };
 		VmtHook                          m_present;
 		VmtHook                          m_reset;
 		VmtHook                          m_set_viewport;

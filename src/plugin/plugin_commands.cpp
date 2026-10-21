@@ -105,12 +105,16 @@ namespace p2boost {
 		console_print_color( m_verification.m_supported ? console_color::green : console_color::red,
 		                     "[p2boost] p2boost %s: %s%s\n", P2BOOST_VERSION,
 		                     m_verification.m_supported ? "supported build" : "UNSUPPORTED BUILD", game_label.c_str( ) );
-		console_print( "[p2boost]   backend   %s, dxvk %s (%s)\n",
-		               m_verification.m_dxvk_vulkan ? "DXVK/Vulkan" : "NOT ACTIVE",
-		               m_verification.m_dxvk_shipped    ? "shipped"
-		               : m_verification.m_dxvk_approved ? "approved replacement"
-		                                                : "unrecognized",
-		               m_verification.m_dxvk_sha256.c_str( ) );
+		if( m_verification.m_backend == render_backend_t::dxvk_vulkan )
+			console_print( "[p2boost]   backend   DXVK/Vulkan, dxvk %s (%s)\n",
+			               m_verification.m_dxvk_shipped    ? "shipped"
+			               : m_verification.m_dxvk_approved ? "approved replacement"
+			                                                : "unrecognized",
+			               m_verification.m_dxvk_sha256.c_str( ) );
+		else if( m_verification.m_backend == render_backend_t::native_d3d9 )
+			console_print( "[p2boost]   backend   D3D9 (%s)\n", m_verification.m_d3d9_path.c_str( ) );
+		else
+			console_print( "[p2boost]   backend   NOT ACTIVE\n" );
 		console_print( "[p2boost]   nvidia    %s (%s:%d)\n", nvidia_profile_state_name( m_nvidia_profile.m_state ),
 		               m_nvidia_profile.m_operation, m_nvidia_profile.m_status );
 		console_print_color( m_enabled ? console_color::green : console_color::yellow,

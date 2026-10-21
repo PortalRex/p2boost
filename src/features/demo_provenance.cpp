@@ -49,6 +49,7 @@ namespace p2boost {
 		m_cbuf_add_text = cbuf_add_text.as< cbuf_add_text_fn_t >( );
 		m_fixes_enabled = fixes_enabled;
 		m_flat_textures = flat_textures;
+		m_backend       = render_backend_name( modules.backend( ) );
 		m_instance      = this;
 		if( m_set_signon_state.install( vmt_slot( recorder, game->demo_recorder_set_signon_state_slot ), reinterpret_cast< void* >( &SetSignonState ) ) &&
 		    m_start_recording.install( vmt_slot( recorder, game->demo_recorder_start_recording_slot ), reinterpret_cast< void* >( &StartRecording ) ) )
@@ -107,10 +108,11 @@ namespace p2boost {
 		char command[ 192 ]{ };
 		std::snprintf( command,
 		               sizeof( command ),
-		               "echo \"p2boost %s (enabled=%d flat=%d backend=DXVK/Vulkan)\"",
+		               "echo \"p2boost %s (enabled=%d flat=%d backend=%s)\"",
 		               P2BOOST_VERSION,
 		               *m_fixes_enabled,
-		               m_flat_textures->enabled( ) );
+		               m_flat_textures->enabled( ),
+		               m_backend );
 
 		// SAR's Engine::ExecuteCommand( command, true ): queue through
 		// Cbuf_AddText, then an empty immediate command flushes the buffer.

@@ -20,8 +20,10 @@ namespace p2boost {
 		// configure the NVIDIA application profile before installing engine hooks.
 		m_modules.refresh( );
 		m_verification = verify_runtime( m_modules );
-		m_device       = find_dxvk_device( m_modules );
-		if( m_verification.m_dxvk_vulkan ) {
+		m_device       = find_device( m_modules );
+
+		// the NVIDIA settings only fix DXVK's Vulkan presentation.
+		if( m_verification.m_backend == render_backend_t::dxvk_vulkan ) {
 			m_nvidia_profile = configure_nvidia_profile( m_device );
 			if( m_nvidia_profile.m_state == nvidia_profile_state_t::failed )
 				m_nvidia_profile = configure_nvidia_profile_elevated( );
@@ -84,7 +86,8 @@ namespace p2boost {
 		require( m_vgui_screen_cache.install( m_modules, m_interfaces, m_vgui_screen_shadow_skip.draw_model_slot( ), m_verification.m_game_root ),
 		         "optional vgui-screen cache unavailable" );
 		require( m_flat_textures.install( m_modules, m_interfaces, m_device ), "optional flat-texture hooks unavailable" );
-		require( m_display_adjustments.install( m_commands, m_device, &m_metrics ), "display-adjustment hooks unavailable" );
+		require( m_display_adjustments.install( m_commands, m_device, &m_metrics, m_verification.m_backend == render_backend_t::native_d3d9 ),
+		         "display-adjustment hooks unavailable" );
 		require( m_display_adjustments.install_viewport_commit_patch( m_modules ), "viewport-commit signature mismatch" );
 		require( m_partner_view.install( m_modules, m_interfaces, m_commands, m_device,
 		                                 m_display_adjustments.available( ) ? &m_display_adjustments : nullptr ),
@@ -118,9 +121,9 @@ namespace p2boost {
 		}
 
 		console_print( "[p2boost] backend=%s fixes=%s\n",
-		               m_verification.m_dxvk_vulkan ? "DXVK/Vulkan" : "unsupported",
+		               render_backend_name( m_verification.m_backend ),
 		               m_enabled ? "enabled" : "disabled" );
-		if( m_verification.m_dxvk_vulkan && !m_verification.m_dxvk_shipped )
+		if( m_verification.m_backend == render_backend_t::dxvk_vulkan && !m_verification.m_dxvk_shipped )
 			console_print( "[p2boost] dxvk_d3d9.dll is %s (%s); performance measurements use this exact binary\n",
 			               m_verification.m_dxvk_approved ? "an approved replacement build" : "an unrecognized build",
 			               m_verification.m_dxvk_sha256.c_str( ) );
@@ -177,7 +180,7 @@ namespace p2boost {
 	}
 
 	const char* Plugin::GetPluginDescription( ) {
-		return "p2boost DXVK/Vulkan performance patch v" P2BOOST_VERSION;
+		return "p2boost D3D9/Vulkan performance patch v" P2BOOST_VERSION;
 	}
 
 	// the video options' "Multicore rendering: Disabled" saves mat_queue_mode
@@ -321,7 +324,7 @@ namespace p2boost {
 
 	bool Plugin::can_enable( ) const noexcept {
 		// partial activation would make A/B results impossible to interpret.
-		return m_verification.m_supported && m_verification.m_dxvk_vulkan && m_frame_limiter.installed( ) &&
+		return m_verification.m_supported && m_verification.m_backend != render_backend_t::none && m_frame_limiter.installed( ) &&
 		       m_shadow_cache.installed( );
 	}
 

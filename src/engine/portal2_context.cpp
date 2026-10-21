@@ -15,9 +15,34 @@ namespace p2boost {
 		m_shader_api      = Module{ L"shaderapivk.dll" };
 		m_dxvk_d3d9       = Module{ L"dxvk_d3d9.dll" };
 		m_vulkan          = Module{ L"vulkan-1.dll" };
+		m_d3d9            = Module{ L"d3d9.dll" };
 		m_vstdlib         = Module{ L"vstdlib.dll" };
 		m_tier0           = Module{ L"tier0.dll" };
-		m_plugin          = Module::containing( reinterpret_cast< const void* >( &find_dxvk_device ) );
+		m_plugin          = Module::containing( reinterpret_cast< const void* >( &find_device ) );
+
+		// without -vulkan the material system loads the original D3D9 shader
+		// API instead; only one of the two is ever mapped.
+		if( !m_shader_api )
+			m_shader_api = Module{ L"shaderapidx9.dll" };
+	}
+
+	render_backend_t portal2_modules_t::backend( ) const noexcept {
+		if( m_shader_api && m_shader_api.handle( ) == GetModuleHandleW( L"shaderapivk.dll" ) )
+			return m_dxvk_d3d9 && m_vulkan ? render_backend_t::dxvk_vulkan : render_backend_t::none;
+		if( m_shader_api && m_shader_api.handle( ) == GetModuleHandleW( L"shaderapidx9.dll" ) )
+			return m_d3d9 ? render_backend_t::native_d3d9 : render_backend_t::none;
+		return render_backend_t::none;
+	}
+
+	const char* render_backend_name( render_backend_t backend ) noexcept {
+		switch( backend ) {
+			case render_backend_t::dxvk_vulkan:
+				return "DXVK/Vulkan";
+			case render_backend_t::native_d3d9:
+				return "D3D9";
+			default:
+				return "unsupported";
+		}
 	}
 
 	void Portal2Interfaces::connect( sdk::create_interface_fn_t engine_factory, const portal2_modules_t& modules ) noexcept {
@@ -59,7 +84,7 @@ namespace p2boost {
 		m_scheme_manager  = nullptr;
 	}
 
-	IDirect3DDevice9* find_dxvk_device( const portal2_modules_t& modules ) noexcept {
+	IDirect3DDevice9* find_device( const portal2_modules_t& modules ) noexcept {
 		const Address device_xref = modules.m_shader_api.find( game::active( )->flat_texture_device );
 		if( !device_xref )
 			return nullptr;

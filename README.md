@@ -5,7 +5,7 @@
 <p align="center">
   <a href="https://github.com/aIIison/p2boost/actions/workflows/build-release.yml"><img src="https://github.com/aIIison/p2boost/actions/workflows/build-release.yml/badge.svg" alt="Build and release"></a>
   <img src="https://img.shields.io/badge/platform-Windows-0d1117?logo=windows&logoColor=white" alt="Windows">
-  <img src="https://img.shields.io/badge/renderer-Vulkan%20(--vulkan)-ff8a1f" alt="Vulkan renderer">
+  <img src="https://img.shields.io/badge/renderer-Vulkan%20%7C%20D3D9-ff8a1f" alt="Vulkan or D3D9 renderer">
   <img src="https://img.shields.io/badge/games-Portal%202%20%C2%B7%20Portal%20Stories%3A%20Mel-2ea8ff" alt="Portal 2 and Portal Stories: Mel">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-6e7681" alt="GPL-3.0"></a>
 </p>
@@ -96,7 +96,10 @@ flowchart LR
 
 - Portal 2 on Steam for Windows, build `23973718` (the current Steam build).
   Portal Stories: Mel is also supported.
-- The Vulkan renderer: add `-vulkan` to the game's launch options.
+- The Vulkan renderer (`-vulkan` in the game's launch options) is
+  recommended. The original DirectX 9 renderer is also supported. There the
+  engine-side fixes apply in full, and `bin\dxvk_d3d9.dll` and the NVIDIA
+  driver setting are not used.
 
 ## Install
 
@@ -105,7 +108,8 @@ flowchart LR
 2. Extract it into your `Portal 2` game folder. `p2boost.dll` goes next to
    `portal2.exe`, and `bin\dxvk_d3d9.dll` goes into `bin\`. The zip already
    has this layout.
-3. In Steam, open Portal 2 → Properties → Launch Options and add `-vulkan`.
+3. In Steam, open Portal 2 → Properties → Launch Options and add `-vulkan`
+   (leave it out to stay on DirectX 9).
 4. Add `plugin_load p2boost` to `portal2\cfg\autoexec.cfg` (create the file
    if it does not exist; for Portal Stories: Mel use
    `portal_stories\cfg\autoexec.cfg`).
@@ -177,7 +181,9 @@ RTX 5090), are in [benchmarks/results.md](benchmarks/results.md).
 | `r_intensity <0.0..2.0>` | Overall brightness multiplier (1.0 = unchanged). |
 
 p2boost also makes `mat_monitorgamma` and `mat_viewportscale` work under
-Vulkan, as they do under DirectX.
+Vulkan, as they do under DirectX. Under DirectX 9 it applies
+`mat_monitorgamma` only in windowed mode, where the driver ignores the game's
+own gamma ramp.
 
 <details>
 <summary><b>Troubleshooting</b></summary>

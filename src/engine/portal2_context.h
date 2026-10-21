@@ -8,10 +8,21 @@
 
 namespace p2boost {
 
+	// the D3D9 implementation the game's shader API was started with: the
+	// Vulkan shader API over DXVK (-vulkan), or the original D3D9 shader API
+	// over the system's d3d9.dll. both expose the same IDirect3DDevice9 ABI.
+	enum class render_backend_t { none, dxvk_vulkan, native_d3d9 };
+
+	const char* render_backend_name( render_backend_t backend ) noexcept;
+
 	// one snapshot of the Portal 2 images used by production code.
 	// every Module is borrowed from the Windows loader and owns no lifetime.
 	struct portal2_modules_t {
 		void refresh( ) noexcept;
+
+		// which shader API the loader mapped; identity checks live in
+		// verify_runtime.
+		render_backend_t backend( ) const noexcept;
 
 		Module m_engine;
 		Module m_input_system;
@@ -22,6 +33,7 @@ namespace p2boost {
 		Module m_shader_api;
 		Module m_dxvk_d3d9;
 		Module m_vulkan;
+		Module m_d3d9;
 		Module m_vstdlib;
 		Module m_tier0;
 		Module m_plugin;
@@ -77,7 +89,8 @@ namespace p2boost {
 		sdk::ISchemeManager*  m_scheme_manager{ };
 	};
 
-	// resolve the one live D3D9 device stored by Portal 2's Vulkan shader API.
-	IDirect3DDevice9* find_dxvk_device( const portal2_modules_t& modules ) noexcept;
+	// resolve the one live D3D9 device stored by Portal 2's shader API. the
+	// Vulkan and D3D9 shader APIs are the same build and share the signature.
+	IDirect3DDevice9* find_device( const portal2_modules_t& modules ) noexcept;
 
 }

@@ -10,7 +10,8 @@ namespace p2boost {
 
 	struct verification_result_t {
 		bool                       m_supported{ };
-		bool                       m_dxvk_vulkan{ };
+		render_backend_t           m_backend{ render_backend_t::none };
+		std::string                m_d3d9_path;
 		bool                       m_dxvk_shipped{ };
 		bool                       m_dxvk_approved{ };
 		std::string                m_dxvk_sha256;

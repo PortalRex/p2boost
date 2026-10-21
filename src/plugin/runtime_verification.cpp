@@ -181,10 +181,14 @@ namespace p2boost {
 		// the exact feature whose offsets moved instead of the whole plugin.
 		if( !modules.m_engine.find( game::active( )->frame_complete ) )
 			result.m_errors.emplace_back( "frame limiter signature not found in engine.dll" );
+		// shaderapivk.dll and shaderapidx9.dll are the same shader API source
+		// built for two D3D9 implementations; both signatures match each.
+		const render_backend_t backend         = modules.backend( );
+		const std::string      shader_api_name = backend == render_backend_t::native_d3d9 ? "shaderapidx9.dll" : "shaderapivk.dll";
 		if( !modules.m_shader_api.find( game::active( )->flat_texture_device ) )
-			result.m_errors.emplace_back( "DXVK device signature not found in shaderapivk.dll" );
+			result.m_errors.emplace_back( "D3D9 device signature not found in " + shader_api_name );
 		if( !modules.m_shader_api.find( game::active( )->viewport_commit_skip ) )
-			result.m_errors.emplace_back( "viewport-commit signature not found in shaderapivk.dll" );
+			result.m_errors.emplace_back( "viewport-commit signature not found in " + shader_api_name );
 		if( !modules.m_client.find( game::active( )->shadow_manager ) ||
 		    !modules.m_client.find( game::active( )->flashlight_models ) ||
 		    !modules.m_client.find( game::active( )->active_shadow_depth_call ) ||
@@ -197,23 +201,39 @@ namespace p2boost {
 		// that satisfies the shipped shaderapivk interface keeps working, so a
 		// Steam update to dxvk_d3d9.dll never invalidates the plugin.
 		try {
-			result.m_dxvk_sha256 = sha256_file( root + L"\\bin\\dxvk_d3d9.dll" );
-			for( const char* shipped : shipped_dxvk_sha256( ) )
-				result.m_dxvk_shipped = result.m_dxvk_shipped || result.m_dxvk_sha256 == shipped;
-			for( const char* replacement : supported_dxvk_replacements( ) )
-				result.m_dxvk_approved = result.m_dxvk_approved || result.m_dxvk_sha256 == replacement;
-			result.m_dxvk_approved = result.m_dxvk_approved || result.m_dxvk_shipped;
+			if( backend == render_backend_t::dxvk_vulkan ) {
+				result.m_dxvk_sha256 = sha256_file( root + L"\\bin\\dxvk_d3d9.dll" );
+				for( const char* shipped : shipped_dxvk_sha256( ) )
+					result.m_dxvk_shipped = result.m_dxvk_shipped || result.m_dxvk_sha256 == shipped;
+				for( const char* replacement : supported_dxvk_replacements( ) )
+					result.m_dxvk_approved = result.m_dxvk_approved || result.m_dxvk_sha256 == replacement;
+				result.m_dxvk_approved = result.m_dxvk_approved || result.m_dxvk_shipped;
+			}
 		} catch( ... ) {
 			// the backend identity check below reports the real problem.
 		}
 
 		// filenames alone are insufficient; verify the loaded backend paths too.
-		const std::wstring shader_api = root + L"\\bin\\shaderapivk.dll";
-		const std::wstring dxvk       = root + L"\\bin\\dxvk_d3d9.dll";
-		result.m_dxvk_vulkan          = is_loaded_from( modules.m_shader_api, shader_api ) &&
-		                       is_loaded_from( modules.m_dxvk_d3d9, dxvk ) && modules.m_vulkan;
-		if( !result.m_dxvk_vulkan )
-			result.m_errors.emplace_back( "the game's DXVK/Vulkan backend is not active; launch with -vulkan" );
+		if( backend == render_backend_t::dxvk_vulkan ) {
+			const std::wstring shader_api = root + L"\\bin\\shaderapivk.dll";
+			const std::wstring dxvk       = root + L"\\bin\\dxvk_d3d9.dll";
+			if( is_loaded_from( modules.m_shader_api, shader_api ) && is_loaded_from( modules.m_dxvk_d3d9, dxvk ) )
+				result.m_backend = backend;
+			else
+				result.m_errors.emplace_back( "the DXVK/Vulkan backend was not loaded from the game installation" );
+		} else if( backend == render_backend_t::native_d3d9 ) {
+			// the D3D9 runtime is the system's (or a wrapper such as ReShade).
+			// p2boost only calls the public IDirect3DDevice9 ABI, so any d3d9.dll
+			// is accepted; its path is reported for benchmark logs.
+			const std::wstring shader_api = root + L"\\bin\\shaderapidx9.dll";
+			result.m_d3d9_path            = narrow( modules.m_d3d9.path( ) );
+			if( is_loaded_from( modules.m_shader_api, shader_api ) )
+				result.m_backend = backend;
+			else
+				result.m_errors.emplace_back( "shaderapidx9.dll was not loaded from the game installation" );
+		} else {
+			result.m_errors.emplace_back( "no supported shader API is active (shaderapidx9.dll, or shaderapivk.dll with -vulkan)" );
+		}
 
 		result.m_supported = result.m_errors.empty( );
 		return result;

@@ -38,6 +38,7 @@ namespace p2boost {
 		cbuf_add_text_fn_t   m_cbuf_add_text{ };
 		const bool*          m_fixes_enabled{ };
 		const FlatTextures*  m_flat_textures{ };
+		const char*          m_backend{ "unsupported" };
 		VmtHook              m_set_signon_state;
 		VmtHook              m_start_recording;
 		bool                 m_pending{ };

@@ -76,20 +76,28 @@ namespace p2boost {
 		remove( );
 	}
 
-	bool DisplayAdjustments::install( const ConsoleCommandRegistry& commands, IDirect3DDevice9* device, FrameMetrics* metrics ) {
+	bool DisplayAdjustments::install( const ConsoleCommandRegistry& commands, IDirect3DDevice9* device, FrameMetrics* metrics, bool engine_gamma_ramp ) {
 		if( m_instance )
 			return false;
 
-		m_metrics          = metrics;
-		m_monitor_gamma    = commands.find_variable( "mat_monitorgamma" );
-		m_viewport_scale   = commands.find_variable( "mat_viewportscale" );
-		m_viewport_upscale = commands.find_variable( "mat_viewportupscale" );
+		m_metrics           = metrics;
+		m_engine_gamma_ramp = engine_gamma_ramp;
+		m_monitor_gamma     = commands.find_variable( "mat_monitorgamma" );
+		m_viewport_scale    = commands.find_variable( "mat_viewportscale" );
+		m_viewport_upscale  = commands.find_variable( "mat_viewportupscale" );
 		if( !m_monitor_gamma || !m_viewport_scale || !m_viewport_upscale )
 			return false;
 
 		m_device = device;
 		if( !m_device )
 			return false;
+
+		// Reset keeps this current; the device may already be fullscreen.
+		com_ptr< IDirect3DSwapChain9 > swap_chain;
+		D3DPRESENT_PARAMETERS          parameters{ };
+		if( SUCCEEDED( m_device->GetSwapChain( 0, swap_chain.ReleaseAndGetAddressOf( ) ) ) && swap_chain &&
+		    SUCCEEDED( swap_chain->GetPresentParameters( &parameters ) ) )
+			m_windowed.store( parameters.Windowed != FALSE, std::memory_order_relaxed );
 
 		auto** device_vmt = vmt_of( m_device );
 		m_instance        = this;
@@ -347,7 +355,10 @@ namespace p2boost {
 
 		const float monitor_gamma    = std::clamp( m_monitor_gamma->value_float( ), 1.6f, 2.6f );
 		const float intensity        = std::clamp( m_intensity.load( std::memory_order_relaxed ), min_intensity, max_intensity );
-		const bool  gamma_active     = std::fabs( monitor_gamma - neutral_monitor_gamma ) > gamma_epsilon;
+		// native D3D9 applies the engine's gamma ramp in exclusive fullscreen;
+		// a second curve here would apply mat_monitorgamma twice.
+		const bool  ramp_applied     = m_engine_gamma_ramp && !m_windowed.load( std::memory_order_relaxed );
+		const bool  gamma_active     = !ramp_applied && std::fabs( monitor_gamma - neutral_monitor_gamma ) > gamma_epsilon;
 		const bool  intensity_active = std::fabs( intensity - 1.0f ) > gamma_epsilon;
 		if( !gamma_active && !intensity_active )
 			return false;
@@ -415,7 +426,10 @@ namespace p2boost {
 				if( const auto listener = slot.m_listener.load( std::memory_order_acquire ) )
 					listener( slot.m_context );
 		}
-		return next ? next( device, parameters ) : D3DERR_INVALIDCALL;
+		const HRESULT result = next ? next( device, parameters ) : D3DERR_INVALIDCALL;
+		if( instance && SUCCEEDED( result ) && parameters )
+			instance->m_windowed.store( parameters->Windowed != FALSE, std::memory_order_relaxed );
+		return result;
 	}
 
 	bool DisplayAdjustments::add_reset_listener( reset_listener_fn_t listener, void* context ) noexcept {
